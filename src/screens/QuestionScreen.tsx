@@ -40,16 +40,6 @@ export function QuestionScreen() {
 
   const isLocked = submitted || submitting;
   const canSubmit = !!circlePosition && !isLocked && !timeExpired;
-  const statusLabel = submitted
-    ? 'Answer locked in'
-    : submitting
-      ? 'Submitting answer...'
-      : timeExpired
-        ? 'Time expired'
-        : circlePosition
-          ? 'Marker ready'
-          : 'Place your marker';
-
   const handleCircleChange = (pos: CirclePosition) => {
     if (!isLocked) setCirclePosition(pos);
   };
@@ -59,22 +49,9 @@ export function QuestionScreen() {
       {/* Header */}
       <div className="shrink-0 border-b border-white/10 bg-slate-800/95 px-4 py-3 backdrop-blur-sm">
         <div className="flex items-center justify-between gap-3">
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-400">
-              Question {question.order_index}
-            </p>
-            <p className={`mt-1 text-sm font-medium ${
-              submitted
-                ? 'text-emerald-300'
-                : timeExpired
-                  ? 'text-red-300'
-                  : circlePosition
-                    ? 'text-indigo-300'
-                    : 'text-slate-300'
-            }`}>
-              {statusLabel}
-            </p>
-          </div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-400">
+            Question {question.order_index}
+          </p>
           <Timer
             endsAt={gameState?.question_ends_at ?? null}
             totalSeconds={question.time_limit_seconds}
@@ -109,38 +86,6 @@ export function QuestionScreen() {
 
       {/* Bottom bar */}
       <div className="shrink-0 border-t border-white/10 bg-slate-800/95 px-4 py-4 backdrop-blur-sm">
-        <div className="mb-3 flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
-          <div>
-            <p className="text-[11px] uppercase tracking-[0.24em] text-slate-500">Submission</p>
-            <p className={`mt-1 text-sm font-semibold ${
-              submitted
-                ? 'text-emerald-300'
-                : timeExpired
-                  ? 'text-red-300'
-                  : circlePosition
-                    ? 'text-white'
-                    : 'text-slate-300'
-            }`}>
-              {submitted
-                ? 'Your answer is locked for this round'
-                : timeExpired
-                  ? 'The host can move on at any time'
-                  : circlePosition
-                    ? 'Marker placed. Review and submit when ready.'
-                    : 'Choose the spot you think is correct.'}
-            </p>
-          </div>
-          <div className={`h-3 w-3 rounded-full ${
-            submitted
-              ? 'bg-emerald-400 shadow-[0_0_16px_rgba(74,222,128,0.55)]'
-              : timeExpired
-                ? 'bg-red-400 shadow-[0_0_16px_rgba(248,113,113,0.45)]'
-                : circlePosition
-                  ? 'bg-indigo-400 shadow-[0_0_16px_rgba(129,140,248,0.55)]'
-                  : 'bg-slate-500'
-          }`} />
-        </div>
-
         <div className="space-y-2">
         {timeExpired && !submitted && !submitting && (
           <p className="text-center text-red-400 text-sm font-medium">Time's up — answer not recorded</p>

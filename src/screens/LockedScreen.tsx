@@ -28,14 +28,6 @@ export function LockedScreen() {
               : 'Waiting for the host to open the question.'}
           </p>
         </div>
-        <div className="rounded-2xl border border-white/10 bg-slate-950/35 px-4 py-3">
-          <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Current step</p>
-          <p className="mt-2 text-sm font-medium text-slate-200">
-            {submitResult
-              ? 'Your answer is locked in. No further taps are needed.'
-              : 'Input is disabled until the host opens the next step.'}
-          </p>
-        </div>
       </div>
     </div>
   );

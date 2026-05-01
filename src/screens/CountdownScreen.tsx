@@ -31,14 +31,6 @@ export function CountdownScreen() {
 
         <div className="rounded-[32px] border border-white/10 bg-white/[0.04] px-6 py-8 shadow-2xl shadow-slate-950/30 backdrop-blur-sm">
           <p className="text-lg font-semibold text-slate-200">Get ready!</p>
-          {question && (
-            <div className="mt-4 rounded-2xl border border-white/10 bg-slate-950/35 px-4 py-4 text-left">
-              <p className="text-[11px] uppercase tracking-[0.24em] text-slate-500">Up next</p>
-              <p className="mt-2 text-base font-semibold leading-snug text-white">
-                {question.text}
-              </p>
-            </div>
-          )}
 
           <div className="relative mx-auto mt-7 flex h-40 w-40 items-center justify-center">
             <div
