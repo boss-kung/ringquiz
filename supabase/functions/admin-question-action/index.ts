@@ -523,6 +523,7 @@ async function deleteQuestion(
   const { data: question, error: fetchError } = await db
     .from('questions')
     .select(`
+      order_index,
       image_url,
       reveal_image_url,
       question_masks!inner(mask_storage_path)
@@ -537,6 +538,8 @@ async function deleteQuestion(
     .eq('id', questionId);
   if (deleteError) return mapDbError('delete_question', deleteError.message);
 
+  await compactQuestionOrderIndexes((question as { order_index: number }).order_index, db);
+
   const imagePaths = [question.image_url];
   if (question.reveal_image_url) imagePaths.push(question.reveal_image_url);
   await db.storage.from('question-images').remove(imagePaths);
@@ -549,6 +552,49 @@ async function deleteQuestion(
     ok: true,
     action: 'delete_question',
   });
+}
+
+async function compactQuestionOrderIndexes(
+  deletedOrderIndex: number,
+  db: ReturnType<typeof getSupabaseAdmin>,
+): Promise<void> {
+  const { data: remainingQuestions, error: remainingError } = await db
+    .from('questions')
+    .select('id, order_index')
+    .gt('order_index', deletedOrderIndex)
+    .order('order_index', { ascending: true });
+
+  if (remainingError) {
+    throw new Error(`Failed to compact question order indexes: ${remainingError.message}`);
+  }
+
+  if (!remainingQuestions || remainingQuestions.length === 0) return;
+
+  for (let index = 0; index < remainingQuestions.length; index += 1) {
+    const row = remainingQuestions[index];
+    const temporaryOrderIndex = -(deletedOrderIndex + index + 1);
+    const { error: tempError } = await db
+      .from('questions')
+      .update({ order_index: temporaryOrderIndex })
+      .eq('id', row.id);
+
+    if (tempError) {
+      throw new Error(`Failed to reserve temporary order_index during compaction: ${tempError.message}`);
+    }
+  }
+
+  for (let index = 0; index < remainingQuestions.length; index += 1) {
+    const row = remainingQuestions[index];
+    const nextOrderIndex = deletedOrderIndex + index;
+    const { error: finalError } = await db
+      .from('questions')
+      .update({ order_index: nextOrderIndex })
+      .eq('id', row.id);
+
+    if (finalError) {
+      throw new Error(`Failed to finalize compacted order_index: ${finalError.message}`);
+    }
+  }
 }
 
 async function fetchSingleQuestion(
