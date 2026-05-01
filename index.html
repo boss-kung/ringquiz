@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="%BASE_URL%vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="theme-color" content="#0f172a" />
+    <title>Quiz Game</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      (function () {
+        if (!window.location.search.startsWith('?/')) return;
+
+        const decoded = window.location.search
+          .slice(2)
+          .split('&')
+          .map((part, index) => (index === 0 ? part : `?${part}`))
+          .join('')
+          .replace(/~and~/g, '&');
+
+        const newUrl = window.location.pathname.replace(/\/$/, '') + decoded + window.location.hash;
+        window.history.replaceState(null, '', newUrl);
+      })();
+    </script>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

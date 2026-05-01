@@ -1,0 +1,154 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Prevent pull-to-refresh and overscroll on the game screen */
+html, body {
+  overscroll-behavior: none;
+  height: 100%;
+}
+
+#root {
+  height: 100%;
+}
+
+/* Remove tap highlight on mobile */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Prevent text selection during drag */
+.no-select {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+@keyframes waitingGlow {
+  0%, 100% {
+    transform: scale(0.92);
+    opacity: 0.24;
+  }
+  50% {
+    transform: scale(1.06);
+    opacity: 0.42;
+  }
+}
+
+@keyframes waitingFloat {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+@keyframes waitingDotPulse {
+  0%, 100% {
+    transform: scale(0.9);
+    opacity: 0.4;
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: 1;
+  }
+}
+
+@keyframes waitingChipIn {
+  0% {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes celebrationSpark {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 0, 0) rotate(0deg) scale(0.8);
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(0, 56px, 0) rotate(160deg) scale(1.15);
+  }
+}
+
+.waiting-glow {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(70px);
+  animation: waitingGlow 7s ease-in-out infinite;
+}
+
+.waiting-glow-a {
+  top: 8%;
+  left: -18%;
+  width: 14rem;
+  height: 14rem;
+  background: rgba(99, 102, 241, 0.24);
+}
+
+.waiting-glow-b {
+  right: -16%;
+  bottom: 10%;
+  width: 16rem;
+  height: 16rem;
+  background: rgba(250, 204, 21, 0.14);
+  animation-delay: 1.8s;
+}
+
+.waiting-float {
+  animation: waitingFloat 3.8s ease-in-out infinite;
+}
+
+.waiting-dot {
+  animation: waitingDotPulse 1.2s ease-in-out infinite;
+}
+
+.waiting-chip {
+  animation: waitingChipIn 0.5s ease-out both;
+}
+
+.celebration-spark {
+  position: relative;
+  width: 0.55rem;
+  height: 0.9rem;
+  border-radius: 9999px;
+  background: linear-gradient(180deg, rgba(250, 204, 21, 0.98), rgba(248, 113, 113, 0.82));
+  box-shadow: 0 0 16px rgba(250, 204, 21, 0.35);
+  animation: celebrationSpark 2.2s ease-in infinite;
+}
+
+@keyframes pingOnceSoft {
+  0% {
+    transform: scale(0.85);
+    opacity: 0.5;
+  }
+  70% {
+    transform: scale(1.05);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.animate-ping-once {
+  animation-name: pingOnceSoft;
+  animation-timing-function: ease-out;
+  animation-fill-mode: both;
+}
+
+.countdown-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  box-shadow: 0 0 30px rgba(129, 140, 248, 0.18);
+}

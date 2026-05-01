@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>RingQuiz</title>
+    <script>
+      (function () {
+        var pathSegmentsToKeep = 1;
+        var location = window.location;
+        var redirectBase = location.protocol + '//' + location.hostname + (location.port ? ':' + location.port : '');
+        var repoPath = location.pathname.split('/').slice(0, 1 + pathSegmentsToKeep).join('/');
+        var routePath = location.pathname
+          .slice(1)
+          .split('/')
+          .slice(pathSegmentsToKeep)
+          .join('/');
+        var query = location.search ? '&' + location.search.slice(1).replace(/&/g, '~and~') : '';
+
+        location.replace(redirectBase + repoPath + '/?/' + routePath.replace(/&/g, '~and~') + query + location.hash);
+      })();
+    </script>
+  </head>
+  <body></body>
+</html>
