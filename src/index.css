@@ -6,10 +6,12 @@
 html, body {
   overscroll-behavior: none;
   height: 100%;
+  touch-action: manipulation;
 }
 
 #root {
   height: 100%;
+  touch-action: manipulation;
 }
 
 /* Remove tap highlight on mobile */
@@ -149,6 +151,41 @@ html, body {
 .countdown-ring {
   position: absolute;
   inset: 0;
-  border-radius: 9999px;
-  box-shadow: 0 0 30px rgba(129, 140, 248, 0.18);
+  filter: drop-shadow(0 0 24px rgba(129, 140, 248, 0.18));
+}
+
+.countdown-ring-progress {
+  transition: stroke-dashoffset 900ms linear;
+}
+
+.countdown-value {
+  animation: pingOnceSoft 700ms ease-out both;
+}
+
+@keyframes timerUrgentGlow {
+  0%, 100% {
+    box-shadow: 0 0 0 rgba(248, 113, 113, 0);
+  }
+  50% {
+    box-shadow: 0 0 18px rgba(248, 113, 113, 0.22);
+  }
+}
+
+.timer-urgent-glow {
+  animation: timerUrgentGlow 1.15s ease-in-out infinite;
+}
+
+@keyframes timerDigitSnap {
+  0% {
+    opacity: 0.7;
+    transform: translateY(-2px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.timer-digit {
+  animation: timerDigitSnap 180ms ease-out;
 }
