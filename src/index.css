@@ -9,9 +9,19 @@ html, body {
   touch-action: manipulation;
 }
 
+html.host-route,
+body.host-route {
+  overscroll-behavior: auto;
+  touch-action: auto;
+}
+
 #root {
   height: 100%;
   touch-action: manipulation;
+}
+
+#root.host-route {
+  touch-action: auto;
 }
 
 /* Remove tap highlight on mobile */
