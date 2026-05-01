@@ -6,6 +6,8 @@ export function CountdownScreen() {
   const question = useGameStore((s) => s.question);
   const [count, setCount] = useState(COUNTDOWN_DISPLAY_SECONDS);
   const progress = (COUNTDOWN_DISPLAY_SECONDS - count) / COUNTDOWN_DISPLAY_SECONDS;
+  const ringCircumference = 2 * Math.PI * 70;
+  const ringOffset = ringCircumference * (1 - Math.max(0, Math.min(1, progress)));
 
   useEffect(() => {
     setCount(COUNTDOWN_DISPLAY_SECONDS);
@@ -33,17 +35,37 @@ export function CountdownScreen() {
           <p className="text-lg font-semibold text-slate-200">Get ready!</p>
 
           <div className="relative mx-auto mt-7 flex h-40 w-40 items-center justify-center">
-            <div
+            <svg
               className="countdown-ring"
-              style={{
-                background: `conic-gradient(rgba(129,140,248,0.95) ${Math.min(360, progress * 360)}deg, rgba(255,255,255,0.08) 0deg)`,
-              }}
-            />
-            <div className="absolute inset-[10px] rounded-full bg-slate-900/95 shadow-[inset_0_0_30px_rgba(15,23,42,0.9)]" />
+              viewBox="0 0 160 160"
+              aria-hidden
+            >
+              <circle
+                cx="80"
+                cy="80"
+                r="70"
+                fill="none"
+                stroke="rgba(255,255,255,0.08)"
+                strokeWidth="10"
+              />
+              <circle
+                cx="80"
+                cy="80"
+                r="70"
+                fill="none"
+                stroke="rgba(129,140,248,0.95)"
+                strokeWidth="10"
+                strokeLinecap="round"
+                transform="rotate(-90 80 80)"
+                strokeDasharray={ringCircumference}
+                strokeDashoffset={ringOffset}
+                className="countdown-ring-progress"
+              />
+            </svg>
+            <div className="absolute inset-[12px] rounded-full bg-slate-900/95 shadow-[inset_0_0_30px_rgba(15,23,42,0.9)]" />
             <div
               key={count}
-              className="relative text-7xl font-black text-white animate-ping-once"
-              style={{ animationDuration: '0.6s' }}
+              className="relative min-w-[1.5ch] text-center text-7xl font-black text-white countdown-value"
             >
               {count > 0 ? count : '🎯'}
             </div>
