@@ -273,7 +273,6 @@ function HostDashboard({ secret, onLogout }: { secret: string; onLogout: () => v
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-400">Live game state</p>
-                  <h2 className="mt-2 text-2xl font-black tracking-tight text-white">{status}</h2>
                   <p className="mt-2 text-sm text-slate-300">{nextRecommendedAction}</p>
                 </div>
                 <div className={`rounded-full px-3 py-1 text-xs font-bold uppercase tracking-[0.22em] ${
@@ -470,14 +469,14 @@ function ActionButton({
     <button
       onClick={onClick}
       disabled={disabled}
-      className={`w-full rounded-2xl border px-4 py-4 text-left transition-transform
+      className={`w-full rounded-2xl border px-4 py-3 text-left transition-transform
         disabled:opacity-40 disabled:cursor-not-allowed active:scale-95 transition-transform
         ${danger
           ? 'border-red-700/50 bg-red-900/60 text-red-300'
           : 'border-white/10 bg-slate-700 text-white hover:bg-slate-600'
         }`}
     >
-      <div className="flex min-h-[72px] items-center">
+      <div className="flex items-center">
         <p className="text-sm font-bold">{loading ? '…' : label}</p>
       </div>
     </button>
