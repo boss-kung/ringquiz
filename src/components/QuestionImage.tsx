@@ -17,8 +17,8 @@ interface Props {
  *
  * Coordinate contract:
  *   - xRatio and yRatio are relative to the RENDERED IMAGE rect (not the container).
- *   - Uses getBoundingClientRect() on the <img> element.
- *   - The <img> uses max-w-full + h-auto: no letterboxing, rect == image pixels.
+ *   - Uses getBoundingClientRect() on the rendered circular media element.
+ *   - The media is visually cropped by CSS, while answer selection ratios remain normalized to the rendered image area.
  */
 export function QuestionImage({
   imageUrl,
@@ -104,44 +104,46 @@ export function QuestionImage({
 
   return (
     <div
-      className="relative inline-block w-full no-select"
+      className="quiz-image-shell no-select"
       style={{ touchAction: 'none' }}
     >
-      <img
-        ref={imgRef}
-        src={imageUrl}
-        alt="Question"
-        className="block w-full h-auto"
-        draggable={false}
-        onLoad={() => {
-          if (imgRef.current) setRenderedWidth(imgRef.current.getBoundingClientRect().width);
-        }}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onPointerCancel={handlePointerUp}
-        style={{ cursor: locked ? 'default' : 'crosshair', touchAction: 'none' }}
-      />
-      {maskOverlayUrl && (
+      <div className="quiz-image-circle">
         <img
-          src={maskOverlayUrl}
-          alt=""
-          aria-hidden
-          className={maskOverlayClassName}
-          style={{
-            position: 'absolute',
-            inset: 0,
-            width: '100%',
-            height: '100%',
-            objectFit: 'fill',
-            pointerEvents: 'none',
-            opacity: 1,
+          ref={imgRef}
+          src={imageUrl}
+          alt="Question"
+          className="quiz-image-media"
+          draggable={false}
+          onLoad={() => {
+            if (imgRef.current) setRenderedWidth(imgRef.current.getBoundingClientRect().width);
           }}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerCancel={handlePointerUp}
+          style={{ cursor: locked ? 'default' : 'crosshair', touchAction: 'none' }}
         />
-      )}
-      {circle && renderCircle(circle)}
-      {revealCircle && revealCircle !== circle &&
-        renderCircle(revealCircle, { borderColor: 'rgba(250, 204, 21, 0.95)', backgroundColor: 'rgba(250,204,21,0.15)' })}
+        {maskOverlayUrl && (
+          <img
+            src={maskOverlayUrl}
+            alt=""
+            aria-hidden
+            className={maskOverlayClassName}
+            style={{
+              position: 'absolute',
+              inset: 0,
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+              pointerEvents: 'none',
+              opacity: 1,
+            }}
+          />
+        )}
+        {circle && renderCircle(circle)}
+        {revealCircle && revealCircle !== circle &&
+          renderCircle(revealCircle, { borderColor: 'rgba(250, 204, 21, 0.95)', backgroundColor: 'rgba(250,204,21,0.15)' })}
+      </div>
     </div>
   );
 }
