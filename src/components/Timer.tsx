@@ -13,28 +13,45 @@ interface Props {
  */
 export function Timer({ endsAt, totalSeconds }: Props) {
   const getServerTime = useGetServerTime();
-  const [remaining, setRemaining] = useState<number | null>(null);
+  const [remainingMs, setRemainingMs] = useState<number | null>(null);
 
   useEffect(() => {
-    if (!endsAt) { setRemaining(null); return; }
-    const endMs = new Date(endsAt).getTime();
+  if (!endsAt) {
+    setRemainingMs(null);
+    return;
+  }
 
-    const tick = () => {
-      const diff = Math.max(0, endMs - getServerTime());
-      setRemaining(Math.ceil(diff / 1000));
-    };
+  const endMs = new Date(endsAt).getTime();
+  let rafId: number;
 
-    tick();
-    const id = setInterval(tick, 250);
-    return () => clearInterval(id);
-  }, [endsAt, getServerTime]);
+  const tick = () => {
+    const diffMs = Math.max(0, endMs - getServerTime());
+    setRemainingMs(diffMs);
 
-  if (remaining === null) return null;
+    if (diffMs > 0) {
+      rafId = requestAnimationFrame(tick);
+    }
+  };
 
-  const normalizedTotalSeconds =
-    totalSeconds && totalSeconds > 0 ? totalSeconds : remaining > 0 ? remaining : 1;
-  const pct = remaining > 0 ? Math.min(1, remaining / normalizedTotalSeconds) : 0;
-  const urgent = remaining <= 10;
+  tick();
+
+  return () => cancelAnimationFrame(rafId);
+}, [endsAt, getServerTime]);
+
+  if (remainingMs === null) return null;
+
+const remainingSeconds = remainingMs / 1000;
+const displaySeconds = remainingSeconds.toFixed(2);
+
+const normalizedTotalMs =
+  totalSeconds && totalSeconds > 0
+    ? totalSeconds * 1000
+    : remainingMs > 0
+      ? remainingMs
+      : 1000;
+
+const pct = remainingMs > 0 ? Math.min(1, remainingMs / normalizedTotalMs) : 0;
+const urgent = remainingSeconds <= 10;
 
   return (
     <div className={`flex items-center gap-2 rounded-full border px-3 py-2 font-mono text-xl font-bold tabular-nums ${
@@ -42,15 +59,14 @@ export function Timer({ endsAt, totalSeconds }: Props) {
         ? 'border-red-400/40 bg-red-500/10 text-red-300 timer-urgent-glow'
         : 'border-white/10 bg-white/[0.04] text-white'
     }`}>
-      <span
-        key={remaining}
-        className="timer-digit min-w-[2.75ch] text-right"
-      >
-        {remaining}s
-      </span>
+    <span
+      className="timer-digit min-w-[5.25ch] text-right"
+    >
+      {displaySeconds} วินาที
+    </span>
       <div className="h-2 w-24 overflow-hidden rounded-full bg-white/15">
         <div
-          className={`h-full rounded-full transition-[width] duration-200 ease-linear ${urgent ? 'bg-red-400' : 'bg-emerald-400'}`}
+          className={`h-full rounded-full ${urgent ? 'bg-red-400' : 'bg-emerald-400'}`}
           style={{ width: `${pct * 100}%` }}
         />
       </div>
