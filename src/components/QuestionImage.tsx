@@ -1,4 +1,5 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
+import type { CSSProperties, PointerEvent } from 'react';
 import type { CirclePosition } from '../lib/types';
 
 interface Props {
@@ -17,9 +18,9 @@ interface Props {
  * Renders the question image with a draggable circle overlay.
  *
  * Coordinate contract:
- *   - xRatio and yRatio are relative to the RENDERED IMAGE rect (not the container).
- *   - Uses getBoundingClientRect() on the rendered circular media element.
- *   - The media is visually cropped by CSS, while answer selection ratios remain normalized to the rendered image area.
+ *   - xRatio and yRatio are relative to the rendered circular media rect.
+ *   - Rectangular uploaded images are visually cropped by CSS object-fit: cover.
+ *   - The answer selection math still uses the rendered image area only.
  */
 export function QuestionImage({
   imageUrl,
@@ -30,7 +31,7 @@ export function QuestionImage({
   revealCircle,
   maskOverlayUrl,
   maskOverlayClassName,
-  shellClassName,
+  shellClassName = '',
 }: Props) {
   const imgRef = useRef<HTMLImageElement>(null);
   const [renderedWidth, setRenderedWidth] = useState(0);
@@ -55,9 +56,11 @@ export function QuestionImage({
   const coordsFromEvent = useCallback((clientX: number, clientY: number): CirclePosition | null => {
     const img = imgRef.current;
     if (!img) return null;
+
     const rect = img.getBoundingClientRect();
     const xRatio = (clientX - rect.left) / rect.width;
     const yRatio = (clientY - rect.top) / rect.height;
+
     // Clamp strictly inside the image
     return {
       xRatio: Math.max(0, Math.min(1, xRatio)),
@@ -65,16 +68,19 @@ export function QuestionImage({
     };
   }, []);
 
-  const handlePointerDown = useCallback((e: React.PointerEvent) => {
+  const handlePointerDown = useCallback((e: PointerEvent<HTMLImageElement>) => {
     if (locked) return;
+
     e.currentTarget.setPointerCapture(e.pointerId);
     isDragging.current = true;
+
     const pos = coordsFromEvent(e.clientX, e.clientY);
     if (pos) onCircleChange(pos);
   }, [locked, coordsFromEvent, onCircleChange]);
 
-  const handlePointerMove = useCallback((e: React.PointerEvent) => {
+  const handlePointerMove = useCallback((e: PointerEvent<HTMLImageElement>) => {
     if (!isDragging.current || locked) return;
+
     const pos = coordsFromEvent(e.clientX, e.clientY);
     if (pos) onCircleChange(pos);
   }, [locked, coordsFromEvent, onCircleChange]);
@@ -85,7 +91,7 @@ export function QuestionImage({
 
   const circlePx = renderedWidth * circleRadiusRatio;
 
-  const renderCircle = (pos: CirclePosition, style?: React.CSSProperties) => (
+  const renderCircle = (pos: CirclePosition, style?: CSSProperties) => (
     <div
       style={{
         position: 'absolute',
@@ -104,11 +110,12 @@ export function QuestionImage({
     />
   );
 
+  const wrapperClassName = ['quiz-image-shell', 'no-select', shellClassName]
+    .filter(Boolean)
+    .join(' ');
+
   return (
-    <div
-      className={`quiz-image-shell no-select ${shellClassName ?? ''}`.trim()}
-      style={{ touchAction: 'none' }}
-    >
+    <div className={wrapperClassName} style={{ touchAction: 'none' }}>
       <div className="quiz-image-circle">
         <img
           ref={imgRef}
@@ -125,6 +132,7 @@ export function QuestionImage({
           onPointerCancel={handlePointerUp}
           style={{ cursor: locked ? 'default' : 'crosshair', touchAction: 'none' }}
         />
+
         {maskOverlayUrl && (
           <img
             src={maskOverlayUrl}
@@ -142,9 +150,12 @@ export function QuestionImage({
             }}
           />
         )}
+
         {circle && renderCircle(circle)}
-        {revealCircle && revealCircle !== circle &&
-          renderCircle(revealCircle, { borderColor: 'rgba(250, 204, 21, 0.95)', backgroundColor: 'rgba(250,204,21,0.15)' })}
+        {revealCircle && revealCircle !== circle && renderCircle(revealCircle, {
+          borderColor: 'rgba(250, 204, 21, 0.95)',
+          backgroundColor: 'rgba(250,204,21,0.15)',
+        })}
       </div>
     </div>
   );

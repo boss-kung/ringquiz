@@ -11,8 +11,8 @@ interface Props {
 
 const PODIUM_STYLES = [
   { label: '1st', height: 'h-28', tone: 'from-amber-300/90 to-yellow-500/80', accent: 'text-amber-200', emoji: '🥇' },
-  { label: '2nd', height: 'h-20', tone: 'from-slate-200/80 to-slate-400/70', accent: 'text-slate-200', emoji: '🥈' },
-  { label: '3rd', height: 'h-16', tone: 'from-orange-300/80 to-amber-700/70', accent: 'text-orange-200', emoji: '🥉' },
+  { label: '2nd', height: 'h-24', tone: 'from-slate-200/80 to-slate-400/70', accent: 'text-slate-200', emoji: '🥈' },
+  { label: '3rd', height: 'h-20', tone: 'from-orange-300/80 to-amber-700/70', accent: 'text-orange-200', emoji: '🥉' },
 ];
 
 export function LeaderboardTable({
@@ -87,8 +87,8 @@ export function LeaderboardTable({
                 {isMe && <span className="ml-2 text-yellow-300 text-xs">(you)</span>}
               </span>
               <div className="text-right">
-                <span className="block text-white font-bold tabular-nums">{entry.cumulative_score.toLocaleString()}</span>
-                <span className="text-[10px] uppercase tracking-[0.2em] text-slate-500">pts</span>
+                <span className="text-[16px] block text-white font-bold tabular-nums">{entry.cumulative_score.toLocaleString()}</span>
+                <span className="text-[10px] uppercase tracking-[0.2em] text-slate-500">คะแนน</span>
               </div>
             </div>
           );
@@ -107,14 +107,14 @@ export function LeaderboardTable({
             </span>
             <div className="text-right">
               <span className="block text-white font-bold tabular-nums">{playerEntry.cumulative_score.toLocaleString()}</span>
-              <span className="text-[10px] uppercase tracking-[0.2em] text-slate-500">pts</span>
+              <span className="text-[10px] uppercase tracking-[0.2em] text-slate-500">คะแนน</span>
             </div>
           </div>
         </>
       )}
 
       {top.length === 0 && (
-        <p className="text-center text-white/50 text-sm py-8">No results yet.</p>
+        <p className="text-center text-white/50 text-sm py-8">ยังไม่มีผลลัพธ์</p>
       )}
     </div>
   );
