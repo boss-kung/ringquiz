@@ -10,6 +10,7 @@ interface Props {
   revealCircle?: CirclePosition | null;
   maskOverlayUrl?: string;     // Edge Function URL that returns mask PNG during reveal
   maskOverlayClassName?: string;
+  frameVariant?: 'default' | 'orb';
 }
 
 /**
@@ -29,39 +30,68 @@ export function QuestionImage({
   revealCircle,
   maskOverlayUrl,
   maskOverlayClassName,
+  frameVariant = 'default',
 }: Props) {
   const imgRef = useRef<HTMLImageElement>(null);
-  const [renderedWidth, setRenderedWidth] = useState(0);
+  const stageRef = useRef<HTMLDivElement>(null);
+  const [imageBox, setImageBox] = useState({ left: 0, top: 0, width: 0, height: 0 });
   const isDragging = useRef(false);
 
-  // Track rendered image width for pixel-accurate circle radius
   useEffect(() => {
+    const stage = stageRef.current;
     const img = imgRef.current;
-    if (!img) return;
+    if (!stage || !img) return;
+
+    const updateImageBox = () => {
+      const stageRect = stage.getBoundingClientRect();
+
+      if (frameVariant === 'orb' && img.naturalWidth > 0 && img.naturalHeight > 0) {
+        const scale = Math.min(stageRect.width / img.naturalWidth, stageRect.height / img.naturalHeight);
+        const width = img.naturalWidth * scale;
+        const height = img.naturalHeight * scale;
+        setImageBox({
+          left: (stageRect.width - width) / 2,
+          top: (stageRect.height - height) / 2,
+          width,
+          height,
+        });
+        return;
+      }
+
+      setImageBox({
+        left: 0,
+        top: 0,
+        width: stageRect.width,
+        height: stageRect.height,
+      });
+    };
 
     const ro = new ResizeObserver(() => {
-      setRenderedWidth(img.getBoundingClientRect().width);
+      updateImageBox();
     });
-    ro.observe(img);
+    ro.observe(stage);
 
-    // Set immediately if already loaded
-    if (img.complete) setRenderedWidth(img.getBoundingClientRect().width);
+    if (img.complete) updateImageBox();
 
     return () => ro.disconnect();
-  }, []);
+  }, [frameVariant]);
 
   const coordsFromEvent = useCallback((clientX: number, clientY: number): CirclePosition | null => {
-    const img = imgRef.current;
-    if (!img) return null;
-    const rect = img.getBoundingClientRect();
-    const xRatio = (clientX - rect.left) / rect.width;
-    const yRatio = (clientY - rect.top) / rect.height;
-    // Clamp strictly inside the image
+    const stage = stageRef.current;
+    if (!stage || imageBox.width <= 0 || imageBox.height <= 0) return null;
+    const stageRect = stage.getBoundingClientRect();
+    const x = clientX - stageRect.left - imageBox.left;
+    const y = clientY - stageRect.top - imageBox.top;
+
+    if (x < 0 || y < 0 || x > imageBox.width || y > imageBox.height) {
+      return null;
+    }
+
     return {
-      xRatio: Math.max(0, Math.min(1, xRatio)),
-      yRatio: Math.max(0, Math.min(1, yRatio)),
+      xRatio: Math.max(0, Math.min(1, x / imageBox.width)),
+      yRatio: Math.max(0, Math.min(1, y / imageBox.height)),
     };
-  }, []);
+  }, [imageBox]);
 
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
     if (locked) return;
@@ -81,14 +111,14 @@ export function QuestionImage({
     isDragging.current = false;
   }, []);
 
-  const circlePx = renderedWidth * circleRadiusRatio;
+  const circlePx = imageBox.width * circleRadiusRatio;
 
   const renderCircle = (pos: CirclePosition, style?: React.CSSProperties) => (
     <div
       style={{
         position: 'absolute',
-        left: `${pos.xRatio * 100}%`,
-        top: `${pos.yRatio * 100}%`,
+        left: `${imageBox.left + pos.xRatio * imageBox.width}px`,
+        top: `${imageBox.top + pos.yRatio * imageBox.height}px`,
         width: `${circlePx * 2}px`,
         height: `${circlePx * 2}px`,
         transform: 'translate(-50%, -50%)',
@@ -104,17 +134,51 @@ export function QuestionImage({
 
   return (
     <div
-      className="relative inline-block w-full no-select"
+      className={`relative inline-block w-full no-select ${frameVariant === 'orb' ? 'question-orb-shell max-w-[26rem] mx-auto' : ''}`}
       style={{ touchAction: 'none' }}
     >
+      {frameVariant === 'orb' && (
+        <>
+          <div className="question-orb-glow" aria-hidden />
+          <div className="question-orb-offset-ring" aria-hidden />
+          <div className="question-orb-main-ring" aria-hidden />
+        </>
+      )}
+      <div
+        ref={stageRef}
+        className={frameVariant === 'orb' ? 'question-orb-stage' : 'relative'}
+      >
       <img
         ref={imgRef}
         src={imageUrl}
         alt="Question"
-        className="block w-full h-auto"
+        className={frameVariant === 'orb' ? 'question-orb-image' : 'block w-full h-auto'}
         draggable={false}
         onLoad={() => {
-          if (imgRef.current) setRenderedWidth(imgRef.current.getBoundingClientRect().width);
+          const stage = stageRef.current;
+          const img = imgRef.current;
+          if (!stage || !img) return;
+
+          const stageRect = stage.getBoundingClientRect();
+          if (frameVariant === 'orb' && img.naturalWidth > 0 && img.naturalHeight > 0) {
+            const scale = Math.min(stageRect.width / img.naturalWidth, stageRect.height / img.naturalHeight);
+            const width = img.naturalWidth * scale;
+            const height = img.naturalHeight * scale;
+            setImageBox({
+              left: (stageRect.width - width) / 2,
+              top: (stageRect.height - height) / 2,
+              width,
+              height,
+            });
+            return;
+          }
+
+          setImageBox({
+            left: 0,
+            top: 0,
+            width: stageRect.width,
+            height: stageRect.height,
+          });
         }}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
@@ -130,10 +194,11 @@ export function QuestionImage({
           className={maskOverlayClassName}
           style={{
             position: 'absolute',
-            inset: 0,
-            width: '100%',
-            height: '100%',
-            objectFit: 'fill',
+            left: `${imageBox.left}px`,
+            top: `${imageBox.top}px`,
+            width: `${imageBox.width}px`,
+            height: `${imageBox.height}px`,
+            objectFit: 'contain',
             pointerEvents: 'none',
             opacity: 1,
           }}
@@ -142,6 +207,7 @@ export function QuestionImage({
       {circle && renderCircle(circle)}
       {revealCircle && revealCircle !== circle &&
         renderCircle(revealCircle, { borderColor: 'rgba(250, 204, 21, 0.95)', backgroundColor: 'rgba(250,204,21,0.15)' })}
+      </div>
     </div>
   );
 }
