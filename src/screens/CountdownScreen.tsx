@@ -86,14 +86,14 @@ const cluePhase = showClue;
         <div className="waiting-glow waiting-glow-b" />
       </div>
 
-      <div className="relative w-full max-w-md space-y-6">
+      <div className={`relative w-full space-y-6 ${cluePhase ? 'max-w-3xl' : 'max-w-md'}`}>
         {question && (
           <p className="text-sm uppercase tracking-[0.32em] text-indigo-300/80">
             Question {question.order_index}
           </p>
         )}
 
-        <div className="rounded-[32px] border border-white/10 bg-white/[0.04] px-6 py-8 shadow-2xl shadow-slate-950/30 backdrop-blur-sm">
+        <div className={`rounded-[32px] border border-white/10 bg-white/[0.04] shadow-2xl shadow-slate-950/30 backdrop-blur-sm ${cluePhase ? 'px-4 py-6 sm:px-6 sm:py-8' : 'px-6 py-8'}`}>
           {!cluePhase ? (
             <>
               <p className="text-lg font-semibold text-slate-200">เตรียมพร้อม!</p>

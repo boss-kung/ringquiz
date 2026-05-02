@@ -79,7 +79,8 @@ export function RevealScreen() {
 
       {/* Image with mask overlay — white area = correct zone */}
       <div className="flex-1 overflow-y-auto px-4 py-6">
-        <QuestionImage
+        <div className="flex min-h-full items-start justify-center">
+          <QuestionImage
           imageUrl={showRevealImage ? revealBaseImage : originalQuestionImage}
           circleRadiusRatio={question.circle_radius_ratio}
           circle={
@@ -91,7 +92,9 @@ export function RevealScreen() {
           locked
           maskOverlayClassName="reveal-mask-pulse"
           maskOverlayUrl={`${FUNCTIONS_URL}/get-reveal-mask?questionId=${encodeURIComponent(question.id)}&updatedAt=${encodeURIComponent(gameState?.updated_at ?? '')}`}
+          shellClassName="quiz-image-shell--reveal"
         />
+        </div>
       </div>
 
       <div className="shrink-0 px-4 py-4 bg-slate-800">
