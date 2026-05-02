@@ -76,7 +76,6 @@ export function QuestionScreen() {
             circle={circlePosition}
             onCircleChange={handleCircleChange}
             locked={isLocked}
-            frameVariant="orb"
           />
           </div>
         </div>
