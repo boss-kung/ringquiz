@@ -80,7 +80,7 @@ const cluePhase = showClue;
   ), [question]);
 
   return (
-    <div className="relative flex min-h-full flex-col items-center justify-center overflow-hidden bg-slate-900 px-6 py-12 text-center">
+    <div className="relative flex min-h-full flex-col items-center justify-center overflow-hidden bg-slate-900 px-3 py-9 text-center sm:px-6 sm:py-12">
       <div className="pointer-events-none absolute inset-0 opacity-60">
         <div className="waiting-glow waiting-glow-a" />
         <div className="waiting-glow waiting-glow-b" />
@@ -93,7 +93,7 @@ const cluePhase = showClue;
           </p>
         )}
 
-        <div className={`rounded-[32px] border border-white/10 bg-white/[0.04] shadow-2xl shadow-slate-950/30 backdrop-blur-sm ${cluePhase ? 'px-4 py-6 sm:px-6 sm:py-8' : 'px-6 py-8'}`}>
+        <div className={`rounded-[32px] border border-white/10 bg-white/[0.04] shadow-2xl shadow-slate-950/30 backdrop-blur-sm ${cluePhase ? 'px-2 py-4 sm:px-6 sm:py-8' : 'px-6 py-8'}`}>
           {!cluePhase ? (
             <>
               <p className="text-lg font-semibold text-slate-200">เตรียมพร้อม!</p>

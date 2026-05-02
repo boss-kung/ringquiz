@@ -68,16 +68,16 @@ export function QuestionScreen() {
 
       {/* Image + circle overlay — scrollable container */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        <div className="overflow-y-auto px-4 pb-4">
-          <div className="flex min-h-full items-start justify-center py-2">
+        <div className="overflow-y-auto px-1 pb-3 sm:px-4 sm:pb-4">
+          <div className="flex min-h-full items-start justify-center py-1">
             <QuestionImage
-            imageUrl={resolveQuestionImageUrl(question.image_url)}
-            circleRadiusRatio={question.circle_radius_ratio}
-            circle={circlePosition}
-            onCircleChange={handleCircleChange}
-            locked={isLocked}
-            shellClassName="quiz-image-shell--question"
-          />
+              imageUrl={resolveQuestionImageUrl(question.image_url)}
+              circleRadiusRatio={question.circle_radius_ratio}
+              circle={circlePosition}
+              onCircleChange={handleCircleChange}
+              locked={isLocked}
+              shellClassName="quiz-image-shell--question"
+            />
           </div>
         </div>
       </div>

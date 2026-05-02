@@ -78,22 +78,22 @@ export function RevealScreen() {
       </div>
 
       {/* Image with mask overlay — white area = correct zone */}
-      <div className="flex-1 overflow-y-auto px-4 py-6">
+      <div className="flex-1 overflow-y-auto px-1 py-4 sm:px-4 sm:py-6">
         <div className="flex min-h-full items-start justify-center">
           <QuestionImage
-          imageUrl={showRevealImage ? revealBaseImage : originalQuestionImage}
-          circleRadiusRatio={question.circle_radius_ratio}
-          circle={
-            revealResult
-              ? { xRatio: revealResult.selected_x_ratio, yRatio: revealResult.selected_y_ratio }
-              : circlePosition
-          }
-          onCircleChange={() => {}}
-          locked
-          maskOverlayClassName="reveal-mask-pulse"
-          maskOverlayUrl={`${FUNCTIONS_URL}/get-reveal-mask?questionId=${encodeURIComponent(question.id)}&updatedAt=${encodeURIComponent(gameState?.updated_at ?? '')}`}
-          shellClassName="quiz-image-shell--reveal"
-        />
+            imageUrl={showRevealImage ? revealBaseImage : originalQuestionImage}
+            circleRadiusRatio={question.circle_radius_ratio}
+            circle={
+              revealResult
+                ? { xRatio: revealResult.selected_x_ratio, yRatio: revealResult.selected_y_ratio }
+                : circlePosition
+            }
+            onCircleChange={() => {}}
+            locked
+            maskOverlayClassName="reveal-mask-pulse"
+            maskOverlayUrl={`${FUNCTIONS_URL}/get-reveal-mask?questionId=${encodeURIComponent(question.id)}&updatedAt=${encodeURIComponent(gameState?.updated_at ?? '')}`}
+            shellClassName="quiz-image-shell--reveal"
+          />
         </div>
       </div>
 
