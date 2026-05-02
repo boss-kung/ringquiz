@@ -214,6 +214,16 @@ body.host-route {
   transform-origin: center;
 }
 
+.quiz-image-stage {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
 /* Circular quiz image system: shared by question, clue, and reveal screens */
 :root {
   --quiz-image-size: clamp(320px, 92vmin, 780px);
