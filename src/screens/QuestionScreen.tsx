@@ -75,7 +75,7 @@ export function QuestionScreen() {
       </div>
 
       <div className="flex-1 min-h-0 px-1 py-2 sm:px-4 sm:py-4">
-        <div className="flex h-full items-center justify-center overflow-hidden">
+        <div className="quiz-image-stage">
           <QuestionImage
             imageUrl={resolveQuestionImageUrl(question.image_url)}
             circleRadiusRatio={question.circle_radius_ratio}
@@ -83,6 +83,7 @@ export function QuestionScreen() {
             onCircleChange={handleCircleChange}
             locked={isLocked}
             shellClassName="quiz-image-shell--question"
+            fitToParent
           />
         </div>
       </div>

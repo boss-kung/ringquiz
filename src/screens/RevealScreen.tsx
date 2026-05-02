@@ -86,7 +86,7 @@ export function RevealScreen() {
       </div>
 
       <div className="flex-1 min-h-0 px-1 py-3 sm:px-4 sm:py-6">
-        <div className="flex h-full items-center justify-center overflow-hidden">
+        <div className="quiz-image-stage">
           <QuestionImage
             imageUrl={showRevealImage ? revealBaseImage : originalQuestionImage}
             circleRadiusRatio={question.circle_radius_ratio}
@@ -105,6 +105,7 @@ export function RevealScreen() {
               question.id
             )}&updatedAt=${encodeURIComponent(gameState?.updated_at ?? '')}`}
             shellClassName="quiz-image-shell--reveal"
+            fitToParent
           />
         </div>
       </div>
