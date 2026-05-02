@@ -105,7 +105,6 @@ export function RevealScreen() {
               question.id
             )}&updatedAt=${encodeURIComponent(gameState?.updated_at ?? '')}`}
             shellClassName="quiz-image-shell--reveal"
-            fitToParent
           />
         </div>
       </div>

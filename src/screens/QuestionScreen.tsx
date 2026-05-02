@@ -83,7 +83,6 @@ export function QuestionScreen() {
             onCircleChange={handleCircleChange}
             locked={isLocked}
             shellClassName="quiz-image-shell--question"
-            fitToParent
           />
         </div>
       </div>
