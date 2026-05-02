@@ -300,13 +300,13 @@ body.host-route {
 .quiz-image-shell--question {
   --quiz-image-size: clamp(340px, 96vmin, 800px);
   --quiz-image-max-width: calc(100vw - 0.15rem);
-  --quiz-image-max-height: calc(100vh - 14.8rem);
+  --quiz-image-max-height: calc(100vh - 15.6rem);
 }
 
 .quiz-image-shell--reveal {
   --quiz-image-size: clamp(340px, 96vmin, 800px);
   --quiz-image-max-width: calc(100vw - 0.15rem);
-  --quiz-image-max-height: calc(100vh - 10.9rem);
+  --quiz-image-max-height: calc(100vh - 11.6rem);
 }
 
 .quiz-image-shell--clue {
@@ -328,13 +328,13 @@ body.host-route {
   .quiz-image-shell--question {
     --quiz-image-size: clamp(320px, 98vw, 480px);
     --quiz-image-max-width: calc(100vw - 0.1rem);
-    --quiz-image-max-height: calc(100vh - 14.5rem);
+    --quiz-image-max-height: calc(100vh - 15.1rem);
   }
 
   .quiz-image-shell--reveal {
     --quiz-image-size: clamp(320px, 98vw, 480px);
     --quiz-image-max-width: calc(100vw - 0.1rem);
-    --quiz-image-max-height: calc(100vh - 10.9rem);
+    --quiz-image-max-height: calc(100vh - 11.4rem);
   }
 
   .quiz-image-shell--clue {
