@@ -28,7 +28,7 @@ export function WaitingScreen() {
           </div>
 
           <div className="space-y-3">
-            <p className="text-xs font-semibold uppercase tracking-[0.35em] text-indigo-300/80">
+            <p className="text-xs font-semibold uppercase text-indigo-300/80">
               Lobby พร้อมแล้ว
             </p>
             <h2 className="text-3xl font-black tracking-tight text-white">
@@ -42,7 +42,7 @@ export function WaitingScreen() {
           <div className="rounded-3xl border border-white/10 bg-white/[0.03] px-5 py-5 shadow-2xl shadow-slate-950/30 backdrop-blur-sm">
             <div className="flex items-center justify-between gap-3">
               <div className="text-left">
-                <p className="text-xs uppercase tracking-[0.3em] text-slate-400">จำนวนผู้เล่นปัจจุบัน</p>
+                <p className="text-xs uppercase text-slate-400">จำนวนผู้เล่นปัจจุบัน</p>
                 <p className="mt-2 text-3xl font-black text-white tabular-nums">
                   {players.length}
                 </p>
@@ -59,7 +59,7 @@ export function WaitingScreen() {
             </div>
 
             <div className="mt-5 text-left">
-              <p className="mb-3 text-xs uppercase tracking-[0.28em] text-slate-500">ผู้เล่นในห้อง</p>
+              <p className="mb-3 text-xs uppercase text-slate-500">ผู้เล่นในห้อง</p>
               {players.length === 0 && loading ? (
                 <p className="text-sm text-slate-400">กำลังโหลดรายชื่อผู้เล่น...</p>
               ) : players.length === 0 ? (
@@ -91,7 +91,7 @@ export function WaitingScreen() {
             </div>
           </div>
 
-          <p className="text-xs uppercase tracking-[0.25em] text-slate-500">
+          <p className="text-xs uppercase text-slate-500">
             กำลังรอพิธีกรเริ่มเกม...
           </p>
         </div>

@@ -8,30 +8,61 @@ export function CountdownScreen() {
   const question = useGameStore((s) => s.question);
   const gameState = useGameStore((s) => s.gameState);
   const getServerTime = useGetServerTime();
-  const [count, setCount] = useState(COUNTDOWN_DISPLAY_SECONDS);
-  const progress = (COUNTDOWN_DISPLAY_SECONDS - count) / COUNTDOWN_DISPLAY_SECONDS;
-  const ringCircumference = 2 * Math.PI * 70;
-  const ringOffset = ringCircumference * (1 - Math.max(0, Math.min(1, progress)));
-  const countdownStartedAt = gameState?.updated_at ?? null;
-  const cluePhase = count === 0;
+const totalCountdownMs = COUNTDOWN_DISPLAY_SECONDS * 1000;
+const [remainingMs, setRemainingMs] = useState(totalCountdownMs);
+const [count, setCount] = useState(COUNTDOWN_DISPLAY_SECONDS);
+const [showClue, setShowClue] = useState(false);
+
+const elapsedMs = totalCountdownMs - remainingMs;
+const progress = Math.max(0, Math.min(1, elapsedMs / totalCountdownMs));
+
+const ringCircumference = 2 * Math.PI * 70;
+const ringOffset = ringCircumference * (1 - progress);
+
+const countdownStartedAt = gameState?.updated_at ?? null;
+const cluePhase = showClue;
 
   useEffect(() => {
-    if (!countdownStartedAt) {
-      setCount(COUNTDOWN_DISPLAY_SECONDS);
-      return;
+  setShowClue(false);
+
+  if (!countdownStartedAt) {
+    setRemainingMs(totalCountdownMs);
+    setCount(COUNTDOWN_DISPLAY_SECONDS);
+    return;
+  }
+
+  const countdownEndsAt =
+    new Date(countdownStartedAt).getTime() + totalCountdownMs;
+
+  let clueTimerId: ReturnType<typeof setTimeout> | null = null;
+
+  const syncCountdown = () => {
+    const nextRemainingMs = Math.max(0, countdownEndsAt - getServerTime());
+
+    setRemainingMs(nextRemainingMs);
+    setCount(nextRemainingMs > 0 ? Math.ceil(nextRemainingMs / 1000) : 0);
+
+    if (nextRemainingMs <= 0 && !clueTimerId) {
+      clueTimerId = setTimeout(() => {
+        setShowClue(true);
+      }, 450);
     }
+  };
 
-    const countdownEndsAt = new Date(countdownStartedAt).getTime() + COUNTDOWN_DISPLAY_SECONDS * 1000;
-    const syncCountdown = () => {
-      const remainingMs = Math.max(0, countdownEndsAt - getServerTime());
-      const nextCount = remainingMs > 0 ? Math.ceil(remainingMs / 1000) : 0;
-      setCount(nextCount);
-    };
+  syncCountdown();
 
-    syncCountdown();
-    const id = setInterval(syncCountdown, 200);
-    return () => clearInterval(id);
-  }, [countdownStartedAt, getServerTime, question?.id]);
+  const intervalId = setInterval(syncCountdown, 50);
+
+  return () => {
+    clearInterval(intervalId);
+    if (clueTimerId) clearTimeout(clueTimerId);
+  };
+}, [
+  countdownStartedAt,
+  getServerTime,
+  question?.id,
+  totalCountdownMs,
+]);
 
   const clueImageUrl = useMemo(() => (
     question ? resolveQuestionImageUrl(question.image_url) : null

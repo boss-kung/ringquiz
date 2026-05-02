@@ -38,7 +38,7 @@ export function RevealScreen() {
       return;
     }
 
-    const revealImageAtMs = new Date(revealStartedAt).getTime() + 3000;
+    const revealImageAtMs = new Date(revealStartedAt).getTime() + 6000;
     const syncRevealPhase = () => {
       setShowRevealImage(getServerTime() >= revealImageAtMs);
     };
@@ -58,7 +58,7 @@ export function RevealScreen() {
         {revealNoAnswer && (
           <>
             <div className="text-4xl mb-1">—</div>
-            <p className="text-white text-xl font-bold">ไม่มีการส่งคำตอบ</p>
+            <p className="text-white text-xl font-bold">ไม่ได้ตอบ</p>
             <p className="text-white/60 text-sm mt-1">คุณไม่ได้ส่งคำตอบสำหรับคำถามนี้</p>
           </>
         )}

@@ -22,10 +22,10 @@ export function LockedScreen() {
           </h2>
           <p className="mt-2 text-slate-400 text-sm">
             {submitResult
-              ? 'Hold on while the host reveals the results.'
+              ? 'โปรดรอผู้เล่นคนอื่น และพิธีกรกำลังจะเฉลยคำตอบ'
               : question
-              ? 'The question is closed. Waiting for the host.'
-              : 'Waiting for the host to open the question.'}
+              ? 'การตอบคำถามถูกล็อคแล้ว รอให้พิธีกรเฉลยคำตอบ'
+              : 'กำลังรอพิธีกรเปิดคำถาม...'}
           </p>
         </div>
       </div>

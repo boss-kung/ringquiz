@@ -13,7 +13,7 @@ export function LeaderboardScreen() {
   return (
     <div className="flex min-h-full flex-col bg-slate-900">
       <div className="shrink-0 border-b border-white/10 px-4 py-5 text-center">
-        <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-400">ผู้นำในเกมนี้</p>
+        <p className="text-xs font-semibold uppercase text-slate-400">ผู้นำในเกมนี้</p>
         <h2 className="mt-2 text-2xl font-black tracking-tight text-white">Leaderboard</h2>
         {question && (
           <p className="mt-2 text-sm text-slate-400">หลังจบคำถามข้อที่ {question.order_index}</p>
