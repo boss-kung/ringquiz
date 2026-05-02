@@ -9,6 +9,7 @@ interface Props {
   locked: boolean;             // disable drag/tap after submission
   revealCircle?: CirclePosition | null;
   maskOverlayUrl?: string;     // Edge Function URL that returns mask PNG during reveal
+  maskOverlayClassName?: string;
 }
 
 /**
@@ -27,6 +28,7 @@ export function QuestionImage({
   locked,
   revealCircle,
   maskOverlayUrl,
+  maskOverlayClassName,
 }: Props) {
   const imgRef = useRef<HTMLImageElement>(null);
   const [renderedWidth, setRenderedWidth] = useState(0);
@@ -125,6 +127,7 @@ export function QuestionImage({
           src={maskOverlayUrl}
           alt=""
           aria-hidden
+          className={maskOverlayClassName}
           style={{
             position: 'absolute',
             inset: 0,
