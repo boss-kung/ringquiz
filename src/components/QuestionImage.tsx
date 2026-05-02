@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState, useCallback } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react';
 import type { CirclePosition } from '../lib/types';
 
@@ -12,12 +12,6 @@ interface Props {
   maskOverlayUrl?: string;
   maskOverlayClassName?: string;
   shellClassName?: string;
-  fitToParent?: boolean;
-}
-
-function readCssPx(value: string, fallback = 0): number {
-  const parsed = Number.parseFloat(value);
-  return Number.isFinite(parsed) ? parsed : fallback;
 }
 
 export function QuestionImage({
@@ -30,12 +24,9 @@ export function QuestionImage({
   maskOverlayUrl,
   maskOverlayClassName,
   shellClassName = '',
-  fitToParent = false,
 }: Props) {
-  const wrapperRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
   const [renderedWidth, setRenderedWidth] = useState(0);
-  const [shellSize, setShellSize] = useState<number | null>(null);
   const isDragging = useRef(false);
 
   useEffect(() => {
@@ -56,40 +47,6 @@ export function QuestionImage({
 
     return () => ro.disconnect();
   }, []);
-
-  useEffect(() => {
-    if (!fitToParent) {
-      setShellSize(null);
-      return;
-    }
-
-    const wrapper = wrapperRef.current;
-    const parent = wrapper?.parentElement;
-    if (!wrapper || !parent) {
-      return;
-    }
-
-    const updateShellSize = () => {
-      const parentRect = parent.getBoundingClientRect();
-      const styles = getComputedStyle(wrapper);
-      const offset = readCssPx(styles.getPropertyValue('--quiz-image-offset'));
-      const stroke = readCssPx(styles.getPropertyValue('--quiz-image-stroke'));
-      const ringGap = readCssPx(styles.getPropertyValue('--quiz-image-ring-gap'));
-      const outerDecoration = offset + stroke + ringGap;
-      const safeInset = Math.ceil((outerDecoration * 2) + 4);
-      const availableWidth = Math.max(0, parentRect.width - safeInset * 2);
-      const availableHeight = Math.max(0, parentRect.height - safeInset * 2);
-      const nextSize = Math.floor(Math.max(0, Math.min(availableWidth, availableHeight)));
-      setShellSize(nextSize > 0 ? nextSize : null);
-    };
-
-    updateShellSize();
-
-    const ro = new ResizeObserver(updateShellSize);
-    ro.observe(parent);
-
-    return () => ro.disconnect();
-  }, [fitToParent, shellClassName]);
 
   const coordsFromEvent = useCallback((clientX: number, clientY: number): CirclePosition | null => {
     const img = imgRef.current;
@@ -150,7 +107,7 @@ export function QuestionImage({
         borderRadius: '50%',
         border: '3px solid rgba(255, 255, 255, 0.95)',
         backgroundColor: 'rgba(255, 255, 255, 0.18)',
-        boxShadow: '0 0 0 2px rgba(0,0,0,0.55)',
+        boxShadow: '0 0 0 2px rgba(0, 0, 0, 0.55)',
         pointerEvents: 'none',
         ...style,
       }}
@@ -161,17 +118,8 @@ export function QuestionImage({
     .filter(Boolean)
     .join(' ');
 
-  const wrapperStyle: CSSProperties = {
-    touchAction: 'none',
-  };
-
-  if (shellSize) {
-    wrapperStyle.width = `${shellSize}px`;
-    wrapperStyle.height = `${shellSize}px`;
-  }
-
   return (
-    <div ref={wrapperRef} className={wrapperClassName} style={wrapperStyle}>
+    <div className={wrapperClassName} style={{ touchAction: 'none' }}>
       <div className="quiz-image-circle">
         <img
           ref={imgRef}
@@ -188,7 +136,10 @@ export function QuestionImage({
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
           onPointerCancel={handlePointerUp}
-          style={{ cursor: locked ? 'default' : 'crosshair', touchAction: 'none' }}
+          style={{
+            cursor: locked ? 'default' : 'crosshair',
+            touchAction: 'none',
+          }}
         />
 
         {maskOverlayUrl && (
@@ -212,7 +163,7 @@ export function QuestionImage({
         {circle && renderCircle(circle)}
         {revealCircle && revealCircle !== circle && renderCircle(revealCircle, {
           borderColor: 'rgba(250, 204, 21, 0.95)',
-          backgroundColor: 'rgba(250,204,21,0.15)',
+          backgroundColor: 'rgba(250, 204, 21, 0.15)',
         })}
       </div>
     </div>
