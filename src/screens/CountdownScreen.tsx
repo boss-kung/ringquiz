@@ -1,13 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useGameStore } from '../store/gameStore';
 import { COUNTDOWN_DISPLAY_SECONDS } from '../lib/constants';
-import { useGetServerTime } from '../hooks/useServerTime';
 import { resolveQuestionImageUrl } from '../lib/questionAssets';
 
 export function CountdownScreen() {
   const question = useGameStore((s) => s.question);
   const gameState = useGameStore((s) => s.gameState);
-  const getServerTime = useGetServerTime();
 const totalCountdownMs = COUNTDOWN_DISPLAY_SECONDS * 1000;
 
 const [remainingMs, setRemainingMs] = useState(totalCountdownMs);
@@ -27,21 +25,21 @@ const cluePhase = showClue;
 
   useEffect(() => {
   setShowClue(false);
+  setRemainingMs(totalCountdownMs);
+  setCount(COUNTDOWN_DISPLAY_SECONDS);
 
   if (!countdownStartedAt) {
-    setRemainingMs(totalCountdownMs);
-    setCount(COUNTDOWN_DISPLAY_SECONDS);
     return;
   }
 
-  const countdownEndsAt =
-    new Date(countdownStartedAt).getTime() + totalCountdownMs;
+  const visualStartedAt = performance.now();
 
   let animationFrameId = 0;
   let clueTimerId: ReturnType<typeof setTimeout> | null = null;
 
   const syncCountdown = () => {
-    const nextRemainingMs = Math.max(0, countdownEndsAt - getServerTime());
+    const elapsedMs = performance.now() - visualStartedAt;
+    const nextRemainingMs = Math.max(0, totalCountdownMs - elapsedMs);
 
     if (nextRemainingMs <= 0) {
       setRemainingMs(0);
@@ -50,7 +48,7 @@ const cluePhase = showClue;
       if (!clueTimerId) {
         clueTimerId = setTimeout(() => {
           setShowClue(true);
-        }, 650);
+        }, 350);
       }
 
       return;
@@ -73,7 +71,6 @@ const cluePhase = showClue;
   };
 }, [
   countdownStartedAt,
-  getServerTime,
   question?.id,
   totalCountdownMs,
 ]);
