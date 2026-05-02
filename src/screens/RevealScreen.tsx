@@ -2,7 +2,7 @@ import { useGameStore } from '../store/gameStore';
 import { useRevealResult } from '../hooks/useRevealResult';
 import { QuestionImage } from '../components/QuestionImage';
 import { FUNCTIONS_URL } from '../lib/supabase';
-import { resolveQuestionImageUrl } from '../lib/questionAssets';
+import { resolveQuestionImageUrl, resolveRevealImageUrl } from '../lib/questionAssets';
 
 export function RevealScreen() {
   useRevealResult();
@@ -24,6 +24,7 @@ export function RevealScreen() {
   const bannerClass = revealResult
     ? revealResult.is_correct ? 'bg-emerald-700' : 'bg-rose-800'
     : revealNoAnswer ? 'bg-slate-700' : 'bg-slate-700';
+  const revealBaseImage = resolveRevealImageUrl(question.reveal_image_url) ?? resolveQuestionImageUrl(question.image_url);
 
   return (
     <div className="flex flex-col min-h-full bg-slate-900">
@@ -57,7 +58,7 @@ export function RevealScreen() {
       {/* Image with mask overlay — white area = correct zone */}
       <div className="flex-1 overflow-y-auto">
         <QuestionImage
-          imageUrl={resolveQuestionImageUrl(question.image_url)}
+          imageUrl={revealBaseImage}
           circleRadiusRatio={question.circle_radius_ratio}
           circle={
             revealResult
@@ -66,6 +67,7 @@ export function RevealScreen() {
           }
           onCircleChange={() => {}}
           locked
+          maskOverlayClassName="reveal-mask-pulse"
           maskOverlayUrl={`${FUNCTIONS_URL}/get-reveal-mask?questionId=${encodeURIComponent(question.id)}&updatedAt=${encodeURIComponent(gameState?.updated_at ?? '')}`}
         />
       </div>

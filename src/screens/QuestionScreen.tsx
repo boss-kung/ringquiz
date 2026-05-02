@@ -62,10 +62,7 @@ export function QuestionScreen() {
       {/* Question text */}
       <div className="shrink-0 px-4 py-4">
         <div className="rounded-3xl border border-white/10 bg-white/[0.04] px-4 py-4 shadow-xl shadow-slate-950/20">
-          <p className="text-base font-medium leading-snug text-white">{question.text}</p>
-          <p className="mt-2 text-xs uppercase tracking-[0.22em] text-slate-500">
-            Tap anywhere on the image to place your answer
-          </p>
+          <p className="text-xl font-semibold leading-snug text-white sm:text-2xl">{question.text}</p>
         </div>
       </div>
 
@@ -89,10 +86,6 @@ export function QuestionScreen() {
         <div className="space-y-2">
         {timeExpired && !submitted && !submitting && (
           <p className="text-center text-red-400 text-sm font-medium">Time's up — answer not recorded</p>
-        )}
-
-        {!timeExpired && !circlePosition && !submitted && (
-          <p className="text-center text-slate-400 text-sm">Tap the image to place your answer</p>
         )}
 
         {submitError && (
