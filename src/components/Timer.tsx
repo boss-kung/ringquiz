@@ -41,7 +41,7 @@ export function Timer({ endsAt, totalSeconds }: Props) {
   if (remainingMs === null) return null;
 
 const remainingSeconds = remainingMs / 1000;
-const displaySeconds = remainingSeconds.toFixed(2);
+const displaySeconds = remainingSeconds.toFixed(1);
 
 const normalizedTotalMs =
   totalSeconds && totalSeconds > 0
