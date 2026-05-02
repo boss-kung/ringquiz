@@ -6,78 +6,71 @@ import { resolveQuestionImageUrl } from '../lib/questionAssets';
 export function CountdownScreen() {
   const question = useGameStore((s) => s.question);
   const gameState = useGameStore((s) => s.gameState);
-const totalCountdownMs = COUNTDOWN_DISPLAY_SECONDS * 1000;
 
-const [remainingMs, setRemainingMs] = useState(totalCountdownMs);
-const [count, setCount] = useState(COUNTDOWN_DISPLAY_SECONDS);
-const [showClue, setShowClue] = useState(false);
+  const totalCountdownMs = COUNTDOWN_DISPLAY_SECONDS * 1000;
+  const [remainingMs, setRemainingMs] = useState(totalCountdownMs);
+  const [count, setCount] = useState(COUNTDOWN_DISPLAY_SECONDS);
+  const [showClue, setShowClue] = useState(false);
 
-const progress = Math.max(
-  0,
-  Math.min(1, (totalCountdownMs - remainingMs) / totalCountdownMs)
-);
+  const progress = Math.max(
+    0,
+    Math.min(1, (totalCountdownMs - remainingMs) / totalCountdownMs)
+  );
 
-const ringCircumference = 2 * Math.PI * 70;
-const ringOffset = progress >= 1 ? 0 : ringCircumference * (1 - progress);
-
-const countdownStartedAt = gameState?.updated_at ?? null;
-const cluePhase = showClue;
+  const ringCircumference = 2 * Math.PI * 70;
+  const ringOffset = progress >= 1 ? 0 : ringCircumference * (1 - progress);
+  const countdownStartedAt = gameState?.updated_at ?? null;
+  const cluePhase = showClue;
 
   useEffect(() => {
-  setShowClue(false);
-  setRemainingMs(totalCountdownMs);
-  setCount(COUNTDOWN_DISPLAY_SECONDS);
+    setShowClue(false);
+    setRemainingMs(totalCountdownMs);
+    setCount(COUNTDOWN_DISPLAY_SECONDS);
 
-  if (!countdownStartedAt) {
-    return;
-  }
-
-  const visualStartedAt = performance.now();
-
-  let animationFrameId = 0;
-  let clueTimerId: ReturnType<typeof setTimeout> | null = null;
-
-  const syncCountdown = () => {
-    const elapsedMs = performance.now() - visualStartedAt;
-    const nextRemainingMs = Math.max(0, totalCountdownMs - elapsedMs);
-
-    if (nextRemainingMs <= 0) {
-      setRemainingMs(0);
-      setCount(0);
-
-      if (!clueTimerId) {
-        clueTimerId = setTimeout(() => {
-          setShowClue(true);
-        }, 350);
-      }
-
+    if (!countdownStartedAt) {
       return;
     }
 
-    setRemainingMs(nextRemainingMs);
-    setCount(Math.ceil(nextRemainingMs / 1000));
+    const visualStartedAt = performance.now();
+    let animationFrameId = 0;
+    let clueTimerId: ReturnType<typeof setTimeout> | null = null;
+
+    const syncCountdown = () => {
+      const elapsedMs = performance.now() - visualStartedAt;
+      const nextRemainingMs = Math.max(0, totalCountdownMs - elapsedMs);
+
+      if (nextRemainingMs <= 0) {
+        setRemainingMs(0);
+        setCount(0);
+
+        if (!clueTimerId) {
+          clueTimerId = setTimeout(() => {
+            setShowClue(true);
+          }, 350);
+        }
+
+        return;
+      }
+
+      setRemainingMs(nextRemainingMs);
+      setCount(Math.ceil(nextRemainingMs / 1000));
+      animationFrameId = requestAnimationFrame(syncCountdown);
+    };
 
     animationFrameId = requestAnimationFrame(syncCountdown);
-  };
 
-  animationFrameId = requestAnimationFrame(syncCountdown);
+    return () => {
+      cancelAnimationFrame(animationFrameId);
 
-  return () => {
-    cancelAnimationFrame(animationFrameId);
+      if (clueTimerId) {
+        clearTimeout(clueTimerId);
+      }
+    };
+  }, [countdownStartedAt, question?.id, totalCountdownMs]);
 
-    if (clueTimerId) {
-      clearTimeout(clueTimerId);
-    }
-  };
-}, [
-  countdownStartedAt,
-  question?.id,
-  totalCountdownMs,
-]);
-
-  const clueImageUrl = useMemo(() => (
-    question ? resolveQuestionImageUrl(question.image_url) : null
-  ), [question]);
+  const clueImageUrl = useMemo(() => {
+    return question ? resolveQuestionImageUrl(question.image_url) : null;
+  }, [question]);
 
   return (
     <div className="relative flex min-h-full flex-col items-center justify-center overflow-hidden bg-slate-900 px-3 py-9 text-center sm:px-6 sm:py-12">
@@ -93,17 +86,17 @@ const cluePhase = showClue;
           </p>
         )}
 
-        <div className={`rounded-[32px] border border-white/10 bg-white/[0.04] shadow-2xl shadow-slate-950/30 backdrop-blur-sm ${cluePhase ? 'px-2 py-4 sm:px-6 sm:py-8' : 'px-6 py-8'}`}>
+        <div
+          className={`rounded-[32px] border border-white/10 bg-white/[0.04] shadow-2xl shadow-slate-950/30 backdrop-blur-sm ${
+            cluePhase ? 'px-2 py-4 sm:px-6 sm:py-8' : 'px-6 py-8'
+          }`}
+        >
           {!cluePhase ? (
             <>
               <p className="text-lg font-semibold text-slate-200">เตรียมพร้อม!</p>
 
               <div className="relative mx-auto mt-7 flex h-40 w-40 items-center justify-center">
-                <svg
-                  className="countdown-ring"
-                  viewBox="0 0 160 160"
-                  aria-hidden
-                >
+                <svg className="countdown-ring" viewBox="0 0 160 160" aria-hidden>
                   <circle
                     cx="80"
                     cy="80"
@@ -127,7 +120,9 @@ const cluePhase = showClue;
                     style={{ transition: 'none' }}
                   />
                 </svg>
+
                 <div className="absolute inset-[12px] rounded-full bg-slate-900/95 shadow-[inset_0_0_30px_rgba(15,23,42,0.9)]" />
+
                 <div
                   key={count}
                   className="relative min-w-[1.5ch] text-center text-7xl font-black text-white countdown-value"
@@ -139,6 +134,7 @@ const cluePhase = showClue;
           ) : (
             <div className="space-y-4">
               <p className="text-lg font-semibold text-slate-200">ภาพปริศนา</p>
+
               {clueImageUrl && (
                 <div className="quiz-image-shell quiz-image-shell--clue">
                   <div className="quiz-image-circle">
