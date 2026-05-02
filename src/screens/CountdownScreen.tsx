@@ -140,13 +140,15 @@ const cluePhase = showClue;
             <div className="space-y-4">
               <p className="text-lg font-semibold text-slate-200">ภาพปริศนา</p>
               {clueImageUrl && (
-                <div className="overflow-hidden rounded-[28px] border border-white/10 bg-slate-950/35 p-2 shadow-2xl shadow-slate-950/20">
-                  <img
-                    src={clueImageUrl}
-                    alt="Clue"
-                    className="block w-full h-auto rounded-[22px]"
-                    draggable={false}
-                  />
+                <div className="quiz-image-shell quiz-image-shell--clue">
+                  <div className="quiz-image-circle">
+                    <img
+                      src={clueImageUrl}
+                      alt="Clue"
+                      className="quiz-image-media"
+                      draggable={false}
+                    />
+                  </div>
                 </div>
               )}
             </div>

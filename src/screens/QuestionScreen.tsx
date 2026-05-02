@@ -69,7 +69,7 @@ export function QuestionScreen() {
       {/* Image + circle overlay — scrollable container */}
       <div className="flex-1 flex flex-col overflow-hidden">
         <div className="overflow-y-auto px-4 pb-4">
-          <div className="rounded-[28px] border border-white/10 bg-slate-950/35 p-2 shadow-2xl shadow-slate-950/20">
+          <div className="py-2">
           <QuestionImage
             imageUrl={resolveQuestionImageUrl(question.image_url)}
             circleRadiusRatio={question.circle_radius_ratio}

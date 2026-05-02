@@ -78,7 +78,7 @@ export function RevealScreen() {
       </div>
 
       {/* Image with mask overlay — white area = correct zone */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto px-4 py-6">
         <QuestionImage
           imageUrl={showRevealImage ? revealBaseImage : originalQuestionImage}
           circleRadiusRatio={question.circle_radius_ratio}
