@@ -207,11 +207,11 @@ body.host-route {
   }
   50% {
     opacity: 1;
-    transform: scale(1.01);
+    transform: scale(1);
   }
 }
 
 .reveal-mask-pulse {
-  animation: revealMaskPulse 1.1s ease-in-out infinite;
+  animation: revealMaskPulse 1s ease-in-out infinite;
   transform-origin: center;
 }
