@@ -221,7 +221,7 @@ body.host-route {
   min-height: 0;
   align-items: center;
   justify-content: center;
-  overflow: hidden;
+  overflow: visible;
 }
 
 /* Circular quiz image system: shared by question, clue, and reveal screens */
