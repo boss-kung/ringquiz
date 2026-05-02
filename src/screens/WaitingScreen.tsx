@@ -29,20 +29,20 @@ export function WaitingScreen() {
 
           <div className="space-y-3">
             <p className="text-xs font-semibold uppercase tracking-[0.35em] text-indigo-300/80">
-              Lobby Ready
+              Lobby พร้อมแล้ว
             </p>
             <h2 className="text-3xl font-black tracking-tight text-white">
-              Welcome, {displayName}!
+              สวัสดี, {displayName}!
             </h2>
             <p className="mx-auto max-w-sm text-sm leading-6 text-slate-300">
-              Waiting for the host to start the game. Stay ready and keep this screen open.
+              กำลังรอพิธีกรเริ่มเกม โปรดเตรียมพร้อมและเปิดหน้านี้ไว้
             </p>
           </div>
 
           <div className="rounded-3xl border border-white/10 bg-white/[0.03] px-5 py-5 shadow-2xl shadow-slate-950/30 backdrop-blur-sm">
             <div className="flex items-center justify-between gap-3">
               <div className="text-left">
-                <p className="text-xs uppercase tracking-[0.3em] text-slate-400">Players Joined</p>
+                <p className="text-xs uppercase tracking-[0.3em] text-slate-400">จำนวนผู้เล่นปัจจุบัน</p>
                 <p className="mt-2 text-3xl font-black text-white tabular-nums">
                   {players.length}
                 </p>
@@ -59,11 +59,11 @@ export function WaitingScreen() {
             </div>
 
             <div className="mt-5 text-left">
-              <p className="mb-3 text-xs uppercase tracking-[0.28em] text-slate-500">Lobby Roster</p>
+              <p className="mb-3 text-xs uppercase tracking-[0.28em] text-slate-500">ผู้เล่นในห้อง</p>
               {players.length === 0 && loading ? (
-                <p className="text-sm text-slate-400">Loading players…</p>
+                <p className="text-sm text-slate-400">กำลังโหลดรายชื่อผู้เล่น...</p>
               ) : players.length === 0 ? (
-                <p className="text-sm text-slate-400">You are the first player in the room.</p>
+                <p className="text-sm text-slate-400">คุณเป็นผู้เล่นคนแรกในห้องเลยนะ ว้าว!</p>
               ) : (
                 <div className="flex flex-wrap gap-2">
                   {players.map((player, index) => (
@@ -92,7 +92,7 @@ export function WaitingScreen() {
           </div>
 
           <p className="text-xs uppercase tracking-[0.25em] text-slate-500">
-            Waiting for host to start
+            กำลังรอพิธีกรเริ่มเกม...
           </p>
         </div>
       </div>

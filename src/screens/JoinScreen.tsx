@@ -19,8 +19,8 @@ export function JoinScreen() {
     <div className="flex flex-col items-center justify-center min-h-full px-6 py-12 bg-slate-900">
       <div className="w-full max-w-sm space-y-8">
         <div className="text-center">
-          <h1 className="text-4xl font-bold text-white tracking-tight">Quiz Game</h1>
-          <p className="mt-2 text-slate-400">Enter your name to join</p>
+          <h1 className="text-4xl font-bold text-white tracking-tight">เกมวงแหวนปริศนา</h1>
+          <p className="mt-2 text-slate-400">กรุณาใส่ชื่อของคุณเพื่อเข้าร่วมเกม</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -47,7 +47,7 @@ export function JoinScreen() {
               disabled:opacity-40 disabled:cursor-not-allowed
               active:scale-95 transition-transform"
           >
-            {loading ? 'Joining…' : 'Join Game'}
+            {loading ? 'กำลังเข้าร่วม…' : 'เข้าร่วมเกม'}
           </button>
         </form>
       </div>

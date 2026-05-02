@@ -32,10 +32,10 @@ export function EndScreen() {
       <div className="relative shrink-0 border-b border-white/10 px-4 py-8 text-center">
         <div className="mb-3 text-5xl waiting-float">🏆</div>
         <p className="text-xs font-semibold uppercase tracking-[0.32em] text-amber-300/80">Final Leaderboard</p>
-        <h2 className="mt-2 text-3xl font-black tracking-tight text-white">Game Over</h2>
+        <h2 className="mt-2 text-3xl font-black tracking-tight text-white">จบเกม</h2>
         {playerEntry && (
           <p className="mt-3 text-sm text-slate-300">
-            {displayName} — Rank #{playerEntry.rank} · {playerEntry.cumulative_score.toLocaleString()} pts
+            {displayName} — Rank #{playerEntry.rank} · {playerEntry.cumulative_score.toLocaleString()} คะแนน
           </p>
         )}
       </div>

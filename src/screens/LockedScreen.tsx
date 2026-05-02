@@ -18,7 +18,7 @@ export function LockedScreen() {
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">Round status</p>
           <h2 className="mt-2 text-2xl font-black tracking-tight text-white">
-            {submitResult ? 'Answer submitted!' : 'Waiting…'}
+            {submitResult ? 'ส่งคำตอบเรียบร้อย!' : 'กำลังรอ...'}
           </h2>
           <p className="mt-2 text-slate-400 text-sm">
             {submitResult

@@ -54,7 +54,7 @@ export function CountdownScreen() {
         <div className="rounded-[32px] border border-white/10 bg-white/[0.04] px-6 py-8 shadow-2xl shadow-slate-950/30 backdrop-blur-sm">
           {!cluePhase ? (
             <>
-              <p className="text-lg font-semibold text-slate-200">Get ready!</p>
+              <p className="text-lg font-semibold text-slate-200">เตรียมพร้อม!</p>
 
               <div className="relative mx-auto mt-7 flex h-40 w-40 items-center justify-center">
                 <svg
@@ -92,14 +92,10 @@ export function CountdownScreen() {
                   {count}
                 </div>
               </div>
-
-              <p className="mt-5 text-sm text-slate-400">
-                The clue image will appear first.
-              </p>
             </>
           ) : (
             <div className="space-y-4">
-              <p className="text-lg font-semibold text-slate-200">Clue image</p>
+              <p className="text-lg font-semibold text-slate-200">ภาพปริศนา</p>
               {clueImageUrl && (
                 <div className="overflow-hidden rounded-[28px] border border-white/10 bg-slate-950/35 p-2 shadow-2xl shadow-slate-950/20">
                   <img
@@ -110,9 +106,6 @@ export function CountdownScreen() {
                   />
                 </div>
               )}
-              <p className="text-sm text-slate-400">
-                Waiting for the host to open the question.
-              </p>
             </div>
           )}
         </div>

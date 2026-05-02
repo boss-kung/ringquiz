@@ -33,7 +33,7 @@ export function QuestionScreen() {
   if (!question) {
     return (
       <div className="flex items-center justify-center min-h-full bg-slate-900">
-        <p className="text-slate-400">Loading question…</p>
+        <p className="text-slate-400">กำลังโหลดคำถาม...</p>
       </div>
     );
   }
@@ -85,7 +85,7 @@ export function QuestionScreen() {
       <div className="shrink-0 border-t border-white/10 bg-slate-800/95 px-4 py-4 backdrop-blur-sm">
         <div className="space-y-2">
         {timeExpired && !submitted && !submitting && (
-          <p className="text-center text-red-400 text-sm font-medium">Time's up — answer not recorded</p>
+          <p className="text-center text-red-400 text-sm font-medium">หมดเวลา - คำตอบไม่ได้รับการบันทึก</p>
         )}
 
         {submitError && (
@@ -94,7 +94,7 @@ export function QuestionScreen() {
 
         {submitted && submitResult && (
           <p className="text-center text-emerald-400 text-sm font-medium">
-            ✓ Answer submitted — waiting for results
+            ✓ คำตอบถูกส่งแล้ว — กำลังรอผลลัพธ์
           </p>
         )}
         </div>
@@ -106,7 +106,7 @@ export function QuestionScreen() {
             disabled:opacity-30 disabled:cursor-not-allowed
             active:scale-95 transition-transform"
         >
-          {submitting ? 'Submitting…' : submitted ? 'Submitted ✓' : 'Submit Answer'}
+          {submitting ? 'กำลังส่ง...' : submitted ? 'ส่งแล้ว ✓' : 'ส่งคำตอบ'}
         </button>
       </div>
     </div>
