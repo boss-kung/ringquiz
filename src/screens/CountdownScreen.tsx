@@ -9,15 +9,18 @@ export function CountdownScreen() {
   const gameState = useGameStore((s) => s.gameState);
   const getServerTime = useGetServerTime();
 const totalCountdownMs = COUNTDOWN_DISPLAY_SECONDS * 1000;
+
 const [remainingMs, setRemainingMs] = useState(totalCountdownMs);
 const [count, setCount] = useState(COUNTDOWN_DISPLAY_SECONDS);
 const [showClue, setShowClue] = useState(false);
 
-const elapsedMs = totalCountdownMs - remainingMs;
-const progress = Math.max(0, Math.min(1, elapsedMs / totalCountdownMs));
+const progress = Math.max(
+  0,
+  Math.min(1, (totalCountdownMs - remainingMs) / totalCountdownMs)
+);
 
 const ringCircumference = 2 * Math.PI * 70;
-const ringOffset = ringCircumference * (1 - progress);
+const ringOffset = progress >= 1 ? 0 : ringCircumference * (1 - progress);
 
 const countdownStartedAt = gameState?.updated_at ?? null;
 const cluePhase = showClue;
@@ -34,28 +37,39 @@ const cluePhase = showClue;
   const countdownEndsAt =
     new Date(countdownStartedAt).getTime() + totalCountdownMs;
 
+  let animationFrameId = 0;
   let clueTimerId: ReturnType<typeof setTimeout> | null = null;
 
   const syncCountdown = () => {
     const nextRemainingMs = Math.max(0, countdownEndsAt - getServerTime());
 
-    setRemainingMs(nextRemainingMs);
-    setCount(nextRemainingMs > 0 ? Math.ceil(nextRemainingMs / 1000) : 0);
+    if (nextRemainingMs <= 0) {
+      setRemainingMs(0);
+      setCount(0);
 
-    if (nextRemainingMs <= 0 && !clueTimerId) {
-      clueTimerId = setTimeout(() => {
-        setShowClue(true);
-      }, 450);
+      if (!clueTimerId) {
+        clueTimerId = setTimeout(() => {
+          setShowClue(true);
+        }, 650);
+      }
+
+      return;
     }
+
+    setRemainingMs(nextRemainingMs);
+    setCount(Math.ceil(nextRemainingMs / 1000));
+
+    animationFrameId = requestAnimationFrame(syncCountdown);
   };
 
-  syncCountdown();
-
-  const intervalId = setInterval(syncCountdown, 50);
+  animationFrameId = requestAnimationFrame(syncCountdown);
 
   return () => {
-    clearInterval(intervalId);
-    if (clueTimerId) clearTimeout(clueTimerId);
+    cancelAnimationFrame(animationFrameId);
+
+    if (clueTimerId) {
+      clearTimeout(clueTimerId);
+    }
   };
 }, [
   countdownStartedAt,
@@ -113,6 +127,7 @@ const cluePhase = showClue;
                     strokeDasharray={ringCircumference}
                     strokeDashoffset={ringOffset}
                     className="countdown-ring-progress"
+                    style={{ transition: 'none' }}
                   />
                 </svg>
                 <div className="absolute inset-[12px] rounded-full bg-slate-900/95 shadow-[inset_0_0_30px_rgba(15,23,42,0.9)]" />

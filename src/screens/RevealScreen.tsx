@@ -38,7 +38,7 @@ export function RevealScreen() {
       return;
     }
 
-    const revealImageAtMs = new Date(revealStartedAt).getTime() + 6000;
+    const revealImageAtMs = new Date(revealStartedAt).getTime() + 5000;
     const syncRevealPhase = () => {
       setShowRevealImage(getServerTime() >= revealImageAtMs);
     };
