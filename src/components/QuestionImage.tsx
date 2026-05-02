@@ -10,6 +10,7 @@ interface Props {
   revealCircle?: CirclePosition | null;
   maskOverlayUrl?: string;     // Edge Function URL that returns mask PNG during reveal
   maskOverlayClassName?: string;
+  shellClassName?: string;
 }
 
 /**
@@ -29,6 +30,7 @@ export function QuestionImage({
   revealCircle,
   maskOverlayUrl,
   maskOverlayClassName,
+  shellClassName,
 }: Props) {
   const imgRef = useRef<HTMLImageElement>(null);
   const [renderedWidth, setRenderedWidth] = useState(0);
@@ -104,7 +106,7 @@ export function QuestionImage({
 
   return (
     <div
-      className="quiz-image-shell no-select"
+      className={`quiz-image-shell no-select ${shellClassName ?? ''}`.trim()}
       style={{ touchAction: 'none' }}
     >
       <div className="quiz-image-circle">
