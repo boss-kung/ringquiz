@@ -165,7 +165,7 @@ body.host-route {
 }
 
 .countdown-ring-progress {
-  transition: stroke-dashoffset 900ms linear;
+  transition: stroke-dashoffset 0.8s ease;
 }
 
 .countdown-value {
