@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
-import { supabase, FUNCTIONS_URL, SUPABASE_ANON_KEY } from '../lib/supabase';
+import { supabase, FUNCTIONS_URL } from '../lib/supabase';
 import { useGameStore } from '../store/gameStore';
 import type { SubmitAnswerRequest, SubmitAnswerResponse, EdgeFunctionError } from '../lib/types';
 
