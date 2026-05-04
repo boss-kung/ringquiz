@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ChangeEvent, ReactNode } from 'react';
-import { FUNCTIONS_URL } from '../../lib/supabase';
+import { FUNCTIONS_URL, SUPABASE_ANON_KEY } from '../../lib/supabase';
 import {
   getLocalImageDimensions,
   resolveQuestionImageUrl,
@@ -94,6 +94,7 @@ async function callAdminQuestionAction(
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      'apikey': SUPABASE_ANON_KEY,
       'X-Host-Secret': secret,
     },
     body: JSON.stringify(body),
@@ -130,6 +131,7 @@ async function uploadQuestionAssets(
   const response = await fetch(`${FUNCTIONS_URL}/admin-question-action`, {
     method: 'POST',
     headers: {
+      'apikey': SUPABASE_ANON_KEY,
       'X-Host-Secret': secret,
     },
     body,

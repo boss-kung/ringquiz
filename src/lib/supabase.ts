@@ -32,3 +32,6 @@ export const GAME_STATE_ID = '00000000-0000-0000-0000-000000000001';
 export const FUNCTIONS_URL =
   (import.meta.env.VITE_FUNCTIONS_URL as string | undefined) ||
   `${supabaseUrl}/functions/v1`;
+
+// Supabase anon key — required as 'apikey' header on all edge function fetch calls.
+export const SUPABASE_ANON_KEY = supabaseAnonKey;

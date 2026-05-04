@@ -1,5 +1,5 @@
 import { useEffect, useCallback } from 'react';
-import { FUNCTIONS_URL } from '../lib/supabase';
+import { FUNCTIONS_URL, SUPABASE_ANON_KEY } from '../lib/supabase';
 import { SERVER_TIME_RESYNC_INTERVAL_MS } from '../lib/constants';
 import { useGameStore } from '../store/gameStore';
 import type { ServerTimeResponse } from '../lib/types';
@@ -10,7 +10,9 @@ export function useServerTime() {
   const sync = useCallback(async () => {
     try {
       const t0 = Date.now();
-      const res = await fetch(`${FUNCTIONS_URL}/server-time`);
+      const res = await fetch(`${FUNCTIONS_URL}/server-time`, {
+        headers: { 'apikey': SUPABASE_ANON_KEY },
+      });
       if (!res.ok) return;
       const data: ServerTimeResponse = await res.json();
       const t1 = Date.now();

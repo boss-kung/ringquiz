@@ -4,7 +4,7 @@
  * Manages its own Supabase subscriptions with distinct channel names.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { supabase, GAME_STATE_ID, FUNCTIONS_URL } from '../lib/supabase';
+import { supabase, GAME_STATE_ID, FUNCTIONS_URL, SUPABASE_ANON_KEY } from '../lib/supabase';
 import { resolveQuestionImageUrl, resolveRevealImageUrl } from '../lib/questionAssets';
 import { COUNTDOWN_DISPLAY_SECONDS } from '../lib/constants';
 import type { GameState, Question, Player, LeaderboardEntry } from '../lib/types';
@@ -29,7 +29,7 @@ function sortNewest(players: Player[]): Player[] {
 function useDisplayServerTime() {
   const offset = useRef(0);
   useEffect(() => {
-    fetch(`${FUNCTIONS_URL}/server-time`)
+    fetch(`${FUNCTIONS_URL}/server-time`, { headers: { 'apikey': SUPABASE_ANON_KEY } })
       .then((r) => r.json())
       .then((d) => { if (d.server_time_ms) offset.current = d.server_time_ms - Date.now(); })
       .catch(() => {});

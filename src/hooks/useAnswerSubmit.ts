@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
-import { supabase, FUNCTIONS_URL } from '../lib/supabase';
+import { supabase, FUNCTIONS_URL, SUPABASE_ANON_KEY } from '../lib/supabase';
 import { useGameStore } from '../store/gameStore';
 import type { SubmitAnswerRequest, SubmitAnswerResponse, EdgeFunctionError } from '../lib/types';
 
@@ -42,6 +42,7 @@ export function useAnswerSubmit() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'apikey': SUPABASE_ANON_KEY,
           'Authorization': `Bearer ${session.access_token}`,
         },
         body: JSON.stringify(body),

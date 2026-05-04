@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { FUNCTIONS_URL } from '../../lib/supabase';
+import { FUNCTIONS_URL, SUPABASE_ANON_KEY } from '../../lib/supabase';
 import { resolveQuestionImageUrl } from '../../lib/questionAssets';
 import type {
   AdminQuestionRecord,
@@ -17,7 +17,7 @@ async function callAdmin(
 ): Promise<AdminQuestionResponse> {
   const res = await fetch(`${FUNCTIONS_URL}/admin-question-action`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-Host-Secret': secret },
+    headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_ANON_KEY, 'X-Host-Secret': secret },
     body: JSON.stringify(body),
   });
   const json = await res.json();

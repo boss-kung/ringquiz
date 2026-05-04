@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { FUNCTIONS_URL } from '../../lib/supabase';
+import { FUNCTIONS_URL, SUPABASE_ANON_KEY } from '../../lib/supabase';
 import { STATS_POLL_INTERVAL_MS } from '../../lib/constants';
 import { useGameStore } from '../../store/gameStore';
 import { useGetServerTime } from '../../hooks/useServerTime';
@@ -63,7 +63,7 @@ function HostLogin({ onLogin, error }: { onLogin: (s: string) => void; error: st
 
     try {
       const res = await fetch(`${FUNCTIONS_URL}/get-question-stats`, {
-        headers: { 'X-Host-Secret': value.trim() },
+        headers: { 'apikey': SUPABASE_ANON_KEY, 'X-Host-Secret': value.trim() },
       });
       if (res.status === 401) {
         setLocalError('Wrong secret. Try again.');
@@ -137,7 +137,7 @@ function HostDashboard({ secret, onLogout }: { secret: string; onLogout: () => v
   const fetchStats = useCallback(async () => {
     try {
       const res = await fetch(`${FUNCTIONS_URL}/get-question-stats`, {
-        headers: { 'X-Host-Secret': secret },
+        headers: { 'apikey': SUPABASE_ANON_KEY, 'X-Host-Secret': secret },
       });
       if (res.ok) setStats(await res.json());
     } catch { /* silent */ }
@@ -175,7 +175,7 @@ function HostDashboard({ secret, onLogout }: { secret: string; onLogout: () => v
       const body: HostActionRequest = { action };
       const res = await fetch(`${FUNCTIONS_URL}/host-action`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Host-Secret': secret },
+        headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_ANON_KEY, 'X-Host-Secret': secret },
         body: JSON.stringify(body),
       });
       const json = await res.json();
