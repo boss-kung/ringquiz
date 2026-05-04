@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { FUNCTIONS_URL, SUPABASE_ANON_KEY } from '../../lib/supabase';
 import { resolveQuestionImageUrl } from '../../lib/questionAssets';
 import type {
@@ -115,8 +115,14 @@ export function GameSetManager({ secret }: { secret: string }) {
 
   // ── Create game set ───────────────────────────────────────────────────────
 
+  const nameInputRef = useRef<HTMLInputElement>(null);
+
   const handleCreateGameSet = async () => {
-    if (!newSetName.trim()) return;
+    if (!newSetName.trim()) {
+      nameInputRef.current?.focus();
+      flash('Enter a name for the Game Set first.', true);
+      return;
+    }
     setBusy('create');
     try {
       await callAdmin(secret, { action: 'create_game_set', name: newSetName.trim() });
@@ -331,6 +337,7 @@ export function GameSetManager({ secret }: { secret: string }) {
           busy={busy}
           newSetName={newSetName}
           confirmDelete={confirmDelete}
+          nameInputRef={nameInputRef}
           onNewSetNameChange={setNewSetName}
           onCreateSet={handleCreateGameSet}
           onOpenSet={handleOpenSet}
@@ -379,39 +386,6 @@ export function GameSetManager({ secret }: { secret: string }) {
         />
       )}
 
-      {/* Delete confirmation modal */}
-      {confirmDelete && (
-        <div style={{
-          position: 'fixed', inset: 0, background: 'rgba(5,8,16,.88)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          padding: 24, zIndex: 300, backdropFilter: 'blur(6px)',
-        }}>
-          <div className="gr-card" style={{ width: '100%', maxWidth: 300, padding: 22 }}>
-            <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--rose)', marginBottom: 10 }}>
-              Delete Game Set?
-            </div>
-            <p style={{ fontSize: 12, color: 'var(--text-2)', marginBottom: 18, lineHeight: 1.6 }}>
-              This will permanently delete this Game Set and all its question slots. Question Bank content is not affected.
-            </p>
-            <div style={{ display: 'flex', gap: 9 }}>
-              <button onClick={() => setConfirmDelete(null)} className="gr-btn gr-btn-ghost" style={{ padding: '10px', fontSize: 13 }}>
-                Cancel
-              </button>
-              <button
-                onClick={() => handleDeleteGameSet(confirmDelete)}
-                disabled={busy !== null}
-                style={{
-                  flex: 1, padding: '10px 14px', borderRadius: 12, border: 'none',
-                  background: '#be123c', color: 'white',
-                  fontFamily: 'var(--font-sans)', fontSize: 13, fontWeight: 700, cursor: 'pointer',
-                }}
-              >
-                Delete
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -419,7 +393,7 @@ export function GameSetManager({ secret }: { secret: string }) {
 // ── Game Sets List View ───────────────────────────────────────────────────────
 
 function GameSetsListView({
-  gameSets, loading, busy, newSetName, confirmDelete,
+  gameSets, loading, busy, newSetName, confirmDelete, nameInputRef,
   onNewSetNameChange, onCreateSet, onOpenSet, onSetActive,
   onConfirmDelete, onDeleteSet, onRefresh,
 }: {
@@ -428,6 +402,7 @@ function GameSetsListView({
   busy: string | null;
   newSetName: string;
   confirmDelete: string | null;
+  nameInputRef: React.RefObject<HTMLInputElement>;
   onNewSetNameChange: (v: string) => void;
   onCreateSet: () => void;
   onOpenSet: (gs: GameSetRecord) => void;
@@ -443,6 +418,7 @@ function GameSetsListView({
         <div className="gr-label-xs" style={{ marginBottom: 10 }}>Create New Game Set</div>
         <div style={{ display: 'flex', gap: 8 }}>
           <input
+            ref={nameInputRef}
             value={newSetName}
             onChange={(e) => onNewSetNameChange(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && onCreateSet()}
@@ -452,7 +428,7 @@ function GameSetsListView({
           />
           <button
             onClick={onCreateSet}
-            disabled={!newSetName.trim() || busy !== null}
+            disabled={busy === 'create'}
             className="gr-btn gr-btn-gold"
             style={{ fontSize: 13, padding: '10px 16px', flexShrink: 0 }}
           >
