@@ -1019,6 +1019,63 @@ body.host-route {
   color: var(--text-2);
 }
 
+/* ── STAT ELEMENTS (answered / correct count pills) ─────────────────────── */
+.ds-stat-pill {
+  font: 700 clamp(10px,1.1vw,13px)/1 var(--font-sans);
+  color: var(--text-2);
+  background: rgba(255,255,255,.06);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 5px 12px;
+}
+.ds-stat-line {
+  font-size: clamp(13px,1.5vw,18px);
+  color: var(--text-2);
+}
+.ds-reveal-stats {
+  display: flex;
+  align-items: center;
+  gap: 2vw;
+  padding: 12px 24px;
+  border-radius: 16px;
+  background: rgba(255,255,255,.04);
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.ds-reveal-stat-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+}
+.ds-reveal-stat-val {
+  font: 900 clamp(22px,3vw,40px)/1 var(--font-mono);
+  color: var(--text);
+}
+.ds-reveal-stat-sep {
+  width: 1px;
+  height: clamp(30px,4vh,50px);
+  background: var(--border);
+  flex-shrink: 0;
+}
+
+/* ── QR FALLBACK ─────────────────────────────────────────────────────────── */
+.ds-qr-fallback {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 16px 12px;
+  min-width: clamp(140px,18vw,220px);
+}
+.ds-join-url-lg {
+  font-size: clamp(11px,1.2vw,15px);
+  color: var(--gold);
+  font-weight: 700;
+  word-break: break-all;
+  text-align: center;
+  max-width: clamp(160px,20vw,260px);
+}
+
 /* ── REVEAL ────────────────────────────────────────────────────────────────── */
 .ds-reveal-header {
   display: flex;

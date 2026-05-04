@@ -7,7 +7,26 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase, GAME_STATE_ID, FUNCTIONS_URL, SUPABASE_ANON_KEY } from '../lib/supabase';
 import { resolveQuestionImageUrl, resolveRevealImageUrl } from '../lib/questionAssets';
 import { COUNTDOWN_DISPLAY_SECONDS } from '../lib/constants';
-import type { GameState, Question, Player, LeaderboardEntry } from '../lib/types';
+import type { GameState, Player, LeaderboardEntry, DisplayStatsResponse } from '../lib/types';
+
+// ── Local types ───────────────────────────────────────────────────────────────
+
+// Merged question: base data from `questions` + runtime snapshot from `game_set_questions`
+interface DisplayQuestion {
+  id: string;
+  text: string;
+  image_url: string;
+  reveal_image_url: string | null;
+  image_width: number | null;
+  image_height: number | null;
+  order_index: number;           // bank order — used as fallback only
+  // runtime values (game_set_questions snapshot when available, else questions defaults)
+  time_limit_seconds: number;
+  max_score: number;
+  min_correct_score: number;
+  circle_radius_ratio: number;
+  play_order: number;            // visible position (game set play_order, or order_index)
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -37,13 +56,27 @@ function useDisplayServerTime() {
   return useCallback(() => Date.now() + offset.current, []);
 }
 
-// ── QR code via public API ────────────────────────────────────────────────────
+// ── QR code with fallback ─────────────────────────────────────────────────────
 function QRCode({ url }: { url: string }) {
+  const [imgFailed, setImgFailed] = useState(false);
   const encoded = encodeURIComponent(url);
   const src = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encoded}&bgcolor=050810&color=F5C74A&margin=12&qzone=1`;
+
   return (
     <div className="ds-qr-wrap">
-      <img src={src} alt="QR Code" className="ds-qr-img" />
+      {!imgFailed ? (
+        <img
+          src={src}
+          alt="QR Code"
+          className="ds-qr-img"
+          onError={() => setImgFailed(true)}
+        />
+      ) : (
+        <div className="ds-qr-fallback">
+          <div className="ds-label" style={{ marginBottom: 8 }}>สแกนหรือพิมพ์ URL</div>
+          <div className="ds-join-url ds-join-url-lg">{url}</div>
+        </div>
+      )}
     </div>
   );
 }
@@ -51,29 +84,61 @@ function QRCode({ url }: { url: string }) {
 // ── Root component ────────────────────────────────────────────────────────────
 export function DisplayPage() {
   const [gameState, setGameState] = useState<GameState | null>(null);
-  const [question, setQuestion] = useState<Question | null>(null);
+  const [question, setQuestion] = useState<DisplayQuestion | null>(null);
   const [players, setPlayers] = useState<Player[]>([]);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+  const [stats, setStats] = useState<DisplayStatsResponse | null>(null);
+  const [authReady, setAuthReady] = useState(false);
   const getServerTime = useDisplayServerTime();
-  const prevQId = useRef<string | null>(null);
+  const prevQuestionKeyRef = useRef<string | null>(null);
 
-  // ── Game state subscription ─────────────────────────────────────────────────
+  // ── 1. Anonymous auth — needed so questions RLS allows reading ──────────────
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) {
+        setAuthReady(true);
+      } else {
+        supabase.auth.signInAnonymously()
+          .then(() => setAuthReady(true))
+          .catch(() => setAuthReady(true)); // proceed anyway; stats still work
+      }
+    });
+  }, []);
+
+  // ── 2. Fetch display stats (aggregate only, no raw answer data) ─────────────
+  const fetchStats = useCallback(async () => {
+    try {
+      const res = await fetch(`${FUNCTIONS_URL}/get-display-stats`, {
+        headers: { 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` },
+      });
+      if (!res.ok) return;
+      const data = await res.json() as DisplayStatsResponse;
+      setStats(data);
+    } catch { /* non-critical — display still works without stats */ }
+  }, []);
+
+  // ── 3. Game state subscription ──────────────────────────────────────────────
   useEffect(() => {
     supabase
       .from('game_state').select('*').eq('id', GAME_STATE_ID).single()
-      .then(({ data }) => { if (data) setGameState(data as GameState); });
+      .then(({ data }) => {
+        if (data) { setGameState(data as GameState); void fetchStats(); }
+      });
 
     const ch = supabase.channel('display-game')
       .on('postgres_changes', {
         event: 'UPDATE', schema: 'public', table: 'game_state',
         filter: `id=eq.${GAME_STATE_ID}`,
-      }, (payload) => setGameState(payload.new as GameState))
+      }, (payload) => {
+        setGameState(payload.new as GameState);
+        void fetchStats();
+      })
       .subscribe();
 
     return () => { supabase.removeChannel(ch); };
-  }, []);
+  }, [fetchStats]);
 
-  // ── Players subscription (for lobby wall) ──────────────────────────────────
+  // ── 4. Players subscription (for lobby wall) ────────────────────────────────
   useEffect(() => {
     supabase.from('players').select('id, display_name, total_score, joined_at')
       .then(({ data }) => { if (data) setPlayers(sortNewest(data as Player[])); });
@@ -96,54 +161,167 @@ export function DisplayPage() {
     return () => { supabase.removeChannel(ch); };
   }, []);
 
-  // ── Fetch question when question_id changes ─────────────────────────────────
+  // ── 5. Subscribe to answers to trigger stat refresh (no payload read) ───────
   useEffect(() => {
+    const ch = supabase.channel('display-answers')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'answers' }, () => {
+        void fetchStats();
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [fetchStats]);
+
+  // ── 6. Fetch question with game_set_questions snapshot overlay ──────────────
+  useEffect(() => {
+    if (!authReady) return;
     const qId = gameState?.current_question_id ?? null;
-    if (!qId) { setQuestion(null); prevQId.current = null; return; }
-    if (qId === prevQId.current) return;
-    prevQId.current = qId;
+    const gsqId = gameState?.current_game_set_question_id ?? null;
+    const key = `${qId}::${gsqId}`;
+    if (!qId || key === prevQuestionKeyRef.current) return;
+    prevQuestionKeyRef.current = key;
 
-    supabase.from('questions')
-      .select('id, order_index, text, image_url, circle_radius_ratio, time_limit_seconds, max_score, min_correct_score, image_width, image_height, reveal_image_url, is_published, created_at')
-      .eq('id', qId).single()
-      .then(({ data }) => { if (data) setQuestion(data as Question); });
-  }, [gameState?.current_question_id]);
+    const fetch_ = async () => {
+      const { data: qData } = await supabase
+        .from('questions')
+        .select('id, order_index, text, image_url, circle_radius_ratio, time_limit_seconds, max_score, min_correct_score, image_width, image_height, reveal_image_url')
+        .eq('id', qId)
+        .single();
 
-  // ── Leaderboard fetch when phase changes to leaderboard/ended ──────────────
+      if (!qData) return;
+
+      let dq: DisplayQuestion = {
+        id: qData.id,
+        text: qData.text,
+        image_url: qData.image_url,
+        reveal_image_url: qData.reveal_image_url,
+        image_width: qData.image_width,
+        image_height: qData.image_height,
+        order_index: qData.order_index,
+        time_limit_seconds: qData.time_limit_seconds,
+        max_score: qData.max_score,
+        min_correct_score: qData.min_correct_score,
+        circle_radius_ratio: qData.circle_radius_ratio,
+        play_order: qData.order_index, // fallback: use bank order
+      };
+
+      // Overlay game_set_questions snapshot when available
+      if (gsqId) {
+        const { data: gsqData } = await supabase
+          .from('game_set_questions')
+          .select('play_order, time_limit_seconds, max_score, min_correct_score, circle_radius_ratio')
+          .eq('id', gsqId)
+          .single();
+
+        if (gsqData) {
+          dq = {
+            ...dq,
+            play_order: gsqData.play_order,
+            time_limit_seconds: gsqData.time_limit_seconds,
+            max_score: gsqData.max_score,
+            min_correct_score: gsqData.min_correct_score,
+            circle_radius_ratio: gsqData.circle_radius_ratio,
+          };
+        }
+      }
+
+      setQuestion(dq);
+    };
+
+    void fetch_();
+  }, [authReady, gameState?.current_question_id, gameState?.current_game_set_question_id]);
+
+  // ── 7. Leaderboard — fetch + retry + realtime subscription ─────────────────
   useEffect(() => {
     const status = gameState?.status;
     const qId = gameState?.current_question_id;
     if ((status !== 'leaderboard' && status !== 'ended') || !qId) return;
 
-    supabase.from('leaderboard_snapshot')
-      .select('question_id, player_id, rank, display_name, question_score, cumulative_score')
-      .eq('question_id', qId).order('rank', { ascending: true }).limit(10)
-      .then(({ data }) => { if (data) setLeaderboard(data as LeaderboardEntry[]); });
+    const fetchLb = async () => {
+      const { data } = await supabase
+        .from('leaderboard_snapshot')
+        .select('question_id, player_id, rank, display_name, question_score, cumulative_score')
+        .eq('question_id', qId)
+        .order('rank', { ascending: true })
+        .limit(10);
+      if (data && data.length > 0) setLeaderboard(data as LeaderboardEntry[]);
+    };
+
+    // Fetch immediately, then again after 400 ms in case snapshot was written
+    // just after the phase change (avoiding stale "กำลังโหลด..." state)
+    void fetchLb();
+    const retryTimer = setTimeout(() => void fetchLb(), 400);
+
+    const ch = supabase.channel('display-leaderboard')
+      .on('postgres_changes', {
+        event: 'INSERT', schema: 'public', table: 'leaderboard_snapshot',
+        filter: `question_id=eq.${qId}`,
+      }, () => void fetchLb())
+      .subscribe();
+
+    return () => { clearTimeout(retryTimer); supabase.removeChannel(ch); };
   }, [gameState?.status, gameState?.current_question_id]);
 
   // ── Route to phase component ────────────────────────────────────────────────
   const status = gameState?.status ?? 'waiting';
+  const totalQs = stats?.total_questions ?? 0;
 
   if (!gameState || status === 'waiting') {
     return <DsLobby players={players} />;
   }
   if (status === 'countdown') {
-    return <DsCountdown gameState={gameState} question={question} />;
+    return (
+      <DsCountdown
+        gameState={gameState}
+        question={question}
+        totalQs={totalQs}
+        getServerTime={getServerTime}
+      />
+    );
   }
   if (status === 'question_open') {
-    return <DsQuestion gameState={gameState} question={question} playerCount={players.length} getServerTime={getServerTime} />;
+    return (
+      <DsQuestion
+        gameState={gameState}
+        question={question}
+        stats={stats}
+        totalQs={totalQs}
+        getServerTime={getServerTime}
+      />
+    );
   }
   if (status === 'question_closed') {
-    return <DsClosed question={question} />;
+    return <DsClosed question={question} stats={stats} totalQs={totalQs} />;
   }
   if (status === 'reveal') {
-    return <DsReveal gameState={gameState} question={question} getServerTime={getServerTime} />;
+    return (
+      <DsReveal
+        gameState={gameState}
+        question={question}
+        stats={stats}
+        totalQs={totalQs}
+        getServerTime={getServerTime}
+      />
+    );
   }
   if (status === 'leaderboard') {
-    return <DsLeaderboard leaderboard={leaderboard} question={question} isFinal={false} />;
+    return (
+      <DsLeaderboard
+        leaderboard={leaderboard}
+        question={question}
+        totalQs={totalQs}
+        isFinal={false}
+      />
+    );
   }
   if (status === 'ended') {
-    return <DsLeaderboard leaderboard={leaderboard} question={question} isFinal />;
+    return (
+      <DsLeaderboard
+        leaderboard={leaderboard}
+        question={question}
+        totalQs={totalQs}
+        isFinal
+      />
+    );
   }
   return <DsLobby players={players} />;
 }
@@ -160,13 +338,21 @@ function DsShell({ children, centered = false }: { children: React.ReactNode; ce
   );
 }
 
+// ── Position label helper ─────────────────────────────────────────────────────
+function QPos({ question, totalQs, small }: { question: DisplayQuestion | null; totalQs: number; small?: boolean }) {
+  if (!question) return null;
+  const pos = `Question ${question.play_order}${totalQs > 0 ? ` / ${totalQs}` : ''}`;
+  return small
+    ? <div className="ds-q-pos-sm">{pos}</div>
+    : <div className="ds-q-pos">{pos}</div>;
+}
+
 // ── 1. LOBBY ──────────────────────────────────────────────────────────────────
 function DsLobby({ players }: { players: Player[] }) {
   const joinUrl = window.location.origin + (import.meta.env.BASE_URL || '/');
 
   return (
     <DsShell>
-      {/* Header row */}
       <div className="ds-lobby-header">
         <div>
           <div className="ds-label">Golden Ring · Lobby</div>
@@ -177,9 +363,8 @@ function DsLobby({ players }: { players: Player[] }) {
         </div>
       </div>
 
-      {/* Main row: QR + stats + player wall */}
       <div className="ds-lobby-body">
-        {/* Left: QR */}
+        {/* Left: QR + join URL + player count */}
         <div className="ds-lobby-left">
           <div className="ds-label" style={{ marginBottom: 12, textAlign: 'center' }}>สแกนเพื่อเข้าร่วม</div>
           <QRCode url={joinUrl} />
@@ -208,14 +393,20 @@ function DsLobby({ players }: { players: Player[] }) {
         </div>
       </div>
 
-      {/* Footer */}
       <div className="ds-lobby-footer">กำลังรอพิธีกรเริ่มเกม...</div>
     </DsShell>
   );
 }
 
 // ── 2. COUNTDOWN ─────────────────────────────────────────────────────────────
-function DsCountdown({ gameState, question }: { gameState: GameState; question: Question | null }) {
+function DsCountdown({
+  gameState, question, totalQs, getServerTime,
+}: {
+  gameState: GameState;
+  question: DisplayQuestion | null;
+  totalQs: number;
+  getServerTime: () => number;
+}) {
   const totalMs = COUNTDOWN_DISPLAY_SECONDS * 1000;
   const [remainingMs, setRemainingMs] = useState(totalMs);
   const [showClue, setShowClue] = useState(false);
@@ -223,8 +414,22 @@ function DsCountdown({ gameState, question }: { gameState: GameState; question: 
 
   useEffect(() => {
     setShowClue(false);
-    setRemainingMs(totalMs);
-    const t0 = performance.now();
+
+    // Calculate how much time has already elapsed since the host triggered countdown.
+    // This syncs the display to server time instead of restarting from 0 on mount.
+    const startMs = new Date(startedAt).getTime();
+    const alreadyElapsedMs = Math.max(0, getServerTime() - startMs);
+    const initialRemaining = Math.max(0, totalMs - alreadyElapsedMs);
+
+    if (initialRemaining === 0) {
+      setShowClue(true);
+      return;
+    }
+
+    setRemainingMs(initialRemaining);
+
+    // Offset t0 so performance.now() arithmetic gives the correct remaining time
+    const t0 = performance.now() - alreadyElapsedMs;
     let raf = 0;
     let clueTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -239,8 +444,9 @@ function DsCountdown({ gameState, question }: { gameState: GameState; question: 
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
+
     return () => { cancelAnimationFrame(raf); if (clueTimer) clearTimeout(clueTimer); };
-  }, [startedAt, question?.id, totalMs]);
+  }, [startedAt, question?.id, totalMs, getServerTime]);
 
   const count = Math.ceil(remainingMs / 1000);
   const progress = Math.max(0, Math.min(1, (totalMs - remainingMs) / totalMs));
@@ -250,9 +456,7 @@ function DsCountdown({ gameState, question }: { gameState: GameState; question: 
 
   return (
     <DsShell centered>
-      {question && (
-        <div className="ds-q-pos">Question {question.order_index}</div>
-      )}
+      <QPos question={question} totalQs={totalQs} />
 
       {!showClue ? (
         <div className="ds-countdown-wrap">
@@ -290,11 +494,12 @@ function DsCountdown({ gameState, question }: { gameState: GameState; question: 
 
 // ── 3. QUESTION OPEN ──────────────────────────────────────────────────────────
 function DsQuestion({
-  gameState, question, playerCount, getServerTime,
+  gameState, question, stats, totalQs, getServerTime,
 }: {
   gameState: GameState;
-  question: Question | null;
-  playerCount: number;
+  question: DisplayQuestion | null;
+  stats: DisplayStatsResponse | null;
+  totalQs: number;
   getServerTime: () => number;
 }) {
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
@@ -314,21 +519,25 @@ function DsQuestion({
   const urgent = timeLeft != null && timeLeft <= 5;
   const imgUrl = question ? resolveQuestionImageUrl(question.image_url) : null;
 
+  const submittedCount = stats?.submitted_count ?? null;
+  const playerCount = stats?.player_count ?? null;
+
   return (
     <DsShell>
       {/* Top bar */}
       <div className="ds-q-bar">
-        <div className="ds-q-pos-sm">
-          {question ? `Question ${question.order_index}` : '—'}
-        </div>
+        <QPos question={question} totalQs={totalQs} small />
         <div className="ds-q-meta">
-          <span className="ds-muted">{playerCount} ผู้เล่น</span>
+          {submittedCount !== null && playerCount !== null && (
+            <span className="ds-stat-pill">
+              ตอบแล้ว {submittedCount} / {playerCount}
+            </span>
+          )}
         </div>
       </div>
 
       {/* Content */}
       <div className="ds-q-body">
-        {/* Left: question info */}
         <div className="ds-q-left">
           <div className="ds-q-text">{question?.text ?? 'กำลังโหลด...'}</div>
 
@@ -338,7 +547,6 @@ function DsQuestion({
             <span className="ds-timer-unit">s</span>
           </div>
 
-          {/* Timer bar */}
           <div className="ds-timer-bar-track">
             <div
               className={`ds-timer-bar-fill ${urgent ? 'ds-timer-bar-urgent' : ''}`}
@@ -349,7 +557,6 @@ function DsQuestion({
           <div className="ds-muted" style={{ marginTop: 16 }}>กำลังรับคำตอบ...</div>
         </div>
 
-        {/* Right: image */}
         {imgUrl && (
           <div className="ds-q-right">
             <div className="ds-q-img-wrap">
@@ -363,12 +570,26 @@ function DsQuestion({
 }
 
 // ── 4. QUESTION CLOSED ────────────────────────────────────────────────────────
-function DsClosed({ question }: { question: Question | null }) {
+function DsClosed({
+  question, stats, totalQs,
+}: {
+  question: DisplayQuestion | null;
+  stats: DisplayStatsResponse | null;
+  totalQs: number;
+}) {
+  const submittedCount = stats?.submitted_count ?? null;
+  const playerCount = stats?.player_count ?? null;
+
   return (
     <DsShell centered>
-      {question && <div className="ds-q-pos">Question {question.order_index}</div>}
+      <QPos question={question} totalQs={totalQs} />
       <div className="ds-closed-icon">🔒</div>
       <div className="ds-huge-text">หมดเวลา!</div>
+      {submittedCount !== null && playerCount !== null && (
+        <div className="ds-stat-line">
+          ตอบแล้ว <strong>{submittedCount}</strong> / {playerCount} คน
+        </div>
+      )}
       <div className="ds-sub-text">รอการเฉลยจากพิธีกร...</div>
     </DsShell>
   );
@@ -376,10 +597,12 @@ function DsClosed({ question }: { question: Question | null }) {
 
 // ── 5. REVEAL ─────────────────────────────────────────────────────────────────
 function DsReveal({
-  gameState, question, getServerTime,
+  gameState, question, stats, totalQs, getServerTime,
 }: {
   gameState: GameState;
-  question: Question | null;
+  question: DisplayQuestion | null;
+  stats: DisplayStatsResponse | null;
+  totalQs: number;
   getServerTime: () => number;
 }) {
   const [showReveal, setShowReveal] = useState(false);
@@ -407,10 +630,14 @@ function DsReveal({
   const revealImg = resolveRevealImageUrl(question.reveal_image_url) ?? baseImg;
   const maskUrl = `${FUNCTIONS_URL}/get-reveal-mask?questionId=${encodeURIComponent(question.id)}&updatedAt=${encodeURIComponent(gameState.updated_at ?? '')}`;
 
+  const submittedCount = stats?.submitted_count ?? 0;
+  const correctCount = stats?.correct_count ?? 0;
+  const accuracy = stats?.accuracy ?? 0;
+
   return (
     <DsShell>
       <div className="ds-reveal-header">
-        <div className="ds-q-pos-sm">Question {question.order_index}</div>
+        <QPos question={question} totalQs={totalQs} small />
         <div className="ds-label ds-gold" style={{ letterSpacing: '.2em' }}>เฉลย</div>
       </div>
 
@@ -422,14 +649,24 @@ function DsReveal({
             alt="Reveal"
             className="ds-reveal-img"
           />
-          {/* Mask overlay — same endpoint as player */}
-          <img
-            src={maskUrl}
-            alt=""
-            aria-hidden
-            className="ds-reveal-mask reveal-mask-pulse"
-          />
+          <img src={maskUrl} alt="" aria-hidden className="ds-reveal-mask reveal-mask-pulse" />
         </div>
+
+        {/* Answer stats — shown once reveal is up */}
+        {showReveal && submittedCount > 0 && (
+          <div className="ds-reveal-stats">
+            <div className="ds-reveal-stat-item">
+              <span className="ds-label">ตอบถูก</span>
+              <span className="ds-reveal-stat-val ds-gold">{correctCount} / {submittedCount}</span>
+            </div>
+            <div className="ds-reveal-stat-sep" />
+            <div className="ds-reveal-stat-item">
+              <span className="ds-label">ความแม่นยำ</span>
+              <span className="ds-reveal-stat-val">{accuracy.toFixed(1)}%</span>
+            </div>
+          </div>
+        )}
+
         {!showReveal && (
           <div className="ds-muted" style={{ marginTop: 12 }}>กำลังแสดงเฉลย...</div>
         )}
@@ -440,10 +677,11 @@ function DsReveal({
 
 // ── 6 + 7. LEADERBOARD / FINAL ────────────────────────────────────────────────
 function DsLeaderboard({
-  leaderboard, question, isFinal,
+  leaderboard, question, totalQs, isFinal,
 }: {
   leaderboard: LeaderboardEntry[];
-  question: Question | null;
+  question: DisplayQuestion | null;
+  totalQs: number;
   isFinal: boolean;
 }) {
   const winner = leaderboard[0];
@@ -452,7 +690,6 @@ function DsLeaderboard({
 
   return (
     <DsShell>
-      {/* Header */}
       <div className="ds-lb-header">
         {isFinal ? (
           <>
@@ -468,14 +705,15 @@ function DsLeaderboard({
         ) : (
           <>
             <div className="ds-label ds-gold" style={{ letterSpacing: '.2em' }}>
-              {question ? `หลังจบ Question ${question.order_index}` : 'Leaderboard'}
+              {question
+                ? `หลังจบ Question ${question.play_order}${totalQs > 0 ? ` / ${totalQs}` : ''}`
+                : 'Leaderboard'}
             </div>
             <div className="ds-title" style={{ fontSize: 32 }}>ตารางคะแนน</div>
           </>
         )}
       </div>
 
-      {/* Podium (top 3) */}
       {top.length > 0 && isFinal && (
         <div className="ds-podium">
           {[1, 0, 2].filter((i) => top[i]).map((i) => (
@@ -491,7 +729,6 @@ function DsLeaderboard({
         </div>
       )}
 
-      {/* List */}
       <div className="ds-lb-list">
         {(isFinal ? top.slice(3) : top).map((entry, idx) => {
           const listRank = isFinal ? idx + 4 : idx + 1;

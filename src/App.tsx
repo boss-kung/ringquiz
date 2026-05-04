@@ -19,6 +19,15 @@ import { HostPage } from './screens/host/HostPage';
 import { DisplayPage } from './screens/DisplayPage';
 
 function getAppPath() {
+  // GitHub Pages SPA fallback (public/404.html) rewrites:
+  //   /ringquiz/display  →  /ringquiz/?/display
+  // Check the search string first so direct-link/refresh works on GH Pages.
+  const search = window.location.search;
+  if (search.startsWith('?/')) {
+    const path = search.slice(1).split('&')[0]; // e.g. "/display"
+    return path.startsWith('/') ? path : `/${path}`;
+  }
+
   const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
   const pathname = window.location.pathname;
 

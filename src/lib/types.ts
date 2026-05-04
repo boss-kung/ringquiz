@@ -170,6 +170,17 @@ export interface ExportResultsResponse {
   leaderboard: LeaderboardEntry[];
 }
 
+export interface DisplayStatsResponse {
+  player_count: number;
+  submitted_count: number;
+  correct_count: number;
+  accuracy: number;             // correct_count / submitted_count * 100, or 0
+  question_index: number | null; // play_order in active game set
+  total_questions: number;
+  current_question_id: string | null;
+  active_game_set_id: string | null;
+}
+
 export interface EdgeFunctionError {
   error: string;
   detail?: string;
