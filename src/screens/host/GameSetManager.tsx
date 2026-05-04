@@ -17,15 +17,27 @@ async function callAdmin(
 ): Promise<AdminQuestionResponse> {
   const res = await fetch(`${FUNCTIONS_URL}/admin-question-action`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_ANON_KEY, 'X-Host-Secret': secret },
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPABASE_ANON_KEY}`, 'X-Host-Secret': secret },
     body: JSON.stringify(body),
   });
-  const json = await res.json();
-  if (!res.ok) {
-    const detail = typeof json?.detail === 'string' ? `: ${json.detail}` : '';
-    throw new Error(`${json?.error ?? 'Request failed'}${detail}`);
+
+  if (res.ok) {
+    return res.json() as Promise<AdminQuestionResponse>;
   }
-  return json as AdminQuestionResponse;
+
+  let json: Record<string, unknown> = {};
+  try { json = await res.json(); } catch { /* non-JSON body */ }
+
+  // Edge function errors use { error, detail }; Supabase gateway uses { code, message }
+  const msg =
+    (typeof json.error   === 'string' ? json.error   : null) ??
+    (typeof json.code    === 'string' ? json.code    : null) ??
+    `HTTP ${res.status}`;
+  const detail =
+    (typeof json.detail  === 'string' ? json.detail  : null) ??
+    (typeof json.message === 'string' ? json.message : null) ??
+    res.statusText;
+  throw new Error(detail ? `${msg}: ${detail}` : msg);
 }
 
 // ── Types ────────────────────────────────────────────────────────────────────

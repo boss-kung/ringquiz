@@ -29,7 +29,7 @@ function sortNewest(players: Player[]): Player[] {
 function useDisplayServerTime() {
   const offset = useRef(0);
   useEffect(() => {
-    fetch(`${FUNCTIONS_URL}/server-time`, { headers: { 'apikey': SUPABASE_ANON_KEY } })
+    fetch(`${FUNCTIONS_URL}/server-time`, { headers: { 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` } })
       .then((r) => r.json())
       .then((d) => { if (d.server_time_ms) offset.current = d.server_time_ms - Date.now(); })
       .catch(() => {});

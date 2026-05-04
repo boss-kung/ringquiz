@@ -94,19 +94,26 @@ async function callAdminQuestionAction(
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'apikey': SUPABASE_ANON_KEY,
+      'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
       'X-Host-Secret': secret,
     },
     body: JSON.stringify(body),
   });
 
-  const json = await response.json();
-  if (!response.ok) {
-    const detail = typeof json?.detail === 'string' ? `: ${json.detail}` : '';
-    throw new Error(`${json?.error ?? 'Request failed'}${detail}`);
-  }
+  if (response.ok) return response.json() as Promise<AdminQuestionResponse>;
 
-  return json as AdminQuestionResponse;
+  let json: Record<string, unknown> = {};
+  try { json = await response.json(); } catch { /* non-JSON body */ }
+
+  const msg =
+    (typeof json.error   === 'string' ? json.error   : null) ??
+    (typeof json.code    === 'string' ? json.code    : null) ??
+    `HTTP ${response.status}`;
+  const detail =
+    (typeof json.detail  === 'string' ? json.detail  : null) ??
+    (typeof json.message === 'string' ? json.message : null) ??
+    response.statusText;
+  throw new Error(detail ? `${msg}: ${detail}` : msg);
 }
 
 async function uploadQuestionAssets(
@@ -131,19 +138,27 @@ async function uploadQuestionAssets(
   const response = await fetch(`${FUNCTIONS_URL}/admin-question-action`, {
     method: 'POST',
     headers: {
-      'apikey': SUPABASE_ANON_KEY,
+      'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
       'X-Host-Secret': secret,
     },
     body,
   });
 
-  const json = await response.json();
   if (!response.ok) {
-    const detail = typeof json?.detail === 'string' ? `: ${json.detail}` : '';
-    throw new Error(`${json?.error ?? 'Upload failed'}${detail}`);
+    let errJson: Record<string, unknown> = {};
+    try { errJson = await response.json(); } catch { /* non-JSON body */ }
+    const msg =
+      (typeof errJson.error   === 'string' ? errJson.error   : null) ??
+      (typeof errJson.code    === 'string' ? errJson.code    : null) ??
+      `HTTP ${response.status}`;
+    const detail =
+      (typeof errJson.detail  === 'string' ? errJson.detail  : null) ??
+      (typeof errJson.message === 'string' ? errJson.message : null) ??
+      response.statusText;
+    throw new Error(detail ? `${msg}: ${detail}` : msg);
   }
 
-  return json as AdminUploadAssetsResponse;
+  return response.json() as Promise<AdminUploadAssetsResponse>;
 }
 
 function normalizeEditorForm(form: EditorFormState): Record<string, unknown> {

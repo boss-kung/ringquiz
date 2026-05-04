@@ -11,7 +11,7 @@ export function useServerTime() {
     try {
       const t0 = Date.now();
       const res = await fetch(`${FUNCTIONS_URL}/server-time`, {
-        headers: { 'apikey': SUPABASE_ANON_KEY },
+        headers: { 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` },
       });
       if (!res.ok) return;
       const data: ServerTimeResponse = await res.json();

@@ -17,7 +17,7 @@
 -- TABLE: game_sets
 -- =============================================================================
 
-CREATE TABLE game_sets (
+CREATE TABLE IF NOT EXISTS game_sets (
   id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   name        TEXT        NOT NULL,
   status      TEXT        NOT NULL DEFAULT 'draft'
@@ -26,11 +26,17 @@ CREATE TABLE game_sets (
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_game_sets_status ON game_sets(status);
+CREATE INDEX IF NOT EXISTS idx_game_sets_status ON game_sets(status);
 
-CREATE TRIGGER trg_game_sets_updated_at
-  BEFORE UPDATE ON game_sets
-  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger WHERE tgname = 'trg_game_sets_updated_at'
+  ) THEN
+    CREATE TRIGGER trg_game_sets_updated_at
+      BEFORE UPDATE ON game_sets
+      FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+  END IF;
+END $$;
 
 
 -- =============================================================================
@@ -38,7 +44,7 @@ CREATE TRIGGER trg_game_sets_updated_at
 -- Snapshot values: copied from question bank at add time. Independent after.
 -- =============================================================================
 
-CREATE TABLE game_set_questions (
+CREATE TABLE IF NOT EXISTS game_set_questions (
   id                  UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   game_set_id         UUID        NOT NULL REFERENCES game_sets(id)  ON DELETE CASCADE,
   question_id         UUID        NOT NULL REFERENCES questions(id),
@@ -58,12 +64,18 @@ CREATE TABLE game_set_questions (
   CONSTRAINT gsq_circle_radius_range  CHECK  (circle_radius_ratio > 0 AND circle_radius_ratio <= 0.5)
 );
 
-CREATE INDEX idx_gsq_game_set_play_order ON game_set_questions(game_set_id, play_order);
-CREATE INDEX idx_gsq_question_id         ON game_set_questions(question_id);
+CREATE INDEX IF NOT EXISTS idx_gsq_game_set_play_order ON game_set_questions(game_set_id, play_order);
+CREATE INDEX IF NOT EXISTS idx_gsq_question_id         ON game_set_questions(question_id);
 
-CREATE TRIGGER trg_game_set_questions_updated_at
-  BEFORE UPDATE ON game_set_questions
-  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger WHERE tgname = 'trg_game_set_questions_updated_at'
+  ) THEN
+    CREATE TRIGGER trg_game_set_questions_updated_at
+      BEFORE UPDATE ON game_set_questions
+      FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+  END IF;
+END $$;
 
 
 -- =============================================================================
@@ -71,8 +83,8 @@ CREATE TRIGGER trg_game_set_questions_updated_at
 -- =============================================================================
 
 ALTER TABLE game_state
-  ADD COLUMN active_game_set_id          UUID REFERENCES game_sets(id),
-  ADD COLUMN current_game_set_question_id UUID REFERENCES game_set_questions(id);
+  ADD COLUMN IF NOT EXISTS active_game_set_id          UUID REFERENCES game_sets(id),
+  ADD COLUMN IF NOT EXISTS current_game_set_question_id UUID REFERENCES game_set_questions(id);
 
 
 -- =============================================================================
@@ -84,13 +96,25 @@ ALTER TABLE game_state
 ALTER TABLE game_sets          ENABLE ROW LEVEL SECURITY;
 ALTER TABLE game_set_questions ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "public_read_game_sets"
-  ON game_sets FOR SELECT
-  USING (true);
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies WHERE tablename = 'game_sets' AND policyname = 'public_read_game_sets'
+  ) THEN
+    CREATE POLICY "public_read_game_sets"
+      ON game_sets FOR SELECT
+      USING (true);
+  END IF;
+END $$;
 
-CREATE POLICY "public_read_game_set_questions"
-  ON game_set_questions FOR SELECT
-  USING (true);
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies WHERE tablename = 'game_set_questions' AND policyname = 'public_read_game_set_questions'
+  ) THEN
+    CREATE POLICY "public_read_game_set_questions"
+      ON game_set_questions FOR SELECT
+      USING (true);
+  END IF;
+END $$;
 
 
 -- =============================================================================
@@ -207,15 +231,21 @@ $$;
 -- Create one "Migrated Default Game Set" from all currently published questions,
 -- ordered by their existing order_index. Copy current values as snapshot values.
 -- Set this game set as active in game_state.
+-- Only runs if no game sets exist yet (idempotent guard).
 -- =============================================================================
 
 DO $$
 DECLARE
-  v_game_set_id  UUID    := gen_random_uuid();
-  v_play_order   INT     := 1;
-  v_question     RECORD;
+  v_game_set_id   UUID    := gen_random_uuid();
+  v_play_order    INT     := 1;
+  v_question      RECORD;
   v_has_questions BOOLEAN;
 BEGIN
+  -- Skip if game sets already exist
+  IF EXISTS (SELECT 1 FROM game_sets LIMIT 1) THEN
+    RETURN;
+  END IF;
+
   -- Check if there are any published questions
   SELECT EXISTS (
     SELECT 1 FROM questions WHERE is_published = TRUE LIMIT 1
@@ -260,7 +290,7 @@ $$;
 -- =============================================================================
 -- VERIFICATION (run manually after migration)
 -- =============================================================================
--- SELECT COUNT(*) FROM game_sets;                          -- expect: 1
+-- SELECT COUNT(*) FROM game_sets;                          -- expect: >= 1
 -- SELECT status FROM game_sets;                            -- expect: active
 -- SELECT COUNT(*) FROM game_set_questions;                 -- expect: N (published qs)
 -- SELECT active_game_set_id FROM game_state
