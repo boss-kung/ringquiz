@@ -21,6 +21,11 @@ function isHostRoute() {
   return appPath === '/host' || appPath.startsWith('/host/');
 }
 
+function isDisplayRoute() {
+  const appPath = getAppPath();
+  return appPath === '/display' || appPath.startsWith('/display/');
+}
+
 function preventZoom() {
   const block = (event: Event) => event.preventDefault();
 
@@ -51,21 +56,22 @@ function preventZoom() {
 }
 
 const hostRoute = isHostRoute();
+const displayRoute = isDisplayRoute();
 const viewportMeta = document.querySelector('meta[name="viewport"]');
 if (viewportMeta) {
   viewportMeta.setAttribute(
     'content',
-    hostRoute
+    (hostRoute || displayRoute)
       ? 'width=device-width, initial-scale=1.0'
       : 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no',
   );
 }
 
-document.documentElement.classList.toggle('host-route', hostRoute);
-document.body.classList.toggle('host-route', hostRoute);
-document.getElementById('root')?.classList.toggle('host-route', hostRoute);
+document.documentElement.classList.toggle('host-route', hostRoute || displayRoute);
+document.body.classList.toggle('host-route', hostRoute || displayRoute);
+document.getElementById('root')?.classList.toggle('host-route', hostRoute || displayRoute);
 
-if (!hostRoute) {
+if (!hostRoute && !displayRoute) {
   preventZoom();
 }
 

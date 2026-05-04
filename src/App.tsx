@@ -16,6 +16,7 @@ import { RevealScreen } from './screens/RevealScreen';
 import { LeaderboardScreen } from './screens/LeaderboardScreen';
 import { EndScreen } from './screens/EndScreen';
 import { HostPage } from './screens/host/HostPage';
+import { DisplayPage } from './screens/DisplayPage';
 
 function getAppPath() {
   const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
@@ -29,13 +30,17 @@ function getAppPath() {
   return pathname;
 }
 
-// Simple URL-based routing: /host → Host UI, everything else → Player UI.
+// Simple URL-based routing: /host → Host UI, /display → Display UI, else → Player UI.
 // On GitHub Pages the app lives under /ringquiz/, so we strip BASE_URL first.
 const appPath = getAppPath();
 const isHost = appPath === '/host' || appPath.startsWith('/host/');
+const isDisplay = appPath === '/display' || appPath.startsWith('/display/');
 
 export default function App() {
-  // These hooks run for both player and host; host-specific data (question stats) is polled inside HostPage
+  // Display page is fully standalone — no shared hooks, no player state
+  if (isDisplay) return <DisplayPage />;
+
+  // Host + player share game state hooks
   useServerTime();
   useGameState();
   useQuestion();
