@@ -18,10 +18,12 @@ export interface GameState {
   status: GameStatus;
   current_question_id: string | null;
   current_question_index: number | null;
-  question_started_at: string | null;  // ISO 8601 UTC
-  question_ends_at: string | null;     // ISO 8601 UTC — authoritative deadline
+  question_started_at: string | null;              // ISO 8601 UTC
+  question_ends_at: string | null;                 // ISO 8601 UTC — authoritative deadline
   updated_at: string;
-  session_version: number;               // incremented on hard_reset_game to force player re-login
+  session_version: number;                         // incremented on hard_reset_game
+  active_game_set_id: string | null;               // FK → game_sets.id
+  current_game_set_question_id: string | null;     // FK → game_set_questions.id
 }
 
 // ── Questions ────────────────────────────────────────────────────────────────
@@ -138,11 +140,13 @@ export interface RevealZoneResponse {
 export interface QuestionStatsResponse {
   status: GameStatus;
   question_id: string | null;
-  question_index: number | null;
-  total_questions: number;
+  question_index: number | null;       // 1-based position in active game set
+  total_questions: number;             // total enabled questions in active game set
   submitted_count: number;
   player_count: number;
   question_ends_at: string | null;
+  active_game_set_id: string | null;
+  active_game_set_name: string | null;
 }
 
 export interface ExportResultsResponse {

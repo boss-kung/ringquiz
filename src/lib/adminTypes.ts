@@ -1,3 +1,5 @@
+// ── Question Bank types ──────────────────────────────────────────────────────
+
 export type AdminQuestionActionName =
   | 'list_questions'
   | 'create_question'
@@ -6,7 +8,19 @@ export type AdminQuestionActionName =
   | 'move_question'
   | 'publish_question'
   | 'unpublish_question'
-  | 'delete_question';
+  | 'delete_question'
+  // Game set management
+  | 'list_game_sets'
+  | 'create_game_set'
+  | 'update_game_set_name'
+  | 'delete_game_set'
+  | 'set_active_game_set'
+  | 'list_game_set_questions'
+  | 'add_question_to_game_set'
+  | 'remove_game_set_question'
+  | 'update_game_set_question'
+  | 'reorder_game_set_questions'
+  | 'toggle_game_set_question_enabled';
 
 export interface AdminQuestionRecord {
   id: string;
@@ -50,6 +64,17 @@ export interface AdminQuestionRequest {
   direction?: 'up' | 'down';
   question?: AdminQuestionPayload;
   questions?: AdminQuestionPayload[];
+  // Game set fields
+  game_set_id?: string;
+  game_set_question_id?: string;
+  name?: string;
+  play_order?: number;
+  time_limit_seconds?: number;
+  max_score?: number;
+  min_correct_score?: number;
+  circle_radius_ratio?: number;
+  is_enabled?: boolean;
+  ordered_ids?: string[];              // for reorder_game_set_questions
 }
 
 export interface AdminQuestionResponse {
@@ -60,6 +85,11 @@ export interface AdminQuestionResponse {
   created_count?: number;
   error?: string;
   detail?: string;
+  // Game set fields
+  game_sets?: GameSetRecord[];
+  game_set?: GameSetRecord;
+  game_set_questions?: GameSetQuestionRecord[];
+  game_set_question?: GameSetQuestionRecord;
 }
 
 export interface AdminUploadAssetsResponse {
@@ -85,4 +115,36 @@ export interface AdminQuestionPreviewItem {
   valid: boolean;
   normalizedQuestion?: AdminQuestionPayload;
   errors: AdminQuestionValidationIssue[];
+}
+
+// ── Game Set types ───────────────────────────────────────────────────────────
+
+export interface GameSetRecord {
+  id: string;
+  name: string;
+  status: 'draft' | 'active' | 'archived';
+  created_at: string;
+  updated_at: string;
+  question_count: number;
+  enabled_question_count: number;
+}
+
+export interface GameSetQuestionRecord {
+  id: string;
+  game_set_id: string;
+  question_id: string;
+  play_order: number;
+  time_limit_seconds: number;
+  max_score: number;
+  min_correct_score: number;
+  circle_radius_ratio: number;
+  is_enabled: boolean;
+  created_at: string;
+  updated_at: string;
+  // Joined question data (populated by list_game_set_questions)
+  question_text: string;
+  question_image_url: string;
+  question_reveal_image_url: string | null;
+  question_image_width: number | null;
+  question_image_height: number | null;
 }

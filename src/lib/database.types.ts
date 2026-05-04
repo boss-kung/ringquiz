@@ -23,6 +23,8 @@ export type Database = {
           question_started_at: string | null;
           question_ends_at: string | null;
           updated_at: string;
+          active_game_set_id: string | null;
+          current_game_set_question_id: string | null;
         };
         Insert: {
           id?: string;
@@ -32,6 +34,8 @@ export type Database = {
           question_started_at?: string | null;
           question_ends_at?: string | null;
           updated_at?: string;
+          active_game_set_id?: string | null;
+          current_game_set_question_id?: string | null;
         };
         Update: {
           id?: string;
@@ -41,11 +45,94 @@ export type Database = {
           question_started_at?: string | null;
           question_ends_at?: string | null;
           updated_at?: string;
+          active_game_set_id?: string | null;
+          current_game_set_question_id?: string | null;
         };
         Relationships: [
           {
             foreignKeyName: 'fk_game_state_current_question';
             columns: ['current_question_id'];
+            referencedRelation: 'questions';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+
+      game_sets: {
+        Row: {
+          id: string;
+          name: string;
+          status: 'draft' | 'active' | 'archived';
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          status?: 'draft' | 'active' | 'archived';
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          name?: string;
+          status?: 'draft' | 'active' | 'archived';
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+
+      game_set_questions: {
+        Row: {
+          id: string;
+          game_set_id: string;
+          question_id: string;
+          play_order: number;
+          time_limit_seconds: number;
+          max_score: number;
+          min_correct_score: number;
+          circle_radius_ratio: number;
+          is_enabled: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          game_set_id: string;
+          question_id: string;
+          play_order: number;
+          time_limit_seconds?: number;
+          max_score?: number;
+          min_correct_score?: number;
+          circle_radius_ratio?: number;
+          is_enabled?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          game_set_id?: string;
+          question_id?: string;
+          play_order?: number;
+          time_limit_seconds?: number;
+          max_score?: number;
+          min_correct_score?: number;
+          circle_radius_ratio?: number;
+          is_enabled?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'game_set_questions_game_set_id_fkey';
+            columns: ['game_set_id'];
+            referencedRelation: 'game_sets';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'game_set_questions_question_id_fkey';
+            columns: ['question_id'];
             referencedRelation: 'questions';
             referencedColumns: ['id'];
           },
@@ -192,7 +279,7 @@ export type Database = {
 
     Functions: {
       compute_leaderboard: {
-        Args: { p_question_id: string };
+        Args: { p_question_id: string; p_game_set_question_id?: string };
         Returns: number;
       };
       increment_player_score: {

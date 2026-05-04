@@ -1,24 +1,19 @@
-import { useRef, useEffect, useState, useCallback } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react';
 import type { CirclePosition } from '../lib/types';
 
 interface Props {
   imageUrl: string;
-  circleRadiusRatio: number;   // fraction of image width, e.g. 0.08
+  circleRadiusRatio: number;
   circle: CirclePosition | null;
   onCircleChange: (pos: CirclePosition) => void;
-  locked: boolean;             // disable drag/tap after submission
+  locked: boolean;
   revealCircle?: CirclePosition | null;
-  maskOverlayUrl?: string;     // Edge Function URL that returns mask PNG during reveal
+  maskOverlayUrl?: string;
+  maskOverlayClassName?: string;
+  shellClassName?: string;
 }
 
-/**
- * Renders the question image with a draggable circle overlay.
- *
- * Coordinate contract:
- *   - xRatio and yRatio are relative to the RENDERED IMAGE rect (not the container).
- *   - Uses getBoundingClientRect() on the <img> element.
- *   - The <img> uses max-w-full + h-auto: no letterboxing, rect == image pixels.
- */
 export function QuestionImage({
   imageUrl,
   circleRadiusRatio,
@@ -27,52 +22,71 @@ export function QuestionImage({
   locked,
   revealCircle,
   maskOverlayUrl,
+  maskOverlayClassName,
+  shellClassName = '',
 }: Props) {
   const imgRef = useRef<HTMLImageElement>(null);
   const [renderedWidth, setRenderedWidth] = useState(0);
   const isDragging = useRef(false);
 
-  // Track rendered image width for pixel-accurate circle radius
   useEffect(() => {
     const img = imgRef.current;
-    if (!img) return;
+    if (!img) {
+      return;
+    }
 
     const ro = new ResizeObserver(() => {
       setRenderedWidth(img.getBoundingClientRect().width);
     });
+
     ro.observe(img);
 
-    // Set immediately if already loaded
-    if (img.complete) setRenderedWidth(img.getBoundingClientRect().width);
+    if (img.complete) {
+      setRenderedWidth(img.getBoundingClientRect().width);
+    }
 
     return () => ro.disconnect();
   }, []);
 
   const coordsFromEvent = useCallback((clientX: number, clientY: number): CirclePosition | null => {
     const img = imgRef.current;
-    if (!img) return null;
+    if (!img) {
+      return null;
+    }
+
     const rect = img.getBoundingClientRect();
     const xRatio = (clientX - rect.left) / rect.width;
     const yRatio = (clientY - rect.top) / rect.height;
-    // Clamp strictly inside the image
+
     return {
       xRatio: Math.max(0, Math.min(1, xRatio)),
       yRatio: Math.max(0, Math.min(1, yRatio)),
     };
   }, []);
 
-  const handlePointerDown = useCallback((e: React.PointerEvent) => {
-    if (locked) return;
+  const handlePointerDown = useCallback((e: ReactPointerEvent<HTMLImageElement>) => {
+    if (locked) {
+      return;
+    }
+
     e.currentTarget.setPointerCapture(e.pointerId);
     isDragging.current = true;
+
     const pos = coordsFromEvent(e.clientX, e.clientY);
-    if (pos) onCircleChange(pos);
+    if (pos) {
+      onCircleChange(pos);
+    }
   }, [locked, coordsFromEvent, onCircleChange]);
 
-  const handlePointerMove = useCallback((e: React.PointerEvent) => {
-    if (!isDragging.current || locked) return;
+  const handlePointerMove = useCallback((e: ReactPointerEvent<HTMLImageElement>) => {
+    if (!isDragging.current || locked) {
+      return;
+    }
+
     const pos = coordsFromEvent(e.clientX, e.clientY);
-    if (pos) onCircleChange(pos);
+    if (pos) {
+      onCircleChange(pos);
+    }
   }, [locked, coordsFromEvent, onCircleChange]);
 
   const handlePointerUp = useCallback(() => {
@@ -81,7 +95,7 @@ export function QuestionImage({
 
   const circlePx = renderedWidth * circleRadiusRatio;
 
-  const renderCircle = (pos: CirclePosition, style?: React.CSSProperties) => (
+  const renderCircle = (pos: CirclePosition, style?: CSSProperties) => (
     <div
       style={{
         position: 'absolute',
@@ -93,52 +107,65 @@ export function QuestionImage({
         borderRadius: '50%',
         border: '3px solid rgba(255, 255, 255, 0.95)',
         backgroundColor: 'rgba(255, 255, 255, 0.18)',
-        boxShadow: '0 0 0 2px rgba(0,0,0,0.55)',
+        boxShadow: '0 0 0 2px rgba(0, 0, 0, 0.55)',
         pointerEvents: 'none',
         ...style,
       }}
     />
   );
 
+  const wrapperClassName = ['quiz-image-shell', 'no-select', shellClassName]
+    .filter(Boolean)
+    .join(' ');
+
   return (
-    <div
-      className="relative inline-block w-full no-select"
-      style={{ touchAction: 'none' }}
-    >
-      <img
-        ref={imgRef}
-        src={imageUrl}
-        alt="Question"
-        className="block w-full h-auto"
-        draggable={false}
-        onLoad={() => {
-          if (imgRef.current) setRenderedWidth(imgRef.current.getBoundingClientRect().width);
-        }}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onPointerCancel={handlePointerUp}
-        style={{ cursor: locked ? 'default' : 'crosshair', touchAction: 'none' }}
-      />
-      {maskOverlayUrl && (
+    <div className={wrapperClassName} style={{ touchAction: 'none' }}>
+      <div className="quiz-image-circle">
         <img
-          src={maskOverlayUrl}
-          alt=""
-          aria-hidden
+          ref={imgRef}
+          src={imageUrl}
+          alt="Question"
+          className="quiz-image-media"
+          draggable={false}
+          onLoad={() => {
+            if (imgRef.current) {
+              setRenderedWidth(imgRef.current.getBoundingClientRect().width);
+            }
+          }}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerCancel={handlePointerUp}
           style={{
-            position: 'absolute',
-            inset: 0,
-            width: '100%',
-            height: '100%',
-            objectFit: 'fill',
-            pointerEvents: 'none',
-            opacity: 1,
+            cursor: locked ? 'default' : 'crosshair',
+            touchAction: 'none',
           }}
         />
-      )}
-      {circle && renderCircle(circle)}
-      {revealCircle && revealCircle !== circle &&
-        renderCircle(revealCircle, { borderColor: 'rgba(250, 204, 21, 0.95)', backgroundColor: 'rgba(250,204,21,0.15)' })}
+
+        {maskOverlayUrl && (
+          <img
+            src={maskOverlayUrl}
+            alt=""
+            aria-hidden
+            className={maskOverlayClassName}
+            style={{
+              position: 'absolute',
+              inset: 0,
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+              pointerEvents: 'none',
+              opacity: 1,
+            }}
+          />
+        )}
+
+        {circle && renderCircle(circle)}
+        {revealCircle && revealCircle !== circle && renderCircle(revealCircle, {
+          borderColor: 'rgba(250, 204, 21, 0.95)',
+          backgroundColor: 'rgba(250, 204, 21, 0.15)',
+        })}
+      </div>
     </div>
   );
 }

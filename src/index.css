@@ -2,153 +2,676 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Prevent pull-to-refresh and overscroll on the game screen */
+/* ── GOLDEN RING DESIGN TOKENS ─────────────────────────────────────────────── */
+:root {
+  --gold: #F5C74A;
+  --gold-dark: #C49A1A;
+  --gold-dim: rgba(245,199,74,.18);
+  --navy: #080D1C;
+  --navy-deep: #050810;
+  --navy-mid: #101830;
+  --navy-card: rgba(255,255,255,.04);
+  --border: rgba(255,255,255,.08);
+  --border-gold: rgba(245,199,74,.22);
+  --text: rgba(248,246,240,1);
+  --text-2: rgba(248,246,240,.62);
+  --text-3: rgba(248,246,240,.32);
+  --emerald: #34D399;
+  --rose: #FB7185;
+  --indigo: #818CF8;
+  --violet: #A78BFA;
+  --font-sans: 'DM Sans', system-ui, sans-serif;
+  --font-mono: 'DM Mono', monospace;
+}
+
+/* ── BASE ───────────────────────────────────────────────────────────────────── */
 html, body {
   overscroll-behavior: none;
   height: 100%;
+  touch-action: manipulation;
+  font-family: var(--font-sans);
+  background: var(--navy-deep);
+  color: var(--text);
+}
+
+html.host-route,
+body.host-route {
+  overscroll-behavior: auto;
+  touch-action: auto;
 }
 
 #root {
   height: 100%;
+  touch-action: manipulation;
 }
 
-/* Remove tap highlight on mobile */
+#root.host-route {
+  touch-action: auto;
+}
+
 * {
   -webkit-tap-highlight-color: transparent;
 }
 
-/* Prevent text selection during drag */
 .no-select {
   user-select: none;
   -webkit-user-select: none;
 }
 
-@keyframes waitingGlow {
-  0%, 100% {
-    transform: scale(0.92);
-    opacity: 0.24;
-  }
-  50% {
-    transform: scale(1.06);
-    opacity: 0.42;
-  }
+/* ── TYPOGRAPHY UTILITIES ───────────────────────────────────────────────────── */
+.gr-label-xs {
+  font: 700 10px/1 var(--font-sans);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--text-3);
 }
-
-@keyframes waitingFloat {
-  0%, 100% {
-    transform: translateY(0px);
-  }
-  50% {
-    transform: translateY(-8px);
-  }
+.gr-label-sm {
+  font: 700 11px/1 var(--font-sans);
+  letter-spacing: .08em;
+  text-transform: uppercase;
 }
+.gr-mono { font-family: var(--font-mono); }
+.gr-gold  { color: var(--gold); }
+.gr-emerald { color: var(--emerald); }
+.gr-rose  { color: var(--rose); }
+.gr-text-2 { color: var(--text-2); }
+.gr-text-3 { color: var(--text-3); }
 
-@keyframes waitingDotPulse {
-  0%, 100% {
-    transform: scale(0.9);
-    opacity: 0.4;
-  }
-  50% {
-    transform: scale(1.1);
-    opacity: 1;
-  }
-}
-
-@keyframes waitingChipIn {
-  0% {
-    opacity: 0;
-    transform: translateY(8px) scale(0.98);
-  }
-  100% {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-@keyframes celebrationSpark {
-  0% {
-    opacity: 0;
-    transform: translate3d(0, 0, 0) rotate(0deg) scale(0.8);
-  }
-  20% {
-    opacity: 1;
-  }
-  100% {
-    opacity: 0;
-    transform: translate3d(0, 56px, 0) rotate(160deg) scale(1.15);
-  }
-}
-
-.waiting-glow {
+/* ── BACKGROUND GLOWS ───────────────────────────────────────────────────────── */
+.gr-glow {
   position: absolute;
-  border-radius: 9999px;
-  filter: blur(70px);
-  animation: waitingGlow 7s ease-in-out infinite;
+  border-radius: 50%;
+  filter: blur(80px);
+  pointer-events: none;
+  animation: grGlowPulse 8s ease-in-out infinite;
+}
+.gr-glow-a { top: -8%; left: -18%; width: 260px; height: 260px; background: rgba(245,199,74,.09); animation-duration: 9s; }
+.gr-glow-b { bottom: -10%; right: -16%; width: 280px; height: 280px; background: rgba(99,102,241,.1); animation-delay: 2s; animation-duration: 11s; }
+.gr-glow-c { top: 30%; right: -12%; width: 200px; height: 200px; background: rgba(167,139,250,.07); animation-delay: 4s; animation-duration: 13s; }
+@keyframes grGlowPulse { 0%,100%{transform:scale(.9);opacity:.6}50%{transform:scale(1.1);opacity:1} }
+
+/* ── GLASS CARDS ────────────────────────────────────────────────────────────── */
+.gr-card {
+  background: var(--navy-card);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+}
+.gr-card-gold {
+  background: rgba(245,199,74,.05);
+  border: 1px solid var(--border-gold);
+  border-radius: 20px;
+}
+.gr-card-strong {
+  background: rgba(255,255,255,.03);
+  border: 1px solid rgba(255,255,255,.07);
+  border-radius: 20px;
 }
 
-.waiting-glow-a {
-  top: 8%;
-  left: -18%;
-  width: 14rem;
-  height: 14rem;
-  background: rgba(99, 102, 241, 0.24);
+/* ── GAME HEADER ────────────────────────────────────────────────────────────── */
+.gr-header {
+  flex-shrink: 0;
+  padding: 14px 20px 12px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(8,13,28,.92);
+  backdrop-filter: blur(12px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 
-.waiting-glow-b {
-  right: -16%;
-  bottom: 10%;
-  width: 16rem;
-  height: 16rem;
-  background: rgba(250, 204, 21, 0.14);
-  animation-delay: 1.8s;
+/* ── BUTTONS ────────────────────────────────────────────────────────────────── */
+.gr-btn {
+  width: 100%;
+  padding: 15px 20px;
+  border-radius: 14px;
+  border: none;
+  font: 800 15px/1 var(--font-sans);
+  cursor: pointer;
+  transition: transform .1s, box-shadow .2s;
+  position: relative;
+  overflow: hidden;
+}
+.gr-btn:active { transform: scale(.97); }
+.gr-btn:disabled { opacity: .3; cursor: not-allowed; }
+
+.gr-btn-gold {
+  background: linear-gradient(135deg, #C49A1A 0%, #F5C74A 50%, #C49A1A 100%);
+  color: #0C1228;
+  box-shadow: 0 4px 20px rgba(245,199,74,.3);
+}
+.gr-btn-gold::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, transparent 40%, rgba(255,255,255,.15) 55%, transparent 75%);
+}
+.gr-btn-ghost {
+  background: rgba(255,255,255,.06);
+  border: 1px solid rgba(255,255,255,.1);
+  color: var(--text);
+  font: 700 14px/1 var(--font-sans);
+}
+.gr-btn-submit-done {
+  background: rgba(52,211,153,.12);
+  border: 1px solid rgba(52,211,153,.3);
+  color: var(--emerald);
+}
+.gr-btn-danger {
+  background: rgba(251,113,133,.08);
+  border: 1px solid rgba(251,113,133,.18);
+  color: var(--rose);
 }
 
-.waiting-float {
-  animation: waitingFloat 3.8s ease-in-out infinite;
+/* Host action buttons */
+.gr-hbtn {
+  padding: 11px 14px;
+  border-radius: 11px;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,.05);
+  color: var(--text);
+  font: 700 12px/1 var(--font-sans);
+  cursor: pointer;
+  transition: background .15s, transform .1s;
+  text-align: left;
+  width: 100%;
+}
+.gr-hbtn:active { transform: scale(.97); }
+.gr-hbtn:disabled { opacity: .3; cursor: not-allowed; }
+.gr-hbtn-primary {
+  background: rgba(245,199,74,.1);
+  border-color: rgba(245,199,74,.22);
+  color: var(--gold);
+}
+.gr-hbtn-danger {
+  background: rgba(251,113,133,.08);
+  border-color: rgba(251,113,133,.18);
+  color: var(--rose);
 }
 
-.waiting-dot {
-  animation: waitingDotPulse 1.2s ease-in-out infinite;
+/* ── INPUT ──────────────────────────────────────────────────────────────────── */
+.gr-input {
+  width: 100%;
+  padding: 15px 18px;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,.1);
+  background: rgba(255,255,255,.05);
+  color: var(--text);
+  font: 500 16px/1 var(--font-sans);
+  outline: none;
+  transition: border-color .2s, box-shadow .2s;
+}
+.gr-input::placeholder { color: var(--text-3); }
+.gr-input:focus {
+  border-color: rgba(245,199,74,.4);
+  box-shadow: 0 0 0 3px rgba(245,199,74,.09);
 }
 
-.waiting-chip {
-  animation: waitingChipIn 0.5s ease-out both;
+/* ── BADGES ─────────────────────────────────────────────────────────────────── */
+.gr-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font: 700 10px/1 var(--font-sans);
+  letter-spacing: .07em;
+  text-transform: uppercase;
 }
+.gr-badge-gold  { background: rgba(245,199,74,.1); border: 1px solid rgba(245,199,74,.22); color: var(--gold); }
+.gr-badge-emerald{ background: rgba(52,211,153,.1); border: 1px solid rgba(52,211,153,.22); color: var(--emerald); }
+.gr-badge-rose  { background: rgba(251,113,133,.1); border: 1px solid rgba(251,113,133,.22); color: var(--rose); }
+.gr-badge-indigo{ background: rgba(129,140,248,.1); border: 1px solid rgba(129,140,248,.22); color: var(--indigo); }
+.gr-badge-live  { background: rgba(251,113,133,.12); border: 1px solid rgba(251,113,133,.28); color: var(--rose); }
+.gr-badge-live::before {
+  content: '';
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: var(--rose);
+  animation: grBlink 1.4s ease-in-out infinite;
+}
+@keyframes grBlink { 0%,100%{opacity:1}50%{opacity:.25} }
+
+/* ── PLAYER CHIP ────────────────────────────────────────────────────────────── */
+.gr-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px 5px 5px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,.04);
+  font: 600 12px/1 var(--font-sans);
+  animation: grChipIn .35s ease-out both;
+  color: var(--text);
+}
+.gr-chip-me { border-color: rgba(245,199,74,.28); background: rgba(245,199,74,.07); }
+.gr-chip-avatar {
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font: 800 9px/1 var(--font-sans);
+  color: white;
+  flex-shrink: 0;
+}
+@keyframes grChipIn { from{opacity:0;transform:scale(.9) translateY(4px)}to{opacity:1;transform:none} }
+
+/* ── TIMER ──────────────────────────────────────────────────────────────────── */
+.gr-timer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,.09);
+  background: rgba(255,255,255,.04);
+  font: 500 14px/1 var(--font-mono);
+  color: var(--text);
+}
+.gr-timer-urgent {
+  border-color: rgba(251,113,133,.32);
+  background: rgba(251,113,133,.08);
+  color: var(--rose);
+  animation: grTimerUrgent 1.1s ease-in-out infinite;
+}
+@keyframes grTimerUrgent { 0%,100%{box-shadow:none}50%{box-shadow:0 0 14px rgba(251,113,133,.3)} }
+.gr-timer-track { width: 52px; height: 3px; border-radius: 999px; background: rgba(255,255,255,.1); overflow: hidden; flex-shrink: 0; }
+.gr-timer-fill  { height: 100%; border-radius: 999px; transition: width .25s linear; }
+
+/* ── LEADERBOARD ROW ────────────────────────────────────────────────────────── */
+.gr-lb-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 14px;
+  border-radius: 14px;
+  background: rgba(255,255,255,.04);
+  border: 1px solid transparent;
+  animation: grRowIn .35s ease-out both;
+}
+.gr-lb-row-me {
+  background: rgba(245,199,74,.07);
+  border-color: rgba(245,199,74,.2);
+}
+@keyframes grRowIn { from{opacity:0;transform:translateX(-10px)}to{opacity:1;transform:none} }
+.gr-lb-avatar {
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font: 800 11px/1 var(--font-sans);
+  color: white;
+  flex-shrink: 0;
+}
+
+/* ── PODIUM BAR ─────────────────────────────────────────────────────────────── */
+.gr-pod-bar {
+  width: 100%;
+  border-radius: 10px 10px 4px 4px;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: flex-end;
+  padding-bottom: 10px; gap: 3px;
+}
+
+/* ── LOCK RING ──────────────────────────────────────────────────────────────── */
+.gr-lock-ring {
+  width: 110px; height: 110px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(245,199,74,.28);
+  display: flex; align-items: center; justify-content: center;
+  margin: 0 auto;
+  position: relative;
+  animation: grFloat 3.5s ease-in-out infinite;
+  box-shadow: 0 0 40px rgba(245,199,74,.08);
+}
+.gr-lock-ring::before {
+  content: '';
+  position: absolute;
+  inset: -9px;
+  border-radius: 50%;
+  border: 1px solid rgba(245,199,74,.1);
+}
+.gr-lock-ring::after {
+  content: '';
+  position: absolute;
+  inset: -18px;
+  border-radius: 50%;
+  border: 1px solid rgba(245,199,74,.05);
+}
+@keyframes grFloat { 0%,100%{transform:translateY(0)}50%{transform:translateY(-7px)} }
+
+/* ── REVEAL BANNER ──────────────────────────────────────────────────────────── */
+.gr-reveal-banner {
+  flex-shrink: 0;
+  padding: 14px 20px 12px;
+  text-align: center;
+}
+.gr-reveal-banner-ok {
+  background: linear-gradient(180deg, rgba(52,211,153,.14) 0%, transparent 100%);
+  border-bottom: 1px solid rgba(52,211,153,.18);
+}
+.gr-reveal-banner-bad {
+  background: linear-gradient(180deg, rgba(251,113,133,.14) 0%, transparent 100%);
+  border-bottom: 1px solid rgba(251,113,133,.18);
+}
+.gr-reveal-banner-neutral {
+  background: linear-gradient(180deg, rgba(129,140,248,.14) 0%, transparent 100%);
+  border-bottom: 1px solid rgba(129,140,248,.18);
+}
+
+/* ── PROGRESS BAR ───────────────────────────────────────────────────────────── */
+.gr-progress { height: 4px; border-radius: 999px; background: rgba(255,255,255,.07); overflow: hidden; }
+.gr-progress-fill {
+  height: 100%; border-radius: 999px;
+  background: linear-gradient(90deg, #C49A1A, #F5C74A);
+  transition: width .4s ease;
+}
+
+/* ── METRIC CARD ────────────────────────────────────────────────────────────── */
+.gr-metric {
+  padding: 11px 13px;
+  border-radius: 13px;
+  background: rgba(255,255,255,.04);
+  border: 1px solid rgba(255,255,255,.07);
+}
+
+/* ── ADMIN ROW ──────────────────────────────────────────────────────────────── */
+.gr-admin-row {
+  padding: 13px 14px;
+  border-radius: 13px;
+  background: rgba(255,255,255,.03);
+  border: 1px solid rgba(255,255,255,.06);
+  cursor: pointer;
+  transition: background .15s;
+}
+.gr-admin-row:hover { background: rgba(255,255,255,.05); }
+
+/* ── COUNTDOWN NUMBER ───────────────────────────────────────────────────────── */
+.gr-countdown-num {
+  font: 900 72px/1 var(--font-sans);
+  background: linear-gradient(135deg, #F5C74A, #FFF8E7);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: grNumPop .4s cubic-bezier(.34,1.56,.64,1) both;
+}
+@keyframes grNumPop { from{transform:scale(.65);opacity:0}to{transform:scale(1);opacity:1} }
+
+/* ── END SCREEN SPARKS ──────────────────────────────────────────────────────── */
+.gr-spark {
+  position: absolute;
+  width: 5px; height: 12px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #F5C74A, #FB7185);
+  box-shadow: 0 0 10px rgba(245,199,74,.4);
+  animation: grSparkFly 2.4s ease-in infinite;
+}
+@keyframes grSparkFly {
+  0%   { opacity: 0; transform: translate(0,0) rotate(0deg) scale(.8); }
+  12%  { opacity: 1; }
+  100% { opacity: 0; transform: translate(var(--sx,8px), 55px) rotate(170deg) scale(1.1); }
+}
+
+/* ── JOIN SCREEN ANIMATIONS ─────────────────────────────────────────────────── */
+@keyframes grRingRotate    { from{transform:translate(-50%,-50%) rotate(0deg)}   to{transform:translate(-50%,-50%) rotate(360deg)} }
+@keyframes grRingRotateCCW { from{transform:translate(-50%,-50%) rotate(0deg)}   to{transform:translate(-50%,-50%) rotate(-360deg)} }
+@keyframes grJoinGlow      { 0%,100%{opacity:.5;transform:translate(-50%,-50%) scale(.95)} 50%{opacity:1;transform:translate(-50%,-50%) scale(1.05)} }
+@keyframes grLogoPulse     { 0%,100%{box-shadow:0 0 20px rgba(245,199,74,.15)} 50%{box-shadow:0 0 50px rgba(245,199,74,.45),0 0 80px rgba(245,199,74,.15)} }
+@keyframes grTitleReveal   { from{opacity:0;transform:translateY(14px)} to{opacity:1;transform:translateY(0)} }
+@keyframes grSubtitleReveal{ from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+@keyframes grInputReveal   { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
+@keyframes grDotOrbit1     { 0%{transform:rotate(0deg)   translateX(52px) rotate(0deg)}   100%{transform:rotate(360deg)  translateX(52px) rotate(-360deg)} }
+@keyframes grDotOrbit2     { 0%{transform:rotate(120deg) translateX(52px) rotate(-120deg)} 100%{transform:rotate(480deg)  translateX(52px) rotate(-480deg)} }
+@keyframes grDotOrbit3     { 0%{transform:rotate(240deg) translateX(52px) rotate(-240deg)} 100%{transform:rotate(600deg)  translateX(52px) rotate(-600deg)} }
+
+.gr-join-ring-1 { position:absolute;top:50%;left:50%;width:200px;height:200px;border-radius:50%;border:1px dashed rgba(245,199,74,.2);animation:grRingRotate 18s linear infinite; }
+.gr-join-ring-2 { position:absolute;top:50%;left:50%;width:280px;height:280px;border-radius:50%;border:1px dashed rgba(245,199,74,.12);animation:grRingRotateCCW 24s linear infinite; }
+.gr-join-ring-3 { position:absolute;top:50%;left:50%;width:360px;height:360px;border-radius:50%;border:1px solid rgba(245,199,74,.06);animation:grRingRotate 36s linear infinite; }
+.gr-join-glow   { position:absolute;top:50%;left:50%;width:300px;height:300px;border-radius:50%;background:radial-gradient(circle,rgba(245,199,74,.08),transparent 70%);animation:grJoinGlow 4s ease-in-out infinite; }
+.gr-join-logo   { animation: grLogoPulse 3s ease-in-out infinite; }
+.gr-join-title  { animation: grTitleReveal .7s .2s ease-out both; }
+.gr-join-subtitle{ animation: grSubtitleReveal .7s .4s ease-out both; }
+.gr-join-form   { animation: grInputReveal .7s .55s ease-out both; }
+.gr-orbit-dot   { position:absolute;top:50%;left:50%;width:5px;height:5px;border-radius:50%;background:var(--gold);margin:-2.5px 0 0 -2.5px; }
+.gr-orbit-dot-1 { animation: grDotOrbit1 6s linear infinite; }
+.gr-orbit-dot-2 { animation: grDotOrbit2 6s linear infinite; }
+.gr-orbit-dot-3 { animation: grDotOrbit3 6s linear infinite; }
+
+/* ── WAITING SCREEN ANIMATIONS ──────────────────────────────────────────────── */
+@keyframes grParticleFloat {
+  0%   { transform: translateY(0) translateX(0) scale(1); opacity: .7; }
+  33%  { transform: translateY(-18px) translateX(6px) scale(1.1); opacity: 1; }
+  66%  { transform: translateY(-8px) translateX(-5px) scale(.9); opacity: .5; }
+  100% { transform: translateY(0) translateX(0) scale(1); opacity: .7; }
+}
+@keyframes grWaitRingPulse {
+  0%,100% { transform: translate(-50%,-50%) scale(1);    opacity: .18; }
+  50%      { transform: translate(-50%,-50%) scale(1.04); opacity: .32; }
+}
+@keyframes grCountUp  { from{transform:scale(.7);opacity:0}  to{transform:scale(1);opacity:1} }
+@keyframes grCardSlideIn { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
+
+.gr-wait-particle { position: absolute; border-radius: 50%; pointer-events: none; animation: grParticleFloat var(--dur,5s) var(--delay,0s) ease-in-out infinite; }
+.gr-wait-ring     { position: absolute; top: 28%; left: 50%; border-radius: 50%; border: 1px solid rgba(245,199,74,.22); animation: grWaitRingPulse var(--dur,6s) var(--delay,0s) ease-in-out infinite; }
+.gr-wait-count    { animation: grCountUp .5s cubic-bezier(.34,1.56,.64,1) both; }
+.gr-wait-card-1   { animation: grCardSlideIn .5s .1s ease-out both; }
+.gr-wait-card-2   { animation: grCardSlideIn .5s .25s ease-out both; }
+
+/* ── QUESTION URGENT ANIMATIONS ─────────────────────────────────────────────── */
+@keyframes grUrgentRingPulse { 0%,100%{box-shadow:0 0 0 0 rgba(251,113,133,0)} 50%{box-shadow:0 0 0 8px rgba(251,113,133,.18),0 0 40px rgba(251,113,133,.25)} }
+@keyframes grUrgentBorderBlink { 0%,100%{border-color:rgba(251,113,133,.45)} 50%{border-color:rgba(251,113,133,.9)} }
+.gr-urgent-ring { animation: grUrgentRingPulse .9s ease-in-out infinite, grUrgentBorderBlink .9s ease-in-out infinite !important; }
+
+/* ── LEGACY WAITING ANIMATIONS (keep for existing screens) ──────────────────── */
+@keyframes waitingGlow {
+  0%, 100% { transform: scale(0.92); opacity: 0.24; }
+  50%       { transform: scale(1.06); opacity: 0.42; }
+}
+@keyframes waitingFloat {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-8px); }
+}
+@keyframes waitingDotPulse {
+  0%, 100% { transform: scale(0.9);  opacity: 0.4; }
+  50%       { transform: scale(1.1);  opacity: 1; }
+}
+@keyframes waitingChipIn {
+  0%   { opacity: 0; transform: translateY(8px) scale(0.98); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes celebrationSpark {
+  0%   { opacity: 0; transform: translate3d(0, 0, 0) rotate(0deg) scale(0.8); }
+  20%  { opacity: 1; }
+  100% { opacity: 0; transform: translate3d(0, 56px, 0) rotate(160deg) scale(1.15); }
+}
+
+.waiting-glow { position: absolute; border-radius: 9999px; filter: blur(70px); animation: waitingGlow 7s ease-in-out infinite; }
+.waiting-glow-a { top: 8%; left: -18%; width: 14rem; height: 14rem; background: rgba(99,102,241,.24); }
+.waiting-glow-b { right: -16%; bottom: 10%; width: 16rem; height: 16rem; background: rgba(250,204,21,.14); animation-delay: 1.8s; }
+.waiting-float  { animation: waitingFloat 3.8s ease-in-out infinite; }
+.waiting-dot    { animation: waitingDotPulse 1.2s ease-in-out infinite; }
+.waiting-chip   { animation: waitingChipIn 0.5s ease-out both; }
 
 .celebration-spark {
   position: relative;
-  width: 0.55rem;
-  height: 0.9rem;
+  width: .55rem; height: .9rem;
   border-radius: 9999px;
-  background: linear-gradient(180deg, rgba(250, 204, 21, 0.98), rgba(248, 113, 113, 0.82));
-  box-shadow: 0 0 16px rgba(250, 204, 21, 0.35);
+  background: linear-gradient(180deg, rgba(250,204,21,.98), rgba(248,113,113,.82));
+  box-shadow: 0 0 16px rgba(250,204,21,.35);
   animation: celebrationSpark 2.2s ease-in infinite;
 }
 
+/* ── COUNTDOWN RING ─────────────────────────────────────────────────────────── */
 @keyframes pingOnceSoft {
-  0% {
-    transform: scale(0.85);
-    opacity: 0.5;
-  }
-  70% {
-    transform: scale(1.05);
-    opacity: 1;
-  }
-  100% {
-    transform: scale(1);
-    opacity: 1;
-  }
+  0%   { transform: scale(0.85); opacity: 0.5; }
+  70%  { transform: scale(1.05); opacity: 1; }
+  100% { transform: scale(1);    opacity: 1; }
+}
+.animate-ping-once { animation-name: pingOnceSoft; animation-timing-function: ease-out; animation-fill-mode: both; }
+.countdown-ring          { position: absolute; inset: 0; filter: drop-shadow(0 0 24px rgba(245,199,74,.18)); }
+.countdown-ring-progress { transition: stroke-dashoffset 0.8s ease; }
+.countdown-value         { animation: pingOnceSoft 700ms ease-out both; }
+
+/* ── TIMER ANIMATIONS ───────────────────────────────────────────────────────── */
+@keyframes timerUrgentGlow {
+  0%, 100% { box-shadow: 0 0 0 rgba(248,113,113,0); }
+  50%       { box-shadow: 0 0 18px rgba(248,113,113,.22); }
+}
+.timer-urgent-glow { animation: timerUrgentGlow 1.15s ease-in-out infinite; }
+@keyframes timerDigitSnap {
+  0%   { opacity: 0.7; transform: translateY(-2px); }
+  100% { opacity: 1;   transform: translateY(0); }
+}
+.timer-digit { animation: timerDigitSnap 180ms ease-out; }
+
+/* ── REVEAL MASK ────────────────────────────────────────────────────────────── */
+@keyframes revealMaskPulse { 0%,100%{opacity:.1}50%{opacity:1} }
+.reveal-mask-pulse { animation: revealMaskPulse 1s ease-in-out infinite; transform-origin: center; }
+
+/* ── QUIZ IMAGE STAGE ───────────────────────────────────────────────────────── */
+.quiz-image-stage {
+  display: flex;
+  width: 100%; height: 100%;
+  min-height: 0;
+  align-items: center;
+  justify-content: center;
+  overflow: visible;
 }
 
-.animate-ping-once {
-  animation-name: pingOnceSoft;
-  animation-timing-function: ease-out;
-  animation-fill-mode: both;
+/* Circular quiz image system */
+:root {
+  --quiz-image-size: clamp(320px, 92vmin, 780px);
+  --quiz-image-stroke: clamp(4px, 0.9vmin, 8px);
+  --quiz-image-offset: clamp(8px, 1.4vmin, 16px);
+  --quiz-image-ring-gap: clamp(4px, 0.9vmin, 10px);
+  --quiz-image-max-width: calc(100vw - 0.25rem);
+  --quiz-image-max-height: calc(100vh - 14.25rem);
 }
 
-.countdown-ring {
+.quiz-image-shell {
+  position: relative;
+  isolation: isolate;
+  box-sizing: border-box;
+  width: min(
+    var(--quiz-image-size),
+    calc(var(--quiz-image-max-width) - (var(--quiz-image-offset) * 2) - (var(--quiz-image-stroke) * 4)),
+    calc(var(--quiz-image-max-height) - (var(--quiz-image-offset) * 2) - (var(--quiz-image-stroke) * 4))
+  );
+  aspect-ratio: 1 / 1;
+  margin-inline: auto;
+  overflow: visible;
+  filter: drop-shadow(0 22px 42px rgba(2, 6, 23, 0.34));
+}
+
+.quiz-image-shell::before,
+.quiz-image-shell::after {
+  content: "";
   position: absolute;
-  inset: 0;
-  border-radius: 9999px;
-  box-shadow: 0 0 30px rgba(129, 140, 248, 0.18);
+  border-radius: 50%;
+  pointer-events: none;
+  box-sizing: border-box;
+}
+
+.quiz-image-shell::before {
+  inset: calc((var(--quiz-image-offset) + var(--quiz-image-stroke)) * -1);
+  z-index: 0;
+  border: calc(var(--quiz-image-stroke) * 0.95) solid rgba(245, 199, 74, 0.98);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.12),
+    0 0 0 calc(var(--quiz-image-stroke) * 0.55) rgba(245, 199, 74, 0.16),
+    0 0 18px rgba(245, 199, 74, 0.24),
+    0 0 34px rgba(94, 234, 212, 0.08),
+    0 14px 26px rgba(2, 6, 23, 0.18);
+}
+
+.quiz-image-shell::after {
+  inset: calc((var(--quiz-image-offset) + var(--quiz-image-stroke) + var(--quiz-image-ring-gap)) * -1);
+  z-index: 0;
+  background:
+    radial-gradient(circle at 16% 22%, rgba(255,255,255,.92) 0 1.4px, transparent 2.8px),
+    radial-gradient(circle at 82% 18%, rgba(255,255,255,.82) 0 1.2px, transparent 2.4px),
+    radial-gradient(circle at 90% 66%, rgba(245,199,74,.82)  0 1.4px, transparent 2.8px),
+    radial-gradient(circle at 10% 78%, rgba(255,255,255,.72) 0 1.1px, transparent 2.4px);
+  opacity: .95;
+}
+
+.quiz-image-circle {
+  position: relative;
+  z-index: 1;
+  width: 100%; height: 100%;
+  overflow: hidden;
+  border-radius: 50%;
+  box-sizing: border-box;
+  border: var(--quiz-image-stroke) solid rgba(255, 255, 255, 0.98);
+  background: rgba(2, 6, 23, 0.82);
+  box-shadow:
+    inset 0 0 0 1px rgba(255,255,255,.16),
+    inset 0 0 22px rgba(255,255,255,.05),
+    0 10px 28px rgba(2,6,23,.24);
+}
+
+.quiz-image-media {
+  display: block;
+  width: 100%; height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.quiz-image-shell--question {
+  --quiz-image-size: clamp(340px, 96vmin, 800px);
+  --quiz-image-max-width: calc(100vw - 0.15rem);
+  --quiz-image-max-height: calc(100vh - 15.6rem);
+}
+
+.quiz-image-shell--reveal {
+  --quiz-image-size: clamp(340px, 96vmin, 800px);
+  --quiz-image-max-width: calc(100vw - 0.15rem);
+  --quiz-image-max-height: calc(100vh - 11.6rem);
+}
+
+.quiz-image-shell--clue {
+  --quiz-image-size: clamp(300px, 86vmin, 640px);
+  --quiz-image-max-width: calc(100vw - 0.5rem);
+  --quiz-image-max-height: calc(100vh - 11.8rem);
+}
+
+@media (max-width: 420px) {
+  :root {
+    --quiz-image-size: clamp(300px, 94vw, 460px);
+    --quiz-image-stroke: clamp(4px, 1.15vw, 7px);
+    --quiz-image-offset: clamp(6px, 1.7vw, 11px);
+    --quiz-image-ring-gap: clamp(3px, 0.9vw, 7px);
+    --quiz-image-max-width: calc(100vw - 0.15rem);
+    --quiz-image-max-height: calc(100vh - 13rem);
+  }
+
+  .quiz-image-shell--question {
+    --quiz-image-size: clamp(320px, 98vw, 480px);
+    --quiz-image-max-width: calc(100vw - 0.1rem);
+    --quiz-image-max-height: calc(100vh - 15.1rem);
+  }
+
+  .quiz-image-shell--reveal {
+    --quiz-image-size: clamp(320px, 98vw, 480px);
+    --quiz-image-max-width: calc(100vw - 0.1rem);
+    --quiz-image-max-height: calc(100vh - 11.4rem);
+  }
+
+  .quiz-image-shell--clue {
+    --quiz-image-size: clamp(285px, 90vw, 430px);
+    --quiz-image-max-width: calc(100vw - 0.3rem);
+    --quiz-image-max-height: calc(100vh - 10.6rem);
+  }
+}
+
+/* ── REDUCED MOTION ─────────────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .gr-join-ring-1, .gr-join-ring-2, .gr-join-ring-3,
+  .gr-orbit-dot-1, .gr-orbit-dot-2, .gr-orbit-dot-3,
+  .gr-join-glow, .gr-wait-particle, .gr-wait-ring,
+  .gr-glow, .gr-lock-ring, .gr-spark,
+  .waiting-float, .waiting-glow, .waiting-dot {
+    animation: none;
+  }
 }

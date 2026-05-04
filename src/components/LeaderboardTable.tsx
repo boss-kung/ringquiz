@@ -9,11 +9,25 @@ interface Props {
   compactTopSpacing?: boolean;
 }
 
-const PODIUM_STYLES = [
-  { label: '1st', height: 'h-28', tone: 'from-amber-300/90 to-yellow-500/80', accent: 'text-amber-200', emoji: '🥇' },
-  { label: '2nd', height: 'h-20', tone: 'from-slate-200/80 to-slate-400/70', accent: 'text-slate-200', emoji: '🥈' },
-  { label: '3rd', height: 'h-16', tone: 'from-orange-300/80 to-amber-700/70', accent: 'text-orange-200', emoji: '🥉' },
+const AV_GRADS = [
+  ['#6366F1','#818CF8'],['#8B5CF6','#A78BFA'],['#14B8A6','#34D399'],
+  ['#EC4899','#F472B6'],['#F59E0B','#F5C74A'],['#3B82F6','#60A5FA'],['#10B981','#6EE7B7'],
 ];
+const avGrad = (i: number) =>
+  `linear-gradient(135deg,${AV_GRADS[i % AV_GRADS.length][0]},${AV_GRADS[i % AV_GRADS.length][1]})`;
+
+function initials(name: string) {
+  return name.trim().split(/\s+/).slice(0, 2).map((p) => p[0]?.toUpperCase() ?? '').join('');
+}
+
+const PODIUM_GRADS = [
+  'linear-gradient(180deg,rgba(180,190,200,.45),rgba(140,155,170,.28))',
+  'linear-gradient(180deg,rgba(245,199,74,.55),rgba(180,140,10,.38))',
+  'linear-gradient(180deg,rgba(195,140,70,.45),rgba(145,95,35,.28))',
+];
+const PODIUM_H  = [78, 108, 62];
+const MEDALS    = ['🥈', '🥇', '🥉'];
+const PODIUM_ORDER_3 = [1, 0, 2]; // 2nd, 1st, 3rd visual order
 
 export function LeaderboardTable({
   entries,
@@ -26,43 +40,76 @@ export function LeaderboardTable({
   const podiumEntries = showPodium ? entries.slice(0, 3) : [];
   const listEntries = showPodium ? top.slice(Math.min(podiumEntries.length, 3)) : top;
   const playerInTop = top.some((e) => e.player_id === playerId);
+
   const podiumOrder =
-    podiumEntries.length <= 1
-      ? [0]
-      : podiumEntries.length === 2
-        ? [0, 1]
-        : [1, 0, 2];
+    podiumEntries.length <= 1 ? [0] :
+    podiumEntries.length === 2 ? [0, 1] :
+    PODIUM_ORDER_3;
 
   return (
-    <div className={`w-full max-w-md mx-auto ${compactTopSpacing ? 'space-y-3' : 'space-y-5'}`}>
+    <div
+      style={{
+        width: '100%',
+        maxWidth: 480,
+        margin: '0 auto',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: compactTopSpacing ? 10 : 14,
+      }}
+    >
+      {/* Podium */}
       {showPodium && podiumEntries.length > 0 && (
-        <div className="rounded-[28px] border border-white/10 bg-white/[0.04] px-4 py-5 shadow-xl shadow-slate-950/30">
-          <p className="text-center text-xs uppercase tracking-[0.28em] text-slate-400">Top 3</p>
-          <div className="mt-4 flex items-end justify-center gap-2 sm:gap-3">
+        <div className="gr-card" style={{ padding: '16px 12px 14px', textAlign: 'center' }}>
+          <div className="gr-label-xs" style={{ marginBottom: 14 }}>Top 3</div>
+          <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: 8 }}>
             {podiumOrder
-              .filter((index) => podiumEntries[index])
-              .map((index) => {
-                const entry = podiumEntries[index];
+              .filter((idx) => podiumEntries[idx])
+              .map((idx) => {
+                const entry = podiumEntries[idx];
                 const isMe = entry.player_id === playerId;
-                const style = PODIUM_STYLES[index];
+                const rank = idx === 1 ? 1 : idx === 0 ? 2 : 3;
                 return (
                   <div
                     key={`podium-${entry.player_id}`}
-                    className={`flex flex-1 flex-col items-center gap-2 waiting-chip ${
-                      podiumEntries.length === 1 ? 'max-w-[180px]' : 'max-w-[120px]'
-                    }`}
+                    style={{
+                      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
+                      flex: 1, maxWidth: podiumEntries.length === 1 ? 180 : 96,
+                    }}
                   >
-                    <div className="text-2xl">{style.emoji}</div>
-                    <div className="text-center">
-                      <p className={`text-xs font-semibold uppercase tracking-[0.2em] ${style.accent}`}>{style.label}</p>
-                      <p className="mt-1 max-w-[90px] truncate text-sm font-bold text-white">
-                        {entry.display_name}
-                        {isMe && <span className="ml-1 text-[10px] text-yellow-300">(you)</span>}
-                      </p>
+                    <div style={{ fontSize: 18 }}>{MEDALS[idx]}</div>
+                    <div
+                      style={{
+                        width: 36, height: 36, borderRadius: '50%',
+                        background: avGrad(rank - 1),
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: 12, fontWeight: 800, color: 'white',
+                        border: isMe ? '2px solid var(--gold)' : '2px solid transparent',
+                        boxShadow: isMe ? '0 0 10px rgba(245,199,74,.4)' : 'none',
+                      }}
+                    >
+                      {initials(entry.display_name)}
                     </div>
-                    <div className={`flex w-full flex-col items-center justify-end rounded-2xl bg-gradient-to-b ${style.tone} ${style.height} px-2 pb-3 pt-4 text-slate-950 shadow-lg`}>
-                      <span className="text-xs font-semibold uppercase tracking-[0.18em]">#{entry.rank}</span>
-                      <span className="mt-2 text-lg font-black tabular-nums">{entry.cumulative_score.toLocaleString()}</span>
+                    <div
+                      style={{
+                        fontSize: 10, fontWeight: 700, lineHeight: 1.3,
+                        textAlign: 'center', maxWidth: 64,
+                        color: isMe ? 'var(--gold)' : 'var(--text-2)',
+                      }}
+                    >
+                      {entry.display_name.split(' ')[0]}
+                      {isMe && <span style={{ marginLeft: 3, color: 'var(--gold)' }}>(you)</span>}
+                    </div>
+                    <div
+                      className="gr-pod-bar"
+                      style={{
+                        height: PODIUM_H[idx],
+                        background: PODIUM_GRADS[idx],
+                        border: isMe ? '1px solid rgba(245,199,74,.25)' : '1px solid rgba(255,255,255,.07)',
+                      }}
+                    >
+                      <span className="gr-mono" style={{ fontSize: 12, fontWeight: 800, color: idx === 1 ? '#0C1228' : 'var(--text)' }}>
+                        {entry.cumulative_score.toLocaleString()}
+                      </span>
                     </div>
                   </div>
                 );
@@ -71,50 +118,68 @@ export function LeaderboardTable({
         </div>
       )}
 
-      <div className="space-y-2">
+      {/* List rows */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
         {listEntries.map((entry, i) => {
           const isMe = entry.player_id === playerId;
+          const rank = showPodium ? podiumEntries.length + i + 1 : i + 1;
           return (
             <div
               key={`${entry.player_id}-${i}`}
-              className={`flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium waiting-chip
-                ${isMe ? 'bg-yellow-400/20 ring-1 ring-yellow-400 shadow-[0_0_0_1px_rgba(250,204,21,0.18)]' : 'bg-white/10'}`}
+              className={`gr-lb-row ${isMe ? 'gr-lb-row-me' : ''}`}
               style={{ animationDelay: `${Math.min(i * 50, 300)}ms` }}
             >
-              <span className="w-9 text-center text-white/60 font-bold tabular-nums">#{entry.rank}</span>
-              <span className="flex-1 truncate text-white">
-                {entry.display_name}
-                {isMe && <span className="ml-2 text-yellow-300 text-xs">(you)</span>}
+              <div className="gr-lb-avatar" style={{ background: avGrad(rank - 1) }}>
+                {initials(entry.display_name)}
+              </div>
+              <span
+                className="gr-mono"
+                style={{ width: 28, textAlign: 'center', fontSize: 12, fontWeight: 700, color: 'var(--text-3)', flexShrink: 0 }}
+              >
+                #{entry.rank}
               </span>
-              <div className="text-right">
-                <span className="block text-white font-bold tabular-nums">{entry.cumulative_score.toLocaleString()}</span>
-                <span className="text-[10px] uppercase tracking-[0.2em] text-slate-500">pts</span>
+              <span style={{ flex: 1, fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text)' }}>
+                {entry.display_name}
+                {isMe && <span style={{ marginLeft: 6, fontSize: 10, color: 'var(--gold)' }}>(you)</span>}
+              </span>
+              <div style={{ textAlign: 'right' }}>
+                <div className="gr-mono" style={{ fontSize: 14, fontWeight: 800, color: isMe ? 'var(--gold)' : 'var(--text)' }}>
+                  {entry.cumulative_score.toLocaleString()}
+                </div>
+                <div className="gr-label-xs" style={{ marginTop: 2 }}>คะแนน</div>
               </div>
             </div>
           );
         })}
       </div>
 
-      {/* Show player's own entry if outside top N */}
+      {/* Player's own entry if outside top N */}
       {!playerInTop && playerEntry && (
         <>
-          <div className="text-center text-white/40 text-xs py-1">···</div>
-          <div className="flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium bg-yellow-400/20 ring-1 ring-yellow-400 waiting-chip">
-            <span className="w-9 text-center text-white/60 font-bold tabular-nums">#{playerEntry.rank}</span>
-            <span className="flex-1 truncate text-white">
-              {playerEntry.display_name}
-              <span className="ml-2 text-yellow-300 text-xs">(you)</span>
+          <div style={{ textAlign: 'center', color: 'var(--text-3)', fontSize: 11, padding: '2px 0' }}>···</div>
+          <div className="gr-lb-row gr-lb-row-me">
+            <div className="gr-lb-avatar" style={{ background: avGrad(0) }}>
+              {initials(playerEntry.display_name)}
+            </div>
+            <span className="gr-mono" style={{ width: 28, textAlign: 'center', fontSize: 12, fontWeight: 700, color: 'var(--text-3)', flexShrink: 0 }}>
+              #{playerEntry.rank}
             </span>
-            <div className="text-right">
-              <span className="block text-white font-bold tabular-nums">{playerEntry.cumulative_score.toLocaleString()}</span>
-              <span className="text-[10px] uppercase tracking-[0.2em] text-slate-500">pts</span>
+            <span style={{ flex: 1, fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text)' }}>
+              {playerEntry.display_name}
+              <span style={{ marginLeft: 6, fontSize: 10, color: 'var(--gold)' }}>(you)</span>
+            </span>
+            <div style={{ textAlign: 'right' }}>
+              <div className="gr-mono" style={{ fontSize: 14, fontWeight: 800, color: 'var(--gold)' }}>
+                {playerEntry.cumulative_score.toLocaleString()}
+              </div>
+              <div className="gr-label-xs" style={{ marginTop: 2 }}>คะแนน</div>
             </div>
           </div>
         </>
       )}
 
       {top.length === 0 && (
-        <p className="text-center text-white/50 text-sm py-8">No results yet.</p>
+        <p style={{ textAlign: 'center', color: 'var(--text-2)', fontSize: 13, padding: '32px 0' }}>ยังไม่มีผลลัพธ์</p>
       )}
     </div>
   );

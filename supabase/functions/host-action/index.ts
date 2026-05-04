@@ -1,10 +1,17 @@
 // host-action — all host state transitions.
 // Auth: X-Host-Secret header (validated against HOST_SECRET env var).
-// The host browser has no elevated Supabase auth. All privileged DB writes
-// happen here using the service role client, which bypasses RLS.
 //
-// State machine enforced here — clients cannot skip or reverse states.
-// All mutating actions are idempotent: calling twice gives the same result.
+// Game-set-aware navigation (Phase 2+):
+//   - start_countdown and next_question use the active game set's enabled
+//     questions ordered by play_order, not questions.order_index.
+//   - open_question uses game_set_questions.time_limit_seconds.
+//   - close_question passes current_game_set_question_id to compute_leaderboard
+//     so cumulative scores respect game-set ordering.
+//
+// Backward compat:
+//   - current_question_id is still updated for players to fetch question content.
+//   - current_question_index mirrors play_order (was order_index).
+//   - If no active game set exists, falls back to legacy questions.order_index.
 import { corsHeaders, handleCors } from '../_shared/cors.ts';
 import { getSupabaseAdmin } from '../_shared/supabase-admin.ts';
 import type {
@@ -16,22 +23,22 @@ import type {
   ErrorResponse,
 } from '../_shared/types.ts';
 
+const GAME_STATE_ID = '00000000-0000-0000-0000-000000000001';
+
 // ---------------------------------------------------------------------------
 // Valid from-states per action.
-// '*' means the action is valid from any state.
-// Target state is listed in TRANSITION_TARGET.
 // ---------------------------------------------------------------------------
 
 const VALID_FROM: Record<HostActionName, GameStatus[] | '*'> = {
   start_countdown:       ['waiting', 'leaderboard'],
   open_question:         ['countdown'],
-  close_question:        ['question_open', 'question_closed'],  // question_closed = idempotent
-  show_reveal:           ['question_closed', 'reveal'],          // reveal = idempotent
-  show_leaderboard:      ['reveal', 'leaderboard'],              // leaderboard = idempotent
+  close_question:        ['question_open', 'question_closed'],
+  show_reveal:           ['question_closed', 'reveal'],
+  show_leaderboard:      ['reveal', 'leaderboard'],
   next_question:         ['leaderboard'],
-  end_game:              ['leaderboard', 'ended'],               // ended = idempotent
-  soft_reset_game:       '*',                                    // restart round, keep players
-  hard_reset_game:       '*',                                    // full reset, force re-login
+  end_game:              ['leaderboard', 'ended'],
+  soft_reset_game:       '*',
+  hard_reset_game:       '*',
   force_close_question:  ['question_open', 'question_closed'],
   recompute_leaderboard: ['question_closed', 'reveal', 'leaderboard'],
 };
@@ -47,7 +54,6 @@ const TRANSITION_TARGET: Partial<Record<HostActionName, GameStatus>> = {
   end_game:             'ended',
   soft_reset_game:      'waiting',
   hard_reset_game:      'waiting',
-  // recompute_leaderboard has no target (state unchanged)
 };
 
 // ---------------------------------------------------------------------------
@@ -58,13 +64,11 @@ Deno.serve(async (req: Request): Promise<Response> => {
   const preflight = handleCors(req);
   if (preflight) return preflight;
 
-  // 1. Auth: HOST_SECRET
   const providedSecret = req.headers.get('X-Host-Secret');
   if (!providedSecret || providedSecret !== Deno.env.get('HOST_SECRET')) {
     return error(401, 'unauthorized');
   }
 
-  // 2. Parse body
   let body: HostActionRequest;
   try {
     body = await req.json();
@@ -80,29 +84,22 @@ Deno.serve(async (req: Request): Promise<Response> => {
   const db = getSupabaseAdmin();
 
   try {
-    // 3. Fetch current game state
     const { data: gs, error: gsErr } = await db
       .from('game_state')
       .select('*')
-      .eq('id', '00000000-0000-0000-0000-000000000001')
+      .eq('id', GAME_STATE_ID)
       .single<GameState>();
 
     if (gsErr || !gs) throw new Error(`Failed to read game_state: ${gsErr?.message}`);
 
-    // 4. Validate transition
     const validFrom = VALID_FROM[action];
     if (validFrom !== '*' && !validFrom.includes(gs.status)) {
       return Response.json(
-        {
-          error: 'invalid_transition',
-          from: gs.status,
-          action,
-        } satisfies ErrorResponse,
+        { error: 'invalid_transition', from: gs.status, action } satisfies ErrorResponse,
         { status: 409, headers: corsHeaders },
       );
     }
 
-    // 5. Execute action
     return await executeAction(action, gs, db);
   } catch (err) {
     console.error('[host-action]', action, err);
@@ -123,49 +120,94 @@ async function executeAction(
   const alreadyInState = targetStatus !== undefined && gs.status === targetStatus;
 
   switch (action) {
-    // ── start_countdown ────────────────────────────────────────────────────
-    // Advances to the first published question (from waiting)
-    // or the next published question after the current one (from leaderboard).
+
+    // ── start_countdown ──────────────────────────────────────────────────────
+    // Advances to the first enabled question in the active game set
+    // (or first published question by order_index if no game set is active).
     case 'start_countdown': {
-      const currentIndex = gs.current_question_index ?? -1;
-      const { data: nextQ, error: qErr } = await db
-        .from('questions')
-        .select('id, order_index')
-        .eq('is_published', true)
-        .gt('order_index', currentIndex)
-        .order('order_index', { ascending: true })
-        .limit(1)
-        .single();
+      const currentPlayOrder = gs.current_question_index ?? -1;
 
-      if (qErr || !nextQ) return error(400, 'no_next_question');
+      if (gs.active_game_set_id) {
+        // Game-set-aware path
+        const { data: nextGSQ, error: gqErr } = await db
+          .from('game_set_questions')
+          .select('id, question_id, play_order')
+          .eq('game_set_id', gs.active_game_set_id)
+          .eq('is_enabled', true)
+          .gt('play_order', currentPlayOrder)
+          .order('play_order', { ascending: true })
+          .limit(1)
+          .maybeSingle();
 
-      if (!alreadyInState) {
-        await updateGameState(db, {
-          status: 'countdown',
-          current_question_id: nextQ.id,
-          current_question_index: nextQ.order_index,
-        });
+        if (gqErr) throw new Error(`game_set_questions query failed: ${gqErr.message}`);
+        if (!nextGSQ) return error(400, 'no_next_question');
+
+        if (!alreadyInState) {
+          await updateGameState(db, {
+            status: 'countdown',
+            current_question_id: nextGSQ.question_id,
+            current_question_index: nextGSQ.play_order,
+            current_game_set_question_id: nextGSQ.id,
+          });
+        }
+      } else {
+        // Legacy fallback: use questions.order_index
+        const { data: nextQ, error: qErr } = await db
+          .from('questions')
+          .select('id, order_index')
+          .eq('is_published', true)
+          .gt('order_index', currentPlayOrder)
+          .order('order_index', { ascending: true })
+          .limit(1)
+          .single();
+
+        if (qErr || !nextQ) return error(400, 'no_next_question');
+
+        if (!alreadyInState) {
+          await updateGameState(db, {
+            status: 'countdown',
+            current_question_id: nextQ.id,
+            current_question_index: nextQ.order_index,
+            current_game_set_question_id: null,
+          });
+        }
       }
 
       return ok(action, 'countdown', alreadyInState, await refetchGs(db));
     }
 
-    // ── open_question ──────────────────────────────────────────────────────
-    // Sets authoritative server timestamps for scoring.
+    // ── open_question ────────────────────────────────────────────────────────
+    // Sets authoritative timer using game_set_questions.time_limit_seconds.
     case 'open_question': {
       if (!gs.current_question_id) return error(400, 'no_current_question');
 
-      const { data: q, error: qErr } = await db
-        .from('questions')
-        .select('time_limit_seconds')
-        .eq('id', gs.current_question_id)
-        .single();
+      let timeLimitSeconds: number;
 
-      if (qErr || !q) return error(400, 'no_current_question');
+      if (gs.current_game_set_question_id) {
+        // Use snapshot time from game set
+        const { data: gsq, error: gqErr } = await db
+          .from('game_set_questions')
+          .select('time_limit_seconds')
+          .eq('id', gs.current_game_set_question_id)
+          .single();
+
+        if (gqErr || !gsq) return error(400, 'no_current_question');
+        timeLimitSeconds = gsq.time_limit_seconds;
+      } else {
+        // Legacy fallback: use questions table
+        const { data: q, error: qErr } = await db
+          .from('questions')
+          .select('time_limit_seconds')
+          .eq('id', gs.current_question_id)
+          .single();
+
+        if (qErr || !q) return error(400, 'no_current_question');
+        timeLimitSeconds = q.time_limit_seconds;
+      }
 
       if (!alreadyInState) {
         const now = new Date();
-        const endsAt = new Date(now.getTime() + q.time_limit_seconds * 1000);
+        const endsAt = new Date(now.getTime() + timeLimitSeconds * 1000);
         await updateGameState(db, {
           status: 'question_open',
           question_started_at: now.toISOString(),
@@ -176,10 +218,9 @@ async function executeAction(
       return ok(action, 'question_open', alreadyInState, await refetchGs(db));
     }
 
-    // ── close_question / force_close_question ──────────────────────────────
-    // Transitions to question_closed and runs leaderboard computation.
-    // Both actions behave identically. force_close is for emergency use.
-    // compute_leaderboard is idempotent — safe to run even if already closed.
+    // ── close_question / force_close_question ────────────────────────────────
+    // Passes game_set_question_id to compute_leaderboard for game-set-ordered
+    // cumulative scoring.
     case 'close_question':
     case 'force_close_question': {
       if (!gs.current_question_id) return error(400, 'no_current_question');
@@ -189,7 +230,10 @@ async function executeAction(
       }
 
       const { data: count, error: lbErr } = await db
-        .rpc('compute_leaderboard', { p_question_id: gs.current_question_id });
+        .rpc('compute_leaderboard', {
+          p_question_id: gs.current_question_id,
+          p_game_set_question_id: gs.current_game_set_question_id ?? undefined,
+        });
 
       if (lbErr) throw new Error(`compute_leaderboard failed: ${lbErr.message}`);
 
@@ -198,54 +242,79 @@ async function executeAction(
       });
     }
 
-    // ── show_reveal ────────────────────────────────────────────────────────
+    // ── show_reveal ──────────────────────────────────────────────────────────
     case 'show_reveal': {
       if (!alreadyInState) await updateGameState(db, { status: 'reveal' });
       return ok(action, 'reveal', alreadyInState, await refetchGs(db));
     }
 
-    // ── show_leaderboard ───────────────────────────────────────────────────
+    // ── show_leaderboard ─────────────────────────────────────────────────────
     case 'show_leaderboard': {
       if (!alreadyInState) await updateGameState(db, { status: 'leaderboard' });
       return ok(action, 'leaderboard', alreadyInState, await refetchGs(db));
     }
 
-    // ── next_question ──────────────────────────────────────────────────────
-    // Advances current_question_index. Falls through to start_countdown logic.
+    // ── next_question ────────────────────────────────────────────────────────
+    // Advances to the next enabled question in the active game set.
     case 'next_question': {
-      const currentIndex = gs.current_question_index ?? -1;
-      const { data: nextQ, error: qErr } = await db
-        .from('questions')
-        .select('id, order_index')
-        .eq('is_published', true)
-        .gt('order_index', currentIndex)
-        .order('order_index', { ascending: true })
-        .limit(1)
-        .single();
+      const currentPlayOrder = gs.current_question_index ?? -1;
 
-      if (qErr || !nextQ) return error(400, 'no_next_question');
+      if (gs.active_game_set_id) {
+        const { data: nextGSQ, error: gqErr } = await db
+          .from('game_set_questions')
+          .select('id, question_id, play_order')
+          .eq('game_set_id', gs.active_game_set_id)
+          .eq('is_enabled', true)
+          .gt('play_order', currentPlayOrder)
+          .order('play_order', { ascending: true })
+          .limit(1)
+          .maybeSingle();
 
-      await updateGameState(db, {
-        status: 'countdown',
-        current_question_id: nextQ.id,
-        current_question_index: nextQ.order_index,
-        question_started_at: null,
-        question_ends_at: null,
-      });
+        if (gqErr) throw new Error(`game_set_questions query failed: ${gqErr.message}`);
+        if (!nextGSQ) return error(400, 'no_next_question');
+
+        await updateGameState(db, {
+          status: 'countdown',
+          current_question_id: nextGSQ.question_id,
+          current_question_index: nextGSQ.play_order,
+          current_game_set_question_id: nextGSQ.id,
+          question_started_at: null,
+          question_ends_at: null,
+        });
+      } else {
+        // Legacy fallback
+        const { data: nextQ, error: qErr } = await db
+          .from('questions')
+          .select('id, order_index')
+          .eq('is_published', true)
+          .gt('order_index', currentPlayOrder)
+          .order('order_index', { ascending: true })
+          .limit(1)
+          .single();
+
+        if (qErr || !nextQ) return error(400, 'no_next_question');
+
+        await updateGameState(db, {
+          status: 'countdown',
+          current_question_id: nextQ.id,
+          current_question_index: nextQ.order_index,
+          current_game_set_question_id: null,
+          question_started_at: null,
+          question_ends_at: null,
+        });
+      }
 
       return ok(action, 'countdown', false, await refetchGs(db));
     }
 
-    // ── end_game ───────────────────────────────────────────────────────────
+    // ── end_game ─────────────────────────────────────────────────────────────
     case 'end_game': {
       if (!alreadyInState) await updateGameState(db, { status: 'ended' });
       return ok(action, 'ended', alreadyInState, await refetchGs(db));
     }
 
-    // ── soft_reset_game ───────────────────────────────────────────────────
-    // Clears answers, leaderboard_snapshot, and resets player scores.
-    // Keeps questions, question_masks, and player rows intact.
-    // Players can auto-rejoin with their existing session if they refresh.
+    // ── soft_reset_game ──────────────────────────────────────────────────────
+    // Clears answers, leaderboard, player scores. Keeps questions & game sets.
     case 'soft_reset_game': {
       const { error: err1 } = await db.from('leaderboard_snapshot').delete().not('question_id', 'is', null);
       if (err1) throw new Error(`soft_reset: leaderboard_snapshot delete failed: ${err1.message}`);
@@ -260,6 +329,7 @@ async function executeAction(
         status: 'waiting',
         current_question_id: null,
         current_question_index: null,
+        current_game_set_question_id: null,
         question_started_at: null,
         question_ends_at: null,
       });
@@ -267,10 +337,8 @@ async function executeAction(
       return ok(action, 'waiting', false, await refetchGs(db));
     }
 
-    // ── hard_reset_game ───────────────────────────────────────────────────
-    // Full reset: clears answers, leaderboard_snapshot, players, and resets scores.
-    // Also increments session_version to force all players back to name input screen.
-    // Players cannot auto-rejoin — they must enter their name again.
+    // ── hard_reset_game ──────────────────────────────────────────────────────
+    // Full reset: clears answers, leaderboard, players. Keeps questions & game sets.
     case 'hard_reset_game': {
       const { error: err1 } = await db.from('leaderboard_snapshot').delete().not('question_id', 'is', null);
       if (err1) throw new Error(`hard_reset: leaderboard_snapshot delete failed: ${err1.message}`);
@@ -281,15 +349,14 @@ async function executeAction(
       const { error: err3 } = await db.from('players').delete().not('id', 'is', null);
       if (err3) throw new Error(`hard_reset: players delete failed: ${err3.message}`);
 
-      // Increment session_version with raw SQL to avoid column-not-found errors
       const { error: incrementErr } = await db.rpc('increment_game_session_version');
-      // Non-critical: if RPC fails, session_version might not exist yet. Continue anyway.
       if (incrementErr) console.warn('hard_reset: session_version increment non-critical failure:', incrementErr.message);
 
       await updateGameState(db, {
         status: 'waiting',
         current_question_id: null,
         current_question_index: null,
+        current_game_set_question_id: null,
         question_started_at: null,
         question_ends_at: null,
       });
@@ -297,13 +364,15 @@ async function executeAction(
       return ok(action, 'waiting', false, await refetchGs(db));
     }
 
-    // ── recompute_leaderboard ──────────────────────────────────────────────
-    // Re-runs leaderboard computation without changing state.
+    // ── recompute_leaderboard ────────────────────────────────────────────────
     case 'recompute_leaderboard': {
       if (!gs.current_question_id) return error(400, 'no_current_question');
 
       const { data: count, error: lbErr } = await db
-        .rpc('compute_leaderboard', { p_question_id: gs.current_question_id });
+        .rpc('compute_leaderboard', {
+          p_question_id: gs.current_question_id,
+          p_game_set_question_id: gs.current_game_set_question_id ?? undefined,
+        });
 
       if (lbErr) throw new Error(`recompute_leaderboard failed: ${lbErr.message}`);
 
@@ -328,7 +397,7 @@ async function updateGameState(
   const { error } = await db
     .from('game_state')
     .update(patch)
-    .eq('id', '00000000-0000-0000-0000-000000000001');
+    .eq('id', GAME_STATE_ID);
   if (error) throw new Error(`updateGameState failed: ${error.message}`);
 }
 
@@ -338,13 +407,14 @@ async function refetchGs(
   const { data, error } = await db
     .from('game_state')
     .select('*')
-    .eq('id', '00000000-0000-0000-0000-000000000001')
+    .eq('id', GAME_STATE_ID)
     .single<any>();
   if (error || !data) throw new Error(`refetch game_state failed: ${error?.message}`);
-  // Ensure session_version exists (defaults to 1 if column not yet migrated)
   return {
     ...data,
     session_version: data.session_version ?? 1,
+    active_game_set_id: data.active_game_set_id ?? null,
+    current_game_set_question_id: data.current_game_set_question_id ?? null,
   } as GameState;
 }
 

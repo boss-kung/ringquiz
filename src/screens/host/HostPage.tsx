@@ -4,6 +4,7 @@ import { STATS_POLL_INTERVAL_MS } from '../../lib/constants';
 import { useGameStore } from '../../store/gameStore';
 import { useGetServerTime } from '../../hooks/useServerTime';
 import { AdminQuestionManager } from './AdminQuestionManager';
+import { GameSetManager } from './GameSetManager';
 import type {
   HostActionName,
   HostActionRequest,
@@ -14,22 +15,21 @@ import type {
 
 const SESSION_KEY = 'quiz_host_secret';
 
-// Actions that move the game forward sequentially
 const PRIMARY_ACTIONS: { action: HostActionName; label: string }[] = [
-  { action: 'start_countdown', label: 'Start Game' },
-  { action: 'open_question',   label: 'Open Question' },
-  { action: 'close_question',  label: 'Close Question' },
-  { action: 'show_reveal',     label: 'Show Reveal' },
-  { action: 'show_leaderboard', label: 'Show Leaderboard' },
-  { action: 'next_question',   label: 'Next Question →' },
-  { action: 'end_game',        label: 'End Game' },
+  { action: 'start_countdown',   label: 'Start Game' },
+  { action: 'open_question',     label: 'Open Question' },
+  { action: 'close_question',    label: 'Close Question' },
+  { action: 'show_reveal',       label: 'Show Reveal' },
+  { action: 'show_leaderboard',  label: 'Show Leaderboard' },
+  { action: 'next_question',     label: 'Next Question →' },
+  { action: 'end_game',          label: 'End Game' },
 ];
 
 const UTILITY_ACTIONS: { action: HostActionName; label: string; danger?: boolean }[] = [
   { action: 'force_close_question', label: 'Force Close Question' },
   { action: 'recompute_leaderboard', label: 'Recompute Leaderboard' },
-  { action: 'soft_reset_game', label: 'Soft Reset Round', danger: true },
-  { action: 'hard_reset_game', label: 'Hard Reset Game', danger: true },
+  { action: 'soft_reset_game',      label: 'Soft Reset Round',  danger: true },
+  { action: 'hard_reset_game',      label: 'Hard Reset Game',   danger: true },
 ];
 
 export function HostPage() {
@@ -40,7 +40,12 @@ export function HostPage() {
     return <HostLogin onLogin={(s) => { setSecret(s); }} error={authError} />;
   }
 
-  return <HostDashboard secret={secret} onLogout={() => { sessionStorage.removeItem(SESSION_KEY); setSecret(''); }} />;
+  return (
+    <HostDashboard
+      secret={secret}
+      onLogout={() => { sessionStorage.removeItem(SESSION_KEY); setSecret(''); }}
+    />
+  );
 }
 
 // ── Login ──────────────────────────────────────────────────────────────────────
@@ -56,7 +61,6 @@ function HostLogin({ onLogin, error }: { onLogin: (s: string) => void; error: st
     setChecking(true);
     setLocalError('');
 
-    // Validate by calling get-question-stats — it requires HOST_SECRET
     try {
       const res = await fetch(`${FUNCTIONS_URL}/get-question-stats`, {
         headers: { 'X-Host-Secret': value.trim() },
@@ -75,31 +79,37 @@ function HostLogin({ onLogin, error }: { onLogin: (s: string) => void; error: st
   };
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-full bg-slate-900 px-6">
-      <div className="w-full max-w-sm space-y-6">
-        <div className="text-center">
-          <h1 className="text-3xl font-bold text-white">Host Panel</h1>
-          <p className="mt-1 text-slate-400 text-sm">Enter your HOST_SECRET to continue</p>
+    <div
+      style={{
+        display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center',
+        minHeight: '100%',
+        background: 'var(--navy-deep)',
+        padding: '24px',
+      }}
+    >
+      <div style={{ width: '100%', maxWidth: 360 }}>
+        <div style={{ textAlign: 'center', marginBottom: 28 }}>
+          <div className="gr-label-sm gr-gold" style={{ marginBottom: 8, letterSpacing: '.18em' }}>Control Center</div>
+          <h1 style={{ fontSize: 28, fontWeight: 900, color: 'var(--text)' }}>Host Panel</h1>
+          <p style={{ marginTop: 6, fontSize: 13, color: 'var(--text-2)' }}>Enter your HOST_SECRET to continue</p>
         </div>
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <input
             type="password"
             value={value}
             onChange={(e) => setValue(e.target.value)}
             placeholder="HOST_SECRET"
             autoFocus
-            className="w-full rounded-xl bg-white/10 text-white placeholder-slate-500
-              px-4 py-4 text-base border border-white/10 focus:outline-none
-              focus:ring-2 focus:ring-indigo-500"
+            className="gr-input"
           />
           {(localError || error) && (
-            <p className="text-red-400 text-sm text-center">{localError || error}</p>
+            <p style={{ color: 'var(--rose)', fontSize: 13, textAlign: 'center' }}>{localError || error}</p>
           )}
           <button
             type="submit"
             disabled={!value.trim() || checking}
-            className="w-full rounded-xl bg-indigo-600 text-white font-bold py-4
-              disabled:opacity-40 active:scale-95 transition-transform"
+            className="gr-btn gr-btn-gold"
           >
             {checking ? 'Verifying…' : 'Enter'}
           </button>
@@ -115,7 +125,7 @@ function HostDashboard({ secret, onLogout }: { secret: string; onLogout: () => v
   const gameState = useGameStore((s) => s.gameState);
   const question = useGameStore((s) => s.question);
   const getServerTime = useGetServerTime();
-  const [activeTab, setActiveTab] = useState<'game' | 'questions'>('game');
+  const [activeTab, setActiveTab] = useState<'game' | 'questions' | 'setup'>('game');
   const [stats, setStats] = useState<QuestionStatsResponse | null>(null);
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const [actionLoading, setActionLoading] = useState<HostActionName | null>(null);
@@ -124,7 +134,6 @@ function HostDashboard({ secret, onLogout }: { secret: string; onLogout: () => v
   const [resetConfirm, setResetConfirm] = useState<'soft_reset_game' | 'hard_reset_game' | null>(null);
   const resetInput = useRef('');
 
-  // Poll get-question-stats
   const fetchStats = useCallback(async () => {
     try {
       const res = await fetch(`${FUNCTIONS_URL}/get-question-stats`, {
@@ -140,15 +149,11 @@ function HostDashboard({ secret, onLogout }: { secret: string; onLogout: () => v
     return () => clearInterval(id);
   }, [fetchStats]);
 
-  // Live countdown ticker derived from stats.question_ends_at
   useEffect(() => {
     const endsAt = stats?.question_ends_at;
     if (!endsAt) { setTimeLeft(null); return; }
     const endMs = new Date(endsAt).getTime();
-    const tick = () => {
-      const diff = endMs - getServerTime();
-      setTimeLeft(Math.max(0, Math.ceil(diff / 1000)));
-    };
+    const tick = () => setTimeLeft(Math.max(0, Math.ceil((endMs - getServerTime()) / 1000)));
     tick();
     const id = setInterval(tick, 250);
     return () => clearInterval(id);
@@ -160,7 +165,7 @@ function HostDashboard({ secret, onLogout }: { secret: string; onLogout: () => v
       return;
     }
     await doAction(action);
-  }, []);// eslint-disable-line react-hooks/exhaustive-deps
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const doAction = async (action: HostActionName) => {
     setActionLoading(action);
@@ -170,16 +175,12 @@ function HostDashboard({ secret, onLogout }: { secret: string; onLogout: () => v
       const body: HostActionRequest = { action };
       const res = await fetch(`${FUNCTIONS_URL}/host-action`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Host-Secret': secret,
-        },
+        headers: { 'Content-Type': 'application/json', 'X-Host-Secret': secret },
         body: JSON.stringify(body),
       });
       const json = await res.json();
       if (!res.ok) {
-        const err = json as EdgeFunctionError;
-        setActionError(err.error ?? 'Unknown error');
+        setActionError((json as EdgeFunctionError).error ?? 'Unknown error');
       } else {
         const r = json as HostActionResponse;
         setActionSuccess(`${action} → ${r.status}${r.already_in_state ? ' (already)' : ''}`);
@@ -202,7 +203,7 @@ function HostDashboard({ secret, onLogout }: { secret: string; onLogout: () => v
 
   const status = gameState?.status ?? 'loading…';
   const questionProgress = stats?.question_index != null
-    ? `${stats.question_index}/${stats.total_questions || '—'}`
+    ? `Q${stats.question_index}/${stats.total_questions || '—'}`
     : null;
   const submittedRatio = stats?.player_count
     ? Math.min(1, (stats?.submitted_count ?? 0) / stats.player_count)
@@ -210,220 +211,261 @@ function HostDashboard({ secret, onLogout }: { secret: string; onLogout: () => v
 
   const isActionEnabled = useCallback((action: HostActionName) => {
     switch (action) {
-      case 'start_countdown':
-        return status === 'waiting' && (stats?.total_questions ?? 0) > 0;
-      case 'open_question':
-        return status === 'countdown';
-      case 'close_question':
-        return status === 'question_open' || status === 'question_closed';
-      case 'show_reveal':
-        return status === 'question_closed' || status === 'reveal';
-      case 'show_leaderboard':
-        return status === 'reveal' || status === 'leaderboard';
-      case 'next_question':
-        return status === 'leaderboard';
-      case 'end_game':
-        return status !== 'waiting' && status !== 'ended';
-      case 'force_close_question':
-        return status === 'question_open' || status === 'question_closed';
-      case 'recompute_leaderboard':
-        return status === 'question_closed' || status === 'reveal' || status === 'leaderboard';
+      case 'start_countdown':       return status === 'waiting' && (stats?.total_questions ?? 0) > 0;
+      case 'open_question':         return status === 'countdown';
+      case 'close_question':        return status === 'question_open' || status === 'question_closed';
+      case 'show_reveal':           return status === 'question_closed' || status === 'reveal';
+      case 'show_leaderboard':      return status === 'reveal' || status === 'leaderboard';
+      case 'next_question':         return status === 'leaderboard';
+      case 'end_game':              return status !== 'waiting' && status !== 'ended';
+      case 'force_close_question':  return status === 'question_open' || status === 'question_closed';
+      case 'recompute_leaderboard': return status === 'question_closed' || status === 'reveal' || status === 'leaderboard';
       case 'soft_reset_game':
-      case 'hard_reset_game':
-        return true;
-      default:
-        return false;
+      case 'hard_reset_game':       return true;
+      default:                      return false;
     }
   }, [status, stats?.total_questions]);
+
   const nextRecommendedAction = PRIMARY_ACTIONS.find(({ action }) => isActionEnabled(action))?.label ?? 'Waiting for next valid step';
 
+  const statusColor =
+    status === 'question_open' ? 'var(--emerald)' :
+    status === 'countdown'     ? 'var(--indigo)' :
+    status === 'ended'         ? 'var(--gold)' :
+    'var(--text-2)';
+
   return (
-    <div className="min-h-full bg-slate-900 text-white">
+    <div style={{ minHeight: '100%', background: 'var(--navy-deep)', color: 'var(--text)', fontFamily: 'var(--font-sans)' }}>
       {/* Header */}
-      <div className="sticky top-0 z-10 flex items-center justify-between border-b border-white/10 bg-slate-800 px-4 py-3">
+      <div
+        style={{
+          position: 'sticky', top: 0, zIndex: 10,
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          borderBottom: '1px solid var(--border)',
+          background: 'rgba(5,8,16,.95)',
+          backdropFilter: 'blur(12px)',
+          padding: '12px 18px',
+        }}
+      >
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-400">Control Center</p>
-          <h1 className="mt-1 text-lg font-bold">Host Panel</h1>
+          <div className="gr-label-xs" style={{ marginBottom: 3 }}>Control Center</div>
+          <div style={{ fontSize: 16, fontWeight: 800 }}>Host Panel</div>
         </div>
-        <button
-          onClick={onLogout}
-          className="text-slate-400 text-sm hover:text-white transition-colors"
-        >
-          Logout
-        </button>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <div className="gr-badge gr-badge-live">LIVE</div>
+          <button
+            onClick={onLogout}
+            style={{ fontSize: 11, color: 'var(--text-3)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--font-sans)' }}
+          >
+            Logout
+          </button>
+        </div>
       </div>
 
-      <div className="max-w-lg mx-auto px-4 py-6 space-y-6">
-        <div className="grid grid-cols-2 gap-2 rounded-xl bg-slate-800/70 p-1 border border-white/10">
-          <HostTabButton
-            label="Game Flow"
-            active={activeTab === 'game'}
-            onClick={() => setActiveTab('game')}
-          />
-          <HostTabButton
-            label="Question Bank"
-            active={activeTab === 'questions'}
-            onClick={() => setActiveTab('questions')}
-          />
-        </div>
+      {/* Tab bar */}
+      <div
+        style={{
+          display: 'flex', gap: 6,
+          padding: '10px 16px',
+          borderBottom: '1px solid var(--border)',
+        }}
+      >
+        {([
+          ['game',      'Game Flow'],
+          ['questions', 'Question Bank'],
+          ['setup',     'Game Setup'],
+        ] as const).map(([tab, label]) => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            style={{
+              padding: '7px 14px',
+              borderRadius: 999,
+              border: 'none',
+              fontFamily: 'var(--font-sans)',
+              fontSize: 12,
+              fontWeight: 700,
+              cursor: 'pointer',
+              transition: 'all .15s',
+              background: activeTab === tab ? 'rgba(255,255,255,.07)' : 'transparent',
+              color: activeTab === tab ? 'var(--text)' : 'var(--text-3)',
+              borderBottom: activeTab === tab ? '2px solid var(--gold)' : '2px solid transparent',
+            }}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
 
+      <div style={{ maxWidth: 640, margin: '0 auto', padding: '14px 16px 24px', display: 'flex', flexDirection: 'column', gap: 14 }}>
         {activeTab === 'game' ? (
           <>
-            <div className="rounded-[28px] border border-white/10 bg-slate-800/90 p-5 shadow-xl shadow-slate-950/20">
-              <div className="flex items-start justify-between gap-4">
+            {/* State card */}
+            <div className="gr-card-strong" style={{ padding: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 14 }}>
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-400">Live game state</p>
-                  <h2 className="mt-2 text-2xl font-black tracking-tight text-white">{status}</h2>
-                  <p className="mt-2 text-sm text-slate-300">{nextRecommendedAction}</p>
+                  <div className="gr-label-xs" style={{ marginBottom: 5 }}>Live Game State</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-2)', fontWeight: 600 }}>{nextRecommendedAction}</div>
                 </div>
-                <div className={`rounded-full px-3 py-1 text-xs font-bold uppercase tracking-[0.22em] ${
-                  status === 'question_open'
-                    ? 'bg-emerald-500/15 text-emerald-300'
-                    : status === 'countdown'
-                      ? 'bg-indigo-500/15 text-indigo-300'
-                      : status === 'ended'
-                        ? 'bg-amber-500/15 text-amber-300'
-                        : 'bg-white/5 text-slate-300'
-                }`}>
+                <div
+                  className="gr-badge"
+                  style={{
+                    background: `${statusColor}18`,
+                    border: `1px solid ${statusColor}38`,
+                    color: statusColor,
+                    flexShrink: 0,
+                  }}
+                >
                   {status}
                 </div>
               </div>
 
-              <div className="mt-5 grid grid-cols-2 gap-3">
-                <HostMetricCard
-                  label="Question"
-                  value={questionProgress ?? '—'}
-                  accent="text-indigo-300"
-                />
-                <HostMetricCard
-                  label="Players"
-                  value={stats?.player_count ?? '—'}
-                  accent="text-white"
-                />
-                <HostMetricCard
-                  label="Answers"
-                  value={stats ? `${stats.submitted_count}/${stats.player_count || 0}` : '—'}
-                  accent="text-emerald-300"
-                />
-                <HostMetricCard
-                  label="Time Left"
-                  value={timeLeft !== null ? `${timeLeft}s` : '—'}
-                  accent={timeLeft !== null && timeLeft <= 5 ? 'text-red-300' : 'text-white'}
-                />
-              </div>
+              {/* Active game set */}
+              {stats?.active_game_set_name && (
+                <div style={{ marginBottom: 12, padding: '7px 10px', borderRadius: 9, background: 'rgba(99,102,241,.1)', border: '1px solid rgba(99,102,241,.25)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--indigo)', letterSpacing: '.1em', textTransform: 'uppercase' }}>Game Set</span>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)' }}>{stats.active_game_set_name}</span>
+                </div>
+              )}
 
-              <div className="mt-5 rounded-2xl border border-white/10 bg-slate-950/35 px-4 py-4">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Answer progress</p>
-                    <p className="mt-1 text-sm font-medium text-slate-200">
-                      {stats
-                        ? `${stats.submitted_count} answered out of ${stats.player_count || 0} players`
-                        : 'Waiting for stats'}
-                    </p>
+              {/* Metrics */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                {[
+                  { l: 'Question', v: questionProgress ?? '—', c: 'var(--indigo)' },
+                  { l: 'Players',  v: stats?.player_count ?? '—', c: 'var(--text)' },
+                  { l: 'Answers',  v: stats ? `${stats.submitted_count}/${stats.player_count || 0}` : '—', c: 'var(--emerald)' },
+                  { l: 'Time Left', v: timeLeft !== null ? `${timeLeft}s` : '—', c: timeLeft !== null && timeLeft <= 5 ? 'var(--rose)' : 'var(--text)' },
+                ].map((m) => (
+                  <div key={m.l} className="gr-metric">
+                    <div className="gr-label-xs" style={{ marginBottom: 5 }}>{m.l}</div>
+                    <div className="gr-mono" style={{ fontSize: 18, fontWeight: 800, color: m.c }}>{String(m.v)}</div>
                   </div>
-                  <p className="text-sm font-bold tabular-nums text-white">
+                ))}
+              </div>
+
+              {/* Answer progress */}
+              <div style={{ marginTop: 12, padding: '10px 12px', borderRadius: 11, background: 'rgba(0,0,0,.28)', border: '1px solid rgba(255,255,255,.05)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 7 }}>
+                  <span className="gr-label-xs">Answer Progress</span>
+                  <span className="gr-mono" style={{ fontSize: 10, fontWeight: 700, color: 'var(--emerald)' }}>
                     {stats?.player_count ? `${Math.round(submittedRatio * 100)}%` : '—'}
-                  </p>
+                  </span>
                 </div>
-                <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-white/10">
-                  <div
-                    className="h-full rounded-full bg-emerald-400 transition-all duration-300"
-                    style={{ width: `${submittedRatio * 100}%` }}
-                  />
+                <div className="gr-progress">
+                  <div className="gr-progress-fill" style={{ width: `${submittedRatio * 100}%` }} />
                 </div>
               </div>
 
+              {/* Current prompt */}
               {question && (
-                <div className="mt-5 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-4">
-                  <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Current prompt</p>
-                  <p className="mt-2 text-sm font-medium leading-6 text-white">
-                    {question.text}
-                  </p>
+                <div style={{ marginTop: 10, padding: '10px 12px', borderRadius: 11, background: 'rgba(255,255,255,.03)', border: '1px solid rgba(255,255,255,.06)' }}>
+                  <div className="gr-label-xs" style={{ marginBottom: 6 }}>Current Prompt</div>
+                  <p style={{ fontSize: 12, fontWeight: 500, lineHeight: 1.6, color: 'var(--text)' }}>{question.text}</p>
                 </div>
               )}
             </div>
 
             {/* Feedback */}
             {actionError && (
-              <div className="bg-red-900/40 border border-red-500/40 rounded-lg px-4 py-3 text-red-300 text-sm">
+              <div style={{ background: 'rgba(251,113,133,.1)', border: '1px solid rgba(251,113,133,.3)', borderRadius: 10, padding: '10px 14px', color: 'var(--rose)', fontSize: 13 }}>
                 {actionError}
               </div>
             )}
             {actionSuccess && (
-              <div className="bg-emerald-900/40 border border-emerald-500/40 rounded-lg px-4 py-3 text-emerald-300 text-sm">
+              <div style={{ background: 'rgba(52,211,153,.1)', border: '1px solid rgba(52,211,153,.3)', borderRadius: 10, padding: '10px 14px', color: 'var(--emerald)', fontSize: 13 }}>
                 ✓ {actionSuccess}
               </div>
             )}
 
             {/* Primary actions */}
-            <div className="space-y-2">
-              <p className="text-slate-400 text-xs uppercase tracking-widest">Game Flow</p>
-              <div className="grid grid-cols-2 gap-2">
+            <div>
+              <div className="gr-label-xs" style={{ marginBottom: 8 }}>Game Flow</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 7 }}>
                 {PRIMARY_ACTIONS.map(({ action, label }) => (
-                  <ActionButton
+                  <button
                     key={action}
-                    label={label}
-                    loading={actionLoading === action}
-                    disabled={actionLoading !== null || !isActionEnabled(action)}
                     onClick={() => callAction(action)}
-                  />
+                    disabled={actionLoading !== null || !isActionEnabled(action)}
+                    className="gr-hbtn"
+                    style={isActionEnabled(action) && actionLoading === null ? { borderColor: 'rgba(245,199,74,.2)', color: 'var(--gold)', background: 'rgba(245,199,74,.07)' } : undefined}
+                  >
+                    <span style={{ fontSize: 12, fontWeight: 700 }}>
+                      {actionLoading === action ? '…' : label}
+                    </span>
+                  </button>
                 ))}
               </div>
             </div>
 
             {/* Utility actions */}
-            <div className="space-y-2">
-              <p className="text-slate-400 text-xs uppercase tracking-widest">Emergency / Utilities</p>
-              <div className="grid grid-cols-2 gap-2">
+            <div>
+              <div className="gr-label-xs" style={{ marginBottom: 8 }}>Emergency / Utilities</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 7 }}>
                 {UTILITY_ACTIONS.map(({ action, label, danger }) => (
-                  <ActionButton
+                  <button
                     key={action}
-                    label={label}
-                    loading={actionLoading === action}
-                    disabled={actionLoading !== null || !isActionEnabled(action)}
                     onClick={() => callAction(action)}
-                    danger={danger}
-                  />
+                    disabled={actionLoading !== null || !isActionEnabled(action)}
+                    className={`gr-hbtn ${danger ? 'gr-hbtn-danger' : ''}`}
+                  >
+                    <span style={{ fontSize: 12, fontWeight: 700 }}>
+                      {actionLoading === action ? '…' : label}
+                    </span>
+                  </button>
                 ))}
               </div>
             </div>
           </>
-        ) : (
+        ) : activeTab === 'questions' ? (
           <AdminQuestionManager secret={secret} />
+        ) : (
+          <GameSetManager secret={secret} />
         )}
       </div>
 
       {/* Reset confirmation modal */}
       {resetConfirm && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 px-6">
-          <div className="bg-slate-800 rounded-2xl p-6 w-full max-w-sm space-y-4">
-            <h2 className="text-xl font-bold text-red-400">
+        <div
+          style={{
+            position: 'fixed', inset: 0,
+            background: 'rgba(5,8,16,.88)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: 24, zIndex: 300,
+            backdropFilter: 'blur(6px)',
+          }}
+        >
+          <div className="gr-card" style={{ width: '100%', maxWidth: 300, padding: 22 }}>
+            <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--rose)', marginBottom: 10 }}>
               ⚠️ {resetConfirm === 'soft_reset_game' ? 'Soft Reset Round' : 'Hard Reset Game'}
-            </h2>
-            <p className="text-slate-300 text-sm">
+            </div>
+            <p style={{ fontSize: 12, color: 'var(--text-2)', marginBottom: 14, lineHeight: 1.6 }}>
               {resetConfirm === 'soft_reset_game'
-                ? 'This deletes answers, scores, and leaderboard data. Players can rejoin. Type RESET to confirm.'
-                : 'This clears ALL players, answers, scores, and leaderboard data. Players must re-enter their name. Type RESET to confirm.'}
+                ? 'This deletes answers, scores, and leaderboard data. Type RESET to confirm.'
+                : 'This clears ALL players, answers, scores, and leaderboard data. Type RESET to confirm.'}
             </p>
             <input
               type="text"
               placeholder="Type RESET"
               autoFocus
               onChange={(e) => { resetInput.current = e.target.value; }}
-              className="w-full rounded-lg bg-white/10 text-white px-3 py-3 text-base
-                border border-white/10 focus:outline-none focus:ring-2 focus:ring-red-500"
+              className="gr-input"
+              style={{ marginBottom: 12 }}
             />
-            <div className="flex gap-3">
+            <div style={{ display: 'flex', gap: 9 }}>
               <button
                 onClick={() => { setResetConfirm(null); resetInput.current = ''; }}
-                className="flex-1 rounded-lg bg-white/10 text-white py-3 font-medium"
+                className="gr-btn gr-btn-ghost"
+                style={{ padding: '10px', fontSize: 13 }}
               >
                 Cancel
               </button>
               <button
                 onClick={handleResetConfirm}
-                className="flex-1 rounded-lg bg-red-600 text-white py-3 font-bold"
+                style={{
+                  flex: 1, padding: '10px 14px', borderRadius: 12, border: 'none',
+                  background: '#be123c', color: 'white',
+                  fontFamily: 'var(--font-sans)', fontSize: 13, fontWeight: 700, cursor: 'pointer',
+                }}
               >
                 Confirm
               </button>
@@ -431,72 +473,6 @@ function HostDashboard({ secret, onLogout }: { secret: string; onLogout: () => v
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-function HostTabButton({
-  label,
-  active,
-  onClick,
-}: {
-  label: string;
-  active: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-        active ? 'bg-indigo-600 text-white' : 'text-slate-300 hover:bg-white/5'
-      }`}
-    >
-      {label}
-    </button>
-  );
-}
-
-function ActionButton({
-  label, loading, disabled, onClick, danger,
-}: {
-  label: string;
-  loading: boolean;
-  disabled: boolean;
-  onClick: () => void;
-  danger?: boolean;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className={`w-full rounded-2xl border px-4 py-4 text-left transition-transform
-        disabled:opacity-40 disabled:cursor-not-allowed active:scale-95 transition-transform
-        ${danger
-          ? 'border-red-700/50 bg-red-900/60 text-red-300'
-          : 'border-white/10 bg-slate-700 text-white hover:bg-slate-600'
-        }`}
-    >
-      <div className="flex min-h-[72px] items-center">
-        <p className="text-sm font-bold">{loading ? '…' : label}</p>
-      </div>
-    </button>
-  );
-}
-
-function HostMetricCard({
-  label,
-  value,
-  accent,
-}: {
-  label: string;
-  value: string | number;
-  accent?: string;
-}) {
-  return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
-      <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">{label}</p>
-      <p className={`mt-2 text-xl font-black tabular-nums ${accent ?? 'text-white'}`}>{value}</p>
     </div>
   );
 }

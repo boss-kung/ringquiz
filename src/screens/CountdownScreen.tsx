@@ -1,65 +1,168 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useGameStore } from '../store/gameStore';
 import { COUNTDOWN_DISPLAY_SECONDS } from '../lib/constants';
+import { resolveQuestionImageUrl } from '../lib/questionAssets';
 
 export function CountdownScreen() {
   const question = useGameStore((s) => s.question);
+  const gameState = useGameStore((s) => s.gameState);
+
+  const totalCountdownMs = COUNTDOWN_DISPLAY_SECONDS * 1000;
+  const [remainingMs, setRemainingMs] = useState(totalCountdownMs);
   const [count, setCount] = useState(COUNTDOWN_DISPLAY_SECONDS);
-  const progress = (COUNTDOWN_DISPLAY_SECONDS - count) / COUNTDOWN_DISPLAY_SECONDS;
+  const [showClue, setShowClue] = useState(false);
+
+  const progress = Math.max(0, Math.min(1, (totalCountdownMs - remainingMs) / totalCountdownMs));
+  const ringCircumference = 2 * Math.PI * 70;
+  const ringOffset = progress >= 1 ? 0 : ringCircumference * (1 - progress);
+  const countdownStartedAt = gameState?.updated_at ?? null;
+  const cluePhase = showClue;
 
   useEffect(() => {
+    setShowClue(false);
+    setRemainingMs(totalCountdownMs);
     setCount(COUNTDOWN_DISPLAY_SECONDS);
-    const id = setInterval(() => {
-      setCount((c) => Math.max(0, c - 1));
-    }, 1000);
-    return () => clearInterval(id);
-  }, [question?.id]);
+
+    if (!countdownStartedAt) return;
+
+    const visualStartedAt = performance.now();
+    let animationFrameId = 0;
+    let clueTimerId: ReturnType<typeof setTimeout> | null = null;
+
+    const syncCountdown = () => {
+      const elapsedMs = performance.now() - visualStartedAt;
+      const nextRemainingMs = Math.max(0, totalCountdownMs - elapsedMs);
+
+      if (nextRemainingMs <= 0) {
+        setRemainingMs(0);
+        setCount(0);
+        if (!clueTimerId) {
+          clueTimerId = setTimeout(() => setShowClue(true), 350);
+        }
+        return;
+      }
+
+      setRemainingMs(nextRemainingMs);
+      setCount(Math.ceil(nextRemainingMs / 1000));
+      animationFrameId = requestAnimationFrame(syncCountdown);
+    };
+
+    animationFrameId = requestAnimationFrame(syncCountdown);
+
+    return () => {
+      cancelAnimationFrame(animationFrameId);
+      if (clueTimerId) clearTimeout(clueTimerId);
+    };
+  }, [countdownStartedAt, question?.id, totalCountdownMs]);
+
+  const clueImageUrl = useMemo(() => {
+    return question ? resolveQuestionImageUrl(question.image_url) : null;
+  }, [question]);
 
   return (
-    <div className="relative flex min-h-full flex-col items-center justify-center overflow-hidden bg-slate-900 px-6 py-12 text-center">
-      <div className="pointer-events-none absolute inset-0 opacity-60">
-        <div className="waiting-glow waiting-glow-a" />
-        <div className="waiting-glow waiting-glow-b" />
-      </div>
+    <div
+      style={{
+        position: 'relative',
+        display: 'flex',
+        minHeight: '100%',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        overflow: 'hidden',
+        background: 'var(--navy)',
+        padding: cluePhase ? '8px 12px' : '36px 20px 20px',
+        textAlign: 'center',
+      }}
+    >
+      {/* Background glows */}
+      <div className="gr-glow gr-glow-a" />
+      <div className="gr-glow gr-glow-b" />
 
-      <div className="relative w-full max-w-md space-y-6">
+      <div style={{ position: 'relative', zIndex: 1, width: '100%', maxWidth: cluePhase ? 480 : 320 }}>
         {question && (
-          <p className="text-sm uppercase tracking-[0.32em] text-indigo-300/80">
+          <div className="gr-label-sm gr-gold" style={{ marginBottom: 10, letterSpacing: '.18em' }}>
             Question {question.order_index}
-          </p>
+          </div>
         )}
 
-        <div className="rounded-[32px] border border-white/10 bg-white/[0.04] px-6 py-8 shadow-2xl shadow-slate-950/30 backdrop-blur-sm">
-          <p className="text-lg font-semibold text-slate-200">Get ready!</p>
-          {question && (
-            <div className="mt-4 rounded-2xl border border-white/10 bg-slate-950/35 px-4 py-4 text-left">
-              <p className="text-[11px] uppercase tracking-[0.24em] text-slate-500">Up next</p>
-              <p className="mt-2 text-base font-semibold leading-snug text-white">
-                {question.text}
-              </p>
+        <div className="gr-card" style={{ padding: cluePhase ? '18px 12px' : '28px 20px' }}>
+          {!cluePhase ? (
+            <>
+              <p style={{ fontSize: 14, color: 'var(--text-2)', marginBottom: 22 }}>เตรียมพร้อม!</p>
+
+              {/* Countdown ring */}
+              <div style={{ position: 'relative', width: 160, height: 160, margin: '0 auto' }}>
+                {/* Outer decorative rings */}
+                <svg
+                  style={{ position: 'absolute', inset: -14, width: 188, height: 188 }}
+                  viewBox="0 0 188 188"
+                  aria-hidden
+                >
+                  <circle cx="94" cy="94" r="88" fill="none" stroke="rgba(245,199,74,.06)" strokeWidth="1" />
+                  <circle cx="94" cy="94" r="80" fill="none" stroke="rgba(245,199,74,.11)" strokeWidth="1" />
+                </svg>
+
+                {/* Progress ring */}
+                <svg
+                  className="countdown-ring"
+                  style={{ position: 'absolute', inset: 0, width: 160, height: 160 }}
+                  viewBox="0 0 160 160"
+                  aria-hidden
+                >
+                  <defs>
+                    <linearGradient id="grRingGrad" x1="0" y1="0" x2="1" y2="1">
+                      <stop offset="0%" stopColor="#C49A1A" />
+                      <stop offset="100%" stopColor="#F5C74A" />
+                    </linearGradient>
+                  </defs>
+                  <circle cx="80" cy="80" r="70" fill="none" stroke="rgba(255,255,255,.05)" strokeWidth="9" />
+                  <circle
+                    cx="80" cy="80" r="70"
+                    fill="none"
+                    stroke="url(#grRingGrad)"
+                    strokeWidth="9"
+                    strokeLinecap="round"
+                    transform="rotate(-90 80 80)"
+                    strokeDasharray={ringCircumference}
+                    strokeDashoffset={ringOffset}
+                    style={{ transition: 'none' }}
+                  />
+                </svg>
+
+                {/* Center */}
+                <div
+                  style={{
+                    position: 'absolute', inset: 12,
+                    borderRadius: '50%',
+                    background: 'radial-gradient(circle, rgba(16,24,48,.97), rgba(8,13,28,1))',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    boxShadow: 'inset 0 0 28px rgba(0,0,0,.5)',
+                  }}
+                >
+                  <div key={count} className="gr-countdown-num">
+                    {count > 0 ? count : '●'}
+                  </div>
+                </div>
+              </div>
+            </>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center' }}>
+              <div className="gr-label-sm gr-gold" style={{ letterSpacing: '.14em' }}>ภาพปริศนา</div>
+              {clueImageUrl && (
+                <div className="quiz-image-shell quiz-image-shell--clue">
+                  <div className="quiz-image-circle">
+                    <img
+                      src={clueImageUrl}
+                      alt="Clue"
+                      className="quiz-image-media"
+                      draggable={false}
+                    />
+                  </div>
+                </div>
+              )}
+              <p style={{ fontSize: 12, color: 'var(--text-2)' }}>ดูภาพให้ดีก่อนตอบ</p>
             </div>
           )}
-
-          <div className="relative mx-auto mt-7 flex h-40 w-40 items-center justify-center">
-            <div
-              className="countdown-ring"
-              style={{
-                background: `conic-gradient(rgba(129,140,248,0.95) ${Math.min(360, progress * 360)}deg, rgba(255,255,255,0.08) 0deg)`,
-              }}
-            />
-            <div className="absolute inset-[10px] rounded-full bg-slate-900/95 shadow-[inset_0_0_30px_rgba(15,23,42,0.9)]" />
-            <div
-              key={count}
-              className="relative text-7xl font-black text-white animate-ping-once"
-              style={{ animationDuration: '0.6s' }}
-            >
-              {count > 0 ? count : '🎯'}
-            </div>
-          </div>
-
-          <p className="mt-5 text-sm text-slate-400">
-            Place your marker as soon as the image opens.
-          </p>
         </div>
       </div>
     </div>

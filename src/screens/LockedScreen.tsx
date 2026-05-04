@@ -4,38 +4,85 @@ export function LockedScreen() {
   const submitResult = useGameStore((s) => s.submitResult);
   const question = useGameStore((s) => s.question);
 
-  return (
-    <div className="relative flex min-h-full flex-col items-center justify-center overflow-hidden bg-slate-900 px-6 py-12 text-center">
-      <div className="pointer-events-none absolute inset-0 opacity-60">
-        <div className="waiting-glow waiting-glow-a" />
-        <div className="waiting-glow waiting-glow-b" />
-      </div>
+  const hasAnswered = Boolean(submitResult);
 
-      <div className="relative w-full max-w-md space-y-5 rounded-[30px] border border-white/10 bg-white/[0.04] px-6 py-8 shadow-2xl shadow-slate-950/30">
-        <div className="text-5xl waiting-float">
-          {submitResult ? '✅' : '⏳'}
+  return (
+    <div
+      style={{
+        position: 'relative',
+        display: 'flex',
+        minHeight: '100%',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        overflow: 'hidden',
+        background: 'var(--navy)',
+        padding: '44px 28px 28px',
+        textAlign: 'center',
+      }}
+    >
+      {/* Background glows */}
+      <div className="gr-glow gr-glow-a" />
+      <div className="gr-glow gr-glow-b" />
+
+      {/* Concentric decorative rings */}
+      {[190, 250, 310].map((s, i) => (
+        <div
+          key={i}
+          style={{
+            position: 'absolute',
+            width: s, height: s,
+            borderRadius: '50%',
+            border: `1px solid rgba(245,199,74,${.09 - i * .025})`,
+            top: '50%', left: '50%',
+            transform: 'translate(-50%,-50%)',
+            pointerEvents: 'none',
+          }}
+        />
+      ))}
+
+      <div style={{ position: 'relative', zIndex: 1, width: '100%', maxWidth: 300 }}>
+        {/* Floating lock ring */}
+        <div className="gr-lock-ring" style={{ marginBottom: 26 }}>
+          <div
+            style={{
+              width: 74, height: 74,
+              borderRadius: '50%',
+              background: 'radial-gradient(circle,rgba(245,199,74,.13),rgba(245,199,74,.03))',
+              border: '1.5px solid rgba(245,199,74,.34)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 30,
+            }}
+          >
+            {hasAnswered ? '?' : '⏳'}
+          </div>
         </div>
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">Round status</p>
-          <h2 className="mt-2 text-2xl font-black tracking-tight text-white">
-            {submitResult ? 'Answer submitted!' : 'Waiting…'}
-          </h2>
-          <p className="mt-2 text-slate-400 text-sm">
-            {submitResult
-              ? 'Hold on while the host reveals the results.'
-              : question
-              ? 'The question is closed. Waiting for the host.'
-              : 'Waiting for the host to open the question.'}
-          </p>
+
+        <div className="gr-label-sm gr-gold" style={{ marginBottom: 9 }}>
+          {hasAnswered ? 'ส่งคำตอบแล้ว' : 'รอผู้เล่น'}
         </div>
-        <div className="rounded-2xl border border-white/10 bg-slate-950/35 px-4 py-3">
-          <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Current step</p>
-          <p className="mt-2 text-sm font-medium text-slate-200">
-            {submitResult
-              ? 'Your answer is locked in. No further taps are needed.'
-              : 'Input is disabled until the host opens the next step.'}
-          </p>
-        </div>
+
+        <h2 style={{ fontSize: 24, fontWeight: 900, marginBottom: 11, color: 'var(--text)' }}>
+          {hasAnswered ? 'รอเฉลยคำตอบ…' : 'กำลังรอ…'}
+        </h2>
+
+        <p style={{ fontSize: 13, color: 'var(--text-2)', lineHeight: 1.6 }}>
+          {hasAnswered
+            ? 'คำตอบถูกบันทึกแล้ว — รอดูว่าถูกหรือผิด!'
+            : question
+            ? 'การตอบคำถามถูกล็อคแล้ว รอให้พิธีกรเฉลยคำตอบ'
+            : 'กำลังรอพิธีกรเปิดคำถาม...'}
+        </p>
+
+        {hasAnswered && (
+          <div className="gr-card-gold" style={{ marginTop: 20, padding: '13px 18px', display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ fontSize: 22 }}>🔒</div>
+            <div style={{ textAlign: 'left' }}>
+              <div className="gr-label-xs" style={{ marginBottom: 4 }}>สถานะคำตอบ</div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--gold)' }}>ล็อคแล้ว · รอพิธีกรเฉลย</div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -14,11 +14,13 @@ export interface GameState {
   id: string;
   status: GameStatus;
   current_question_id: string | null;
-  current_question_index: number | null;
-  question_started_at: string | null;  // ISO 8601
-  question_ends_at: string | null;     // ISO 8601
+  current_question_index: number | null;           // legacy: mirrors play_order when game-set aware
+  question_started_at: string | null;              // ISO 8601
+  question_ends_at: string | null;                 // ISO 8601
   updated_at: string;
-  session_version: number;               // incremented on hard_reset_game to force player re-login
+  session_version: number;                         // incremented on hard_reset_game
+  active_game_set_id: string | null;               // FK → game_sets.id
+  current_game_set_question_id: string | null;     // FK → game_set_questions.id
 }
 
 export interface Question {
@@ -35,6 +37,20 @@ export interface Question {
   reveal_image_url: string | null;
   is_published: boolean;
   created_at: string;
+}
+
+export interface GameSetQuestion {
+  id: string;
+  game_set_id: string;
+  question_id: string;
+  play_order: number;
+  time_limit_seconds: number;
+  max_score: number;
+  min_correct_score: number;
+  circle_radius_ratio: number;
+  is_enabled: boolean;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface QuestionMask {
@@ -98,27 +114,26 @@ export interface HostActionResponse {
   ok: boolean;
   action: HostActionName;
   status: GameStatus;
-  already_in_state: boolean;         // true when target state == current state (idempotent hit)
+  already_in_state: boolean;
   question_id: string | null;
   question_index: number | null;
   question_started_at: string | null;
   question_ends_at: string | null;
-  entries_written?: number;          // present for close_question, force_close, recompute
+  entries_written?: number;
 }
 
 // ── submit-answer ────────────────────────────────────────────────────────────
 
 export interface SubmitAnswerRequest {
   question_id: string;
-  x_ratio: number;   // [0, 1] normalized position within question image
-  y_ratio: number;   // [0, 1]
+  x_ratio: number;
+  y_ratio: number;
 }
 
 export interface SubmitAnswerResponse {
   is_correct: boolean;
   score: number;
   already_submitted: boolean;
-  // Present when already_submitted is true — lets the client restore the circle position.
   selected_x_ratio?: number;
   selected_y_ratio?: number;
 }
@@ -132,8 +147,8 @@ export interface ServerTimeResponse {
 // ── get-reveal-zone ──────────────────────────────────────────────────────────
 
 export interface RevealZoneResponse {
-  x_ratio: number;  // centroid X of correct-zone pixels, normalized [0, 1]
-  y_ratio: number;  // centroid Y of correct-zone pixels, normalized [0, 1]
+  x_ratio: number;
+  y_ratio: number;
 }
 
 // ── get-question-stats ───────────────────────────────────────────────────────
@@ -141,11 +156,13 @@ export interface RevealZoneResponse {
 export interface QuestionStatsResponse {
   status: GameStatus;
   question_id: string | null;
-  question_index: number | null;
-  total_questions: number;
+  question_index: number | null;       // 1-based position in active game set
+  total_questions: number;             // total enabled questions in active game set
   submitted_count: number;
   player_count: number;
   question_ends_at: string | null;
+  active_game_set_id: string | null;
+  active_game_set_name: string | null;
 }
 
 // ── export-results ───────────────────────────────────────────────────────────

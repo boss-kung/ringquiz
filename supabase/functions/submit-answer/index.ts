@@ -2,10 +2,12 @@
 // Auth: player JWT (Supabase anonymous auth session token).
 //
 // Security contract:
-//   - Correctness is computed server-side from the mask image. Never trusted from client.
-//   - Score is computed from server time (new Date()), never from client-provided timestamps.
+//   - Correctness computed server-side from mask image. Never trusted from client.
+//   - Score computed from server time. Never from client-provided timestamps.
+//   - Scoring uses game_set_questions snapshot values when current_game_set_question_id
+//     is set; falls back to questions table values for backward compatibility.
 //   - mask_storage_path is never included in any response.
-//   - Duplicate submissions return the existing result (idempotent, not an error).
+//   - Duplicate submissions return the existing result (idempotent).
 //   - Late submissions (NOW() > question_ends_at) are rejected with 400.
 //   - Wrong-state submissions (status !== question_open) are rejected with 400.
 import { corsHeaders, handleCors } from '../_shared/cors.ts';
@@ -13,7 +15,6 @@ import { getSupabaseAdmin } from '../_shared/supabase-admin.ts';
 import { checkCircleOverlapsMask, getCachedMask } from './mask-check.ts';
 import type {
   GameState,
-  Question,
   QuestionMask,
   SubmitAnswerRequest,
   SubmitAnswerResponse,
@@ -50,21 +51,19 @@ Deno.serve(async (req: Request): Promise<Response> => {
   const { question_id, x_ratio, y_ratio } = body;
 
   try {
-    // 3. Validate game state — server-side, not trusted from client
+    // 3. Validate game state
     const { data: gs, error: gsErr } = await db
       .from('game_state')
-      .select('status, current_question_id, question_started_at, question_ends_at')
+      .select('status, current_question_id, question_started_at, question_ends_at, current_game_set_question_id')
       .eq('id', '00000000-0000-0000-0000-000000000001')
-      .single<Pick<GameState, 'status' | 'current_question_id' | 'question_started_at' | 'question_ends_at'>>();
+      .single<Pick<GameState, 'status' | 'current_question_id' | 'question_started_at' | 'question_ends_at' | 'current_game_set_question_id'>>();
 
     if (gsErr || !gs) throw new Error('Failed to read game_state');
 
     if (gs.status !== 'question_open') return err(400, 'question_not_open');
     if (gs.current_question_id !== question_id) return err(400, 'wrong_question');
 
-    // 4. Server-time deadline check — authoritative, never client time.
-    // 2-second grace window absorbs network round-trip latency so players
-    // who tap Submit just before the timer hits 0 aren't unfairly rejected.
+    // 4. Server-time deadline check (2-second grace window for network latency)
     const serverNow = new Date();
     const endsAt = gs.question_ends_at ? new Date(gs.question_ends_at) : null;
     if (!endsAt) throw new Error('question_ends_at is null during question_open');
@@ -98,17 +97,41 @@ Deno.serve(async (req: Request): Promise<Response> => {
       .maybeSingle();
     if (!player) return err(404, 'player_not_found');
 
-    // 7. Fetch question config
-    const { data: question, error: qErr } = await db
-      .from('questions')
-      .select('circle_radius_ratio, max_score, min_correct_score, time_limit_seconds')
-      .eq('id', question_id)
-      .single<Pick<Question, 'circle_radius_ratio' | 'max_score' | 'min_correct_score' | 'time_limit_seconds'>>();
+    // 7. Fetch runtime scoring config:
+    //    - If current_game_set_question_id is set, use game_set_questions snapshot values.
+    //    - Otherwise fall back to questions table (legacy / pre-migration).
+    let circleRadiusRatio: number;
+    let maxScore: number;
+    let minCorrectScore: number;
 
-    if (qErr || !question) throw new Error('Failed to fetch question config');
+    if (gs.current_game_set_question_id) {
+      const { data: gsq, error: gqErr } = await db
+        .from('game_set_questions')
+        .select('circle_radius_ratio, max_score, min_correct_score')
+        .eq('id', gs.current_game_set_question_id)
+        .single<{ circle_radius_ratio: number; max_score: number; min_correct_score: number }>();
 
-    // 8. Fetch mask path + dimensions from question_masks (service role — bypasses RLS deny policy).
-    // mask_storage_path, mask_width, mask_height are never returned to the client in any response.
+      if (gqErr || !gsq) throw new Error('Failed to fetch game_set_question scoring config');
+
+      circleRadiusRatio = gsq.circle_radius_ratio;
+      maxScore = gsq.max_score;
+      minCorrectScore = gsq.min_correct_score;
+    } else {
+      // Legacy fallback: read from questions table
+      const { data: question, error: qErr } = await db
+        .from('questions')
+        .select('circle_radius_ratio, max_score, min_correct_score')
+        .eq('id', question_id)
+        .single<{ circle_radius_ratio: number; max_score: number; min_correct_score: number }>();
+
+      if (qErr || !question) throw new Error('Failed to fetch question scoring config');
+
+      circleRadiusRatio = question.circle_radius_ratio;
+      maxScore = question.max_score;
+      minCorrectScore = question.min_correct_score;
+    }
+
+    // 8. Fetch mask path + dimensions (service role bypasses RLS deny policy)
     const { data: maskRow, error: maskErr } = await db
       .from('question_masks')
       .select('mask_storage_path, mask_width, mask_height')
@@ -117,14 +140,11 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
     if (maskErr || !maskRow) throw new Error(`Mask not found for question ${question_id}`);
 
-    // 9. Download mask PNG from private bucket (service role — bypasses storage RLS).
-    // Skip download if decoded mask is already in the module-level cache.
-    // Cache key = mask_storage_path (unique per question; stable across requests).
+    // 9. Download mask PNG from private bucket (cache by path)
     const cacheKey = maskRow.mask_storage_path;
     let maskBuffer: ArrayBuffer;
 
     if (getCachedMask(cacheKey)) {
-      // Cache hit — skip storage download; checkCircleOverlapsMask will read from cache
       maskBuffer = new ArrayBuffer(0);
     } else {
       const { data: maskFile, error: downloadErr } = await db.storage
@@ -137,19 +157,18 @@ Deno.serve(async (req: Request): Promise<Response> => {
       maskBuffer = await maskFile.arrayBuffer();
     }
 
-    // 10. Pixel overlap check — pure computation, no DB access.
-    // Pass mask dimensions for validation: throws if decoded PNG size differs.
+    // 10. Pixel overlap check using game-set circle radius
     const isCorrect = await checkCircleOverlapsMask(
       maskBuffer,
       x_ratio,
       y_ratio,
-      question.circle_radius_ratio,
-      cacheKey,                              // cache key for module-level cache
-      maskRow.mask_width ?? undefined,       // expected width; null means skip validation
-      maskRow.mask_height ?? undefined,      // expected height; null means skip validation
+      circleRadiusRatio,
+      cacheKey,
+      maskRow.mask_width ?? undefined,
+      maskRow.mask_height ?? undefined,
     );
 
-    // 11. Compute score from server time — client time is never used
+    // 11. Compute score from server time
     const startedAt = gs.question_started_at ? new Date(gs.question_started_at) : serverNow;
     const totalMs = endsAt.getTime() - startedAt.getTime();
     const remainingMs = endsAt.getTime() - serverNow.getTime();
@@ -157,12 +176,12 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
     const score = isCorrect
       ? Math.round(
-          question.min_correct_score +
-          (question.max_score - question.min_correct_score) * timeRemainingRatio,
+          minCorrectScore +
+          (maxScore - minCorrectScore) * timeRemainingRatio,
         )
       : 0;
 
-    // 12. Insert answer (service role bypasses missing INSERT RLS policy)
+    // 12. Insert answer (service role bypasses RLS)
     const { error: insertErr } = await db.from('answers').insert({
       player_id: user.id,
       question_id,
@@ -174,7 +193,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       score,
     });
 
-    // Handle race condition: simultaneous request won the UNIQUE constraint
+    // Race condition: simultaneous request won the UNIQUE constraint
     if (insertErr?.code === '23505') {
       const { data: raceResult } = await db
         .from('answers')
@@ -195,12 +214,12 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
     if (insertErr) throw new Error(`Answer insert failed: ${insertErr.message}`);
 
-    // 13. Increment player's running total score (non-critical; leaderboard uses answers table)
+    // 13. Increment player's running total score
     if (score > 0) {
       await db.rpc('increment_player_score', { p_player_id: user.id, p_amount: score });
     }
 
-    // 14. Return result — never includes mask path, mask data, or time_remaining_ratio
+    // 14. Return result — never includes mask path or mask data
     const responseBody: SubmitAnswerResponse = {
       is_correct: isCorrect,
       score,
