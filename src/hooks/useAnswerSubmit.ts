@@ -42,7 +42,6 @@ export function useAnswerSubmit() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'apikey': SUPABASE_ANON_KEY,
           'Authorization': `Bearer ${session.access_token}`,
         },
         body: JSON.stringify(body),
