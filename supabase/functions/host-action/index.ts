@@ -64,8 +64,10 @@ Deno.serve(async (req: Request): Promise<Response> => {
   const preflight = handleCors(req);
   if (preflight) return preflight;
 
-  const providedSecret = req.headers.get('X-Host-Secret');
-  if (!providedSecret || providedSecret !== Deno.env.get('HOST_SECRET')) {
+  const envSecret = Deno.env.get('HOST_SECRET')?.trim();
+  if (!envSecret) return error(500, 'server_missing_host_secret');
+  const providedSecret = req.headers.get('X-Host-Secret')?.trim();
+  if (!providedSecret || providedSecret !== envSecret) {
     return error(401, 'unauthorized');
   }
 

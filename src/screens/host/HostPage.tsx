@@ -63,13 +63,21 @@ function HostLogin({ onLogin, error }: { onLogin: (s: string) => void; error: st
 
     try {
       const res = await fetch(`${FUNCTIONS_URL}/get-question-stats`, {
-        headers: { 'apikey': SUPABASE_ANON_KEY, 'X-Host-Secret': value.trim() },
+        headers: { 'Authorization': `Bearer ${SUPABASE_ANON_KEY}`, 'X-Host-Secret': value.trim() },
       });
-      if (res.status === 401) {
-        setLocalError('Wrong secret. Try again.');
-      } else {
+      if (res.ok) {
         sessionStorage.setItem(SESSION_KEY, value.trim());
         onLogin(value.trim());
+        return;
+      }
+      let errCode = '';
+      try { errCode = (await res.json()).error ?? ''; } catch { /* ignore */ }
+      if (res.status === 401) {
+        setLocalError('Wrong secret. Try again.');
+      } else if (errCode === 'server_missing_host_secret') {
+        setLocalError('Server is not configured: HOST_SECRET is missing. Contact the server admin.');
+      } else {
+        setLocalError(`Login failed (HTTP ${res.status}). Try again or check server logs.`);
       }
     } catch {
       setLocalError('Network error. Check connection.');
@@ -137,7 +145,7 @@ function HostDashboard({ secret, onLogout }: { secret: string; onLogout: () => v
   const fetchStats = useCallback(async () => {
     try {
       const res = await fetch(`${FUNCTIONS_URL}/get-question-stats`, {
-        headers: { 'apikey': SUPABASE_ANON_KEY, 'X-Host-Secret': secret },
+        headers: { 'Authorization': `Bearer ${SUPABASE_ANON_KEY}`, 'X-Host-Secret': secret },
       });
       if (res.ok) setStats(await res.json());
     } catch { /* silent */ }
@@ -175,7 +183,7 @@ function HostDashboard({ secret, onLogout }: { secret: string; onLogout: () => v
       const body: HostActionRequest = { action };
       const res = await fetch(`${FUNCTIONS_URL}/host-action`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_ANON_KEY, 'X-Host-Secret': secret },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPABASE_ANON_KEY}`, 'X-Host-Secret': secret },
         body: JSON.stringify(body),
       });
       const json = await res.json();
