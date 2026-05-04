@@ -516,6 +516,33 @@ function GameSetsListView({
           </div>
         )}
       </div>
+
+      {/* Delete confirmation modal */}
+      {confirmDelete && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(5,8,16,.88)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, zIndex: 300, backdropFilter: 'blur(6px)' }}>
+          <div className="gr-card" style={{ width: '100%', maxWidth: 300, padding: 22 }}>
+            <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--rose)', marginBottom: 10 }}>Delete Game Set?</div>
+            <p style={{ fontSize: 12, color: 'var(--text-2)', marginBottom: 18, lineHeight: 1.6 }}>
+              This will permanently delete the game set and all its question assignments. The questions in your bank will not be affected.
+            </p>
+            <div style={{ display: 'flex', gap: 9 }}>
+              <button
+                onClick={() => onConfirmDelete(null)}
+                className="gr-btn gr-btn-ghost"
+                style={{ padding: '10px', fontSize: 13 }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => onDeleteSet(confirmDelete)}
+                style={{ flex: 1, padding: '10px 14px', borderRadius: 12, border: 'none', background: '#be123c', color: 'white', fontFamily: 'var(--font-sans)', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
