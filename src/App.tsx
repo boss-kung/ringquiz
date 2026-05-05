@@ -59,51 +59,36 @@ function PlayerApp() {
     );
   }
 
-  if (!isJoined) return <>
-    <FeedbackFxLayer />
-    <JoinScreen />
-  </>;
+  let screen: JSX.Element;
 
-  // Game state drives which screen to show
-  const status = gameState?.status;
+  if (!isJoined) {
+    screen = <JoinScreen />;
+  } else {
+    const status = gameState?.status;
 
-  if (!status || status === 'waiting') return <>
-    <FeedbackFxLayer />
-    <WaitingScreen />
-  </>;
-  if (status === 'countdown') return <>
-    <FeedbackFxLayer />
-    <CountdownScreen />
-  </>;
-
-  if (status === 'question_open') {
-    // Show locked screen if player already submitted this question
-    return <>
-      <FeedbackFxLayer />
-      {submitted ? <LockedScreen /> : <QuestionScreen />}
-    </>;
+    if (!status || status === 'waiting') {
+      screen = <WaitingScreen />;
+    } else if (status === 'countdown') {
+      screen = <CountdownScreen />;
+    } else if (status === 'question_open') {
+      screen = submitted ? <LockedScreen /> : <QuestionScreen />;
+    } else if (status === 'question_closed') {
+      screen = <LockedScreen />;
+    } else if (status === 'reveal') {
+      screen = <RevealScreen />;
+    } else if (status === 'leaderboard') {
+      screen = <LeaderboardScreen />;
+    } else if (status === 'ended') {
+      screen = <EndScreen />;
+    } else {
+      screen = <WaitingScreen />;
+    }
   }
 
-  if (status === 'question_closed') return <>
-    <FeedbackFxLayer />
-    <LockedScreen />
-  </>;
-  if (status === 'reveal') return <>
-    <FeedbackFxLayer />
-    <RevealScreen />
-  </>;
-  if (status === 'leaderboard') return <>
-    <FeedbackFxLayer />
-    <LeaderboardScreen />
-  </>;
-  if (status === 'ended') return <>
-    <FeedbackFxLayer />
-    <EndScreen />
-  </>;
-
-  // Fallback — unknown status
-  return <>
-    <FeedbackFxLayer />
-    <WaitingScreen />
-  </>;
+  return (
+    <>
+      <FeedbackFxLayer />
+      {screen}
+    </>
+  );
 }
