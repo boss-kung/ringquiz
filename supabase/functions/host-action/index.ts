@@ -131,18 +131,10 @@ async function executeAction(
       const currentPlayOrder = gs.current_question_index ?? -1;
 
       if (gs.active_game_set_id) {
-        // Game-set-aware path
-        const { data: nextGSQ, error: gqErr } = await db
-          .from('game_set_questions')
-          .select('id, question_id, play_order')
-          .eq('game_set_id', gs.active_game_set_id)
-          .eq('is_enabled', true)
-          .gt('play_order', currentPlayOrder)
-          .order('play_order', { ascending: true })
-          .limit(1)
-          .maybeSingle();
-
-        if (gqErr) throw new Error(`game_set_questions query failed: ${gqErr.message}`);
+        // Intentionally do not filter on questions.is_published here.
+        // Hard reset should restart from the first enabled play_order in the
+        // active game set, even if the bank question is unpublished.
+        const nextGSQ = await selectNextGameSetQuestion(gs.active_game_set_id, currentPlayOrder, db);
         if (!nextGSQ) return error(400, 'no_next_question');
 
         if (!alreadyInState) {
@@ -263,17 +255,7 @@ async function executeAction(
       const currentPlayOrder = gs.current_question_index ?? -1;
 
       if (gs.active_game_set_id) {
-        const { data: nextGSQ, error: gqErr } = await db
-          .from('game_set_questions')
-          .select('id, question_id, play_order')
-          .eq('game_set_id', gs.active_game_set_id)
-          .eq('is_enabled', true)
-          .gt('play_order', currentPlayOrder)
-          .order('play_order', { ascending: true })
-          .limit(1)
-          .maybeSingle();
-
-        if (gqErr) throw new Error(`game_set_questions query failed: ${gqErr.message}`);
+        const nextGSQ = await selectNextGameSetQuestion(gs.active_game_set_id, currentPlayOrder, db);
         if (!nextGSQ) return error(400, 'no_next_question');
 
         await updateGameState(db, {
@@ -436,6 +418,42 @@ async function refetchGs(
     active_game_set_id: data.active_game_set_id ?? null,
     current_game_set_question_id: data.current_game_set_question_id ?? null,
   } as GameState;
+}
+
+type NextGameSetQuestion = {
+  id: string;
+  question_id: string;
+  play_order: number;
+};
+
+async function selectNextGameSetQuestion(
+  gameSetId: string,
+  currentPlayOrder: number,
+  db: ReturnType<typeof getSupabaseAdmin>,
+): Promise<NextGameSetQuestion | null> {
+  const { data, error } = await db
+    .from('game_set_questions')
+    .select(`
+      id,
+      question_id,
+      play_order,
+      questions!inner(id)
+    `)
+    .eq('game_set_id', gameSetId)
+    .eq('is_enabled', true)
+    .gt('play_order', currentPlayOrder)
+    .order('play_order', { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw new Error(`game_set_questions query failed: ${error.message}`);
+  if (!data) return null;
+
+  return {
+    id: data.id,
+    question_id: data.question_id,
+    play_order: data.play_order,
+  };
 }
 
 function ok(
