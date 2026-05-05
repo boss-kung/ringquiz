@@ -733,24 +733,16 @@ function DsLobby({
       <div className="ds-lobby-body">
         <div className="ds-stage-card ds-stage-card-hero ds-lobby-left">
           <div className="ds-stage-rings" aria-hidden />
-          <div className="ds-label ds-gold" style={{ marginBottom: 12, textAlign: 'center' }}>Join The Game</div>
           <QRCode url={joinUrl} />
-          <div className="ds-join-url">{joinUrl}</div>
-          <div className="ds-lobby-steps">
-            <div className="ds-lobby-step"><span>1</span>สแกน QR หรือเปิดลิงก์</div>
-            <div className="ds-lobby-step"><span>2</span>กรอกชื่อเล่นของคุณ</div>
-            <div className="ds-lobby-step"><span>3</span>รอพิธีกรเริ่มเกม</div>
-          </div>
-          <div className="ds-player-count ds-stage-inset">
-            <div className="ds-lobby-player-count-hero">{players.length}</div>
-            <div className="ds-lobby-player-count-label">ผู้เล่น</div>
-          </div>
         </div>
 
         <div className="ds-stage-card ds-stage-card-soft ds-lobby-right">
           <div className="ds-lobby-wall-header">
             <div className="ds-label">{latestJoined ? 'ผู้เล่นใหม่กำลังเข้าห้อง' : 'ผู้เล่นในห้อง'}</div>
-            <div className="ds-stage-pill">{players.length} joined</div>
+            <div className="ds-player-count ds-stage-inset">
+              <div className="ds-lobby-player-count-hero">{players.length}</div>
+              <div className="ds-lobby-player-count-label">ผู้เล่น</div>
+            </div>
           </div>
 
           {latestJoined && (
