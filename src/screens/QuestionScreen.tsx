@@ -18,19 +18,34 @@ export function QuestionScreen() {
   const submitError = useGameStore((s) => s.submitError);
   const { submit, submitting } = useAnswerSubmit();
   const getServerTime = useGetServerTime();
-  const [timeExpired, setTimeExpired] = useState(false);
+  const [remainingMs, setRemainingMs] = useState<number | null>(null);
 
   const endsAt = gameState?.question_ends_at ?? null;
   const displayOrder = question?.play_order ?? question?.order_index ?? gameState?.current_question_index ?? null;
+  const durationMs = (question?.time_limit_seconds ?? 0) * 1000;
 
   useEffect(() => {
-    if (!endsAt) { setTimeExpired(false); return; }
+    if (!endsAt) {
+      setRemainingMs(null);
+      return;
+    }
+
     const endMs = new Date(endsAt).getTime();
-    const tick = () => setTimeExpired(getServerTime() >= endMs);
+    let rafId = 0;
+
+    const tick = () => {
+      const diffMs = Math.max(0, endMs - getServerTime());
+      setRemainingMs(diffMs);
+      if (diffMs > 0) {
+        rafId = requestAnimationFrame(tick);
+      }
+    };
+
     tick();
-    const id = setInterval(tick, 250);
-    return () => clearInterval(id);
+    return () => cancelAnimationFrame(rafId);
   }, [endsAt, getServerTime]);
+
+  const timeExpired = remainingMs !== null && remainingMs <= 0;
 
   useEffect(() => {
     if (timeExpired && !submitted) {
@@ -62,25 +77,25 @@ export function QuestionScreen() {
   return (
     <div style={{ display: 'flex', minHeight: '100%', flexDirection: 'column', background: 'var(--navy)' }}>
       {/* Header */}
-      <div className="gr-header">
-        <p className="gr-label-xs">Question {displayOrder ?? '—'}</p>
+      <div className="gr-qhud-wrap">
+        <div className="gr-qhud-order">Question {displayOrder ?? '—'}</div>
         <Timer
-          endsAt={gameState?.question_ends_at ?? null}
-          totalSeconds={question.time_limit_seconds}
+          remainingMs={remainingMs}
+          totalMs={durationMs}
         />
       </div>
 
       {/* Question text */}
-      <div style={{ flexShrink: 0, padding: '8px 14px 6px' }}>
-        <div className="gr-card" style={{ padding: '13px 16px' }}>
-          <p style={{ fontSize: 18, fontWeight: 600, lineHeight: 1.5, color: 'var(--text)' }}>
+      <div className="gr-qtext-wrap">
+        <div className="gr-card gr-qtext-card">
+          <p className="gr-qtext">
             {question.text}
           </p>
         </div>
       </div>
 
       {/* Image area */}
-      <div style={{ flex: 1, minHeight: 0, padding: '6px 16px' }}>
+      <div className="gr-qimage-wrap">
         <div className="quiz-image-stage">
           <QuestionImage
             imageUrl={questionImageUrl}
@@ -96,13 +111,7 @@ export function QuestionScreen() {
 
       {/* Submit bar */}
       <div
-        style={{
-          flexShrink: 0,
-          borderTop: '1px solid var(--border)',
-          background: 'rgba(8,13,28,.92)',
-          backdropFilter: 'blur(12px)',
-          padding: '8px 16px 16px',
-        }}
+        className="gr-qsubmit"
       >
         <div style={{ marginBottom: submitted || timeExpired || submitError ? 8 : 0 }}>
           {timeExpired && !submitted && !submitting && (

@@ -1,57 +1,34 @@
-import { useEffect, useState } from 'react';
-import { useGetServerTime } from '../hooks/useServerTime';
-
 interface Props {
-  endsAt: string | null;
-  totalSeconds: number | null;
+  remainingMs: number | null;
+  totalMs: number | null;
 }
 
-export function Timer({ endsAt, totalSeconds }: Props) {
-  const getServerTime = useGetServerTime();
-  const [remainingMs, setRemainingMs] = useState<number | null>(null);
-
-  useEffect(() => {
-    if (!endsAt) { setRemainingMs(null); return; }
-
-    const endMs = new Date(endsAt).getTime();
-    let rafId: number;
-
-    const tick = () => {
-      const diffMs = Math.max(0, endMs - getServerTime());
-      setRemainingMs(diffMs);
-      if (diffMs > 0) rafId = requestAnimationFrame(tick);
-    };
-
-    tick();
-    return () => cancelAnimationFrame(rafId);
-  }, [endsAt, getServerTime]);
-
+export function Timer({ remainingMs, totalMs }: Props) {
   if (remainingMs === null) return null;
 
+  const durationMs = totalMs && totalMs > 0 ? totalMs : Math.max(remainingMs, 1);
   const remainingSeconds = remainingMs / 1000;
   const displaySeconds = remainingSeconds.toFixed(1);
-
-  const normalizedTotalMs =
-    totalSeconds && totalSeconds > 0
-      ? totalSeconds * 1000
-      : remainingMs > 0 ? remainingMs : 1000;
-
-  const pct = remainingMs > 0 ? Math.min(1, remainingMs / normalizedTotalMs) : 0;
-  const urgent = remainingSeconds <= 10;
+  const progressPercent = Math.max(0, Math.min(100, (remainingMs / durationMs) * 100));
+  const urgent = remainingSeconds <= 5;
+  const critical = remainingSeconds <= 3;
 
   return (
-    <div className={`gr-timer ${urgent ? 'gr-timer-urgent' : ''}`}>
-      <span
-        className="gr-mono timer-digit"
-        style={{ minWidth: '4.5ch', textAlign: 'right' }}
-      >
-        {displaySeconds}s
-      </span>
-      <div className="gr-timer-track">
+    <div className={`gr-timer ${urgent ? 'gr-timer-urgent' : ''}${critical ? ' gr-timer-critical' : ''}`}>
+      <div className="gr-timer-topline">
+        <span className="gr-timer-label">QUESTION</span>
+        <span
+          className="gr-mono gr-timer-value timer-digit"
+          style={{ minWidth: '4.5ch', textAlign: 'right' }}
+        >
+          {displaySeconds}s
+        </span>
+      </div>
+      <div className="gr-timer-track" aria-hidden>
         <div
           className="gr-timer-fill"
           style={{
-            width: `${pct * 100}%`,
+            width: `${progressPercent}%`,
             background: urgent
               ? 'var(--rose)'
               : 'linear-gradient(90deg,#C49A1A,#F5C74A)',
