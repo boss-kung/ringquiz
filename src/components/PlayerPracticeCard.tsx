@@ -40,9 +40,9 @@ function withBaseUrl(path: string): string {
 
 const PRACTICE_QUESTION: PracticeQuestionConfig = {
   id: 'local-practice-1',
-  title: 'Practice Question',
-  prompt: 'ลองแตะตำแหน่งที่คิดว่า “วงแหวนทอง” ซ่อนอยู่ในภาพ',
-  instruction: 'ฝึกวางวงคำตอบก่อนเกมจริง คำตอบนี้ตรวจเฉพาะในเครื่องของคุณเท่านั้น',
+  title: 'ซ้อมก่อนเริ่ม',
+  prompt: 'ซ้อมก่อนเริ่ม',
+  instruction: 'วางวงกลม → ส่ง • ไม่คิดคะแนน',
   imageUrl: withBaseUrl('practice/practice-demo-image.svg'),
   maskUrl: withBaseUrl('practice/practice-demo-mask.svg'),
   revealOverlayUrl: withBaseUrl('practice/practice-demo-reveal.svg'),
@@ -162,7 +162,7 @@ export function PlayerPracticeCard() {
       })
       .catch(() => {
         setMaskData(null);
-        setMaskError('โหลดพื้นที่เฉลยสำหรับโหมดฝึกซ้อมไม่สำเร็จ');
+        setMaskError('โหลดโหมดซ้อมไม่สำเร็จ');
       });
   }, []);
 
@@ -259,11 +259,11 @@ export function PlayerPracticeCard() {
 
   const handleSubmit = useCallback(() => {
     if (!answer) {
-      setMessage('วางวงคำตอบบนภาพก่อน แล้วค่อยส่งคำตอบฝึกซ้อม');
+      setMessage('วางวงกลมก่อน');
       return;
     }
     if (!maskData) {
-      setMessage(maskError ?? 'ยังโหลดพื้นที่เฉลยไม่พร้อม ลองใหม่อีกครั้ง');
+      setMessage(maskError ?? 'ยังไม่พร้อม ลองใหม่');
       return;
     }
 
@@ -276,8 +276,8 @@ export function PlayerPracticeCard() {
     setIsCorrect(correct);
     setMessage(
       correct
-        ? 'ถูกต้อง! วงของคุณแตะพื้นที่เฉลยแล้ว'
-        : 'ยังไม่โดนพื้นที่เฉลย ลองกดเริ่มใหม่แล้วหาตำแหน่งอีกครั้ง',
+        ? 'ถูกต้อง!'
+        : 'ยังไม่ถูก ลองใหม่',
     );
   }, [answer, maskData, maskError]);
 
@@ -296,10 +296,8 @@ export function PlayerPracticeCard() {
     <section className="pw-practice-zone gr-card">
       <div className="pw-practice-head">
         <div>
-          <div className="pw-practice-label">{PRACTICE_QUESTION.title}</div>
-          <h2 className="pw-practice-title">{PRACTICE_QUESTION.prompt}</h2>
+          <h2 className="pw-practice-title">{PRACTICE_QUESTION.title}</h2>
         </div>
-        <div className="pw-practice-chip">Local only</div>
       </div>
 
       <p className="pw-practice-tip">{PRACTICE_QUESTION.instruction}</p>
@@ -325,7 +323,7 @@ export function PlayerPracticeCard() {
         />
 
         {!answer && !submitted && (
-          <div className="pw-practice-hint">แตะหรือเลื่อนเพื่อวางวงคำตอบ</div>
+          <div className="pw-practice-hint">แตะแล้วลากได้</div>
         )}
 
         {submitted && PRACTICE_QUESTION.revealOverlayUrl ? (
@@ -368,25 +366,15 @@ export function PlayerPracticeCard() {
 
       <div className="pw-practice-actions">
         <button type="button" className="pw-submit-btn" onClick={handleSubmit} disabled={submitted}>
-          {submitted ? 'ส่งคำตอบแล้ว' : 'ส่งคำตอบฝึกซ้อม'}
+          {submitted ? 'ส่งแล้ว' : 'ส่ง'}
         </button>
         <button type="button" className="pw-reset-btn" onClick={resetPractice}>
-          {submitted ? 'ลองใหม่อีกครั้ง' : 'รีเซ็ตวง'}
+          {submitted ? 'ลองใหม่' : 'เริ่มใหม่'}
         </button>
       </div>
-
-      {message && (
-        <div className={`pw-practice-feedback${submitted && isCorrect ? ' is-correct' : ''}${submitted && isCorrect === false ? ' is-wrong' : ''}`}>
-          {message}
-        </div>
-      )}
-
-      {maskError && <div className="pw-practice-note">{maskError}</div>}
-      {!maskError && (
-        <div className="pw-practice-note">
-          โหมดฝึกซ้อมนี้ทำงานเฉพาะในเครื่องของคุณ และจะหายไปทันทีเมื่อ Host เริ่มเกมจริง
-        </div>
-      )}
+      <div className={`pw-practice-feedback${submitted && isCorrect ? ' is-correct' : ''}${submitted && isCorrect === false ? ' is-wrong' : ''}${!message ? ' is-empty' : ''}`}>
+        {message ?? maskError ?? ' '}
+      </div>
     </section>
   );
 }
