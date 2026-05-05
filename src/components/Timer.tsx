@@ -10,6 +10,7 @@ export function Timer({ remainingMs, totalMs }: Props) {
   const remainingSeconds = remainingMs / 1000;
   const displaySeconds = remainingSeconds.toFixed(1);
   const progressPercent = Math.max(0, Math.min(100, (remainingMs / durationMs) * 100));
+  const progressRatio = progressPercent / 100;
   const urgent = remainingSeconds <= 5;
   const critical = remainingSeconds <= 3;
 
@@ -28,7 +29,7 @@ export function Timer({ remainingMs, totalMs }: Props) {
         <div
           className="gr-timer-fill"
           style={{
-            width: `${progressPercent}%`,
+            transform: `scaleX(${progressRatio})`,
             background: urgent
               ? 'var(--rose)'
               : 'linear-gradient(90deg,#C49A1A,#F5C74A)',
