@@ -15,6 +15,7 @@
  * - All image/mask layers use object-fit:contain to preserve coordinate alignment.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { CSSProperties } from 'react';
 import { supabase, GAME_STATE_ID, FUNCTIONS_URL, SUPABASE_ANON_KEY } from '../lib/supabase';
 import { resolveQuestionImageUrl, resolveRevealImageUrl } from '../lib/questionAssets';
 import { COUNTDOWN_DISPLAY_SECONDS, SERVER_TIME_RESYNC_INTERVAL_MS } from '../lib/constants';
@@ -36,6 +37,20 @@ interface DisplayQuestion {
   min_correct_score: number;
   circle_radius_ratio: number;
   play_order: number;
+}
+
+interface LeaderboardFxMeta {
+  previousRank: number | null;
+  rankDelta: number | null;
+  scoreDelta: number;
+  previousScore: number;
+  isNew: boolean;
+}
+
+interface LeaderChangeState {
+  playerId: string;
+  displayName: string;
+  at: number;
 }
 
 // P0.1 — per-channel realtime status
@@ -63,6 +78,21 @@ const DISPLAY_RT_DEBUG = import.meta.env.DEV;
 function logDisplayRt(channel: string, status: string) {
   if (!DISPLAY_RT_DEBUG) return;
   console.log(`[Display] ${channel} channel:`, status);
+}
+
+function useReducedMotion() {
+  const [reduced, setReduced] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return;
+    const media = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const sync = () => setReduced(media.matches);
+    sync();
+    media.addEventListener?.('change', sync);
+    return () => media.removeEventListener?.('change', sync);
+  }, []);
+
+  return reduced;
 }
 
 function deriveConnBadge(
@@ -214,6 +244,80 @@ function DisplayImageStage({
   );
 }
 
+function DisplayTransition({
+  phase,
+  reducedMotion,
+  children,
+}: {
+  phase: string;
+  reducedMotion: boolean;
+  children: React.ReactNode;
+}) {
+  const prevPhaseRef = useRef(phase);
+  const [transitionKey, setTransitionKey] = useState(0);
+
+  useEffect(() => {
+    if (prevPhaseRef.current !== phase) {
+      prevPhaseRef.current = phase;
+      setTransitionKey((n) => n + 1);
+    }
+  }, [phase]);
+
+  return (
+    <div
+      key={`${phase}-${transitionKey}`}
+      className={`ds-phase-transition${reducedMotion ? ' ds-phase-transition-reduced' : ''}`}
+    >
+      {children}
+    </div>
+  );
+}
+
+function RankDeltaBadge({ meta }: { meta: LeaderboardFxMeta | undefined }) {
+  if (!meta) return null;
+  if (meta.isNew) return <span className="ds-rank-delta ds-rank-delta-new">NEW</span>;
+  if (!meta.rankDelta) return null;
+  if (meta.rankDelta > 0) {
+    return <span className="ds-rank-delta ds-rank-delta-up">▲ +{meta.rankDelta}</span>;
+  }
+  return <span className="ds-rank-delta ds-rank-delta-down">▼ -{Math.abs(meta.rankDelta)}</span>;
+}
+
+function AnimatedScore({
+  value,
+  from,
+  reducedMotion,
+}: {
+  value: number;
+  from: number;
+  reducedMotion: boolean;
+}) {
+  const [displayValue, setDisplayValue] = useState(value);
+
+  useEffect(() => {
+    if (reducedMotion || from === value) {
+      setDisplayValue(value);
+      return;
+    }
+
+    const start = performance.now();
+    const duration = 700;
+    let raf = 0;
+
+    const tick = (now: number) => {
+      const t = Math.min(1, (now - start) / duration);
+      const eased = 1 - Math.pow(1 - t, 3);
+      setDisplayValue(Math.round(from + (value - from) * eased));
+      if (t < 1) raf = requestAnimationFrame(tick);
+    };
+
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [from, reducedMotion, value]);
+
+  return <>{displayValue.toLocaleString()}</>;
+}
+
 // ── Root component ────────────────────────────────────────────────────────────
 
 const MAX_VISIBLE_PLAYERS = 24;
@@ -244,6 +348,8 @@ export function DisplayPage() {
   const [statsFetchError, setStatsFetchError] = useState(false);
   const [questionFetchError, setQuestionFetchError] = useState(false);
   const [gameStateFetchError, setGameStateFetchError] = useState(false);
+  const [leaderboardFx, setLeaderboardFx] = useState<Record<string, LeaderboardFxMeta>>({});
+  const [leaderChange, setLeaderChange] = useState<LeaderChangeState | null>(null);
 
   // P0.4 — throttle repeated error logs
   const lastPlayersErrLogRef = useRef(0);
@@ -251,15 +357,29 @@ export function DisplayPage() {
   const lastGameStateErrLogRef = useRef(0);
 
   const getServerTime = useDisplayServerTime();
+  const reducedMotion = useReducedMotion();
   const prevQuestionKeyRef = useRef<string | null>(null);
+  const previousLeaderboardRef = useRef<Map<string, LeaderboardEntry>>(new Map());
+  const previousLeaderIdRef = useRef<string | null>(null);
+  const leaderChangeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Clean up all timers on unmount
   useEffect(() => {
     return () => {
       newPlayerTimeoutsRef.current.forEach((t) => clearTimeout(t));
       if (latestJoinedTimerRef.current) clearTimeout(latestJoinedTimerRef.current);
+      if (leaderChangeTimerRef.current) clearTimeout(leaderChangeTimerRef.current);
     };
   }, []);
+
+  useEffect(() => {
+    if ((gameState?.status ?? 'waiting') === 'waiting' && !gameState?.current_question_id) {
+      previousLeaderboardRef.current = new Map();
+      previousLeaderIdRef.current = null;
+      setLeaderboardFx({});
+      setLeaderChange(null);
+    }
+  }, [gameState?.current_question_id, gameState?.status]);
 
   // ── P0.2 — unified highlight helper ─────────────────────────────────────────
   // Called from both realtime INSERT callback and polling reconcile.
@@ -345,6 +465,41 @@ export function DisplayPage() {
       setPlayersFetchError(true);
     }
   }, [reconcilePlayers]);
+
+  const applyLeaderboardSnapshot = useCallback((entries: LeaderboardEntry[]) => {
+    const prevMap = previousLeaderboardRef.current;
+    const nextMeta: Record<string, LeaderboardFxMeta> = {};
+
+    for (const entry of entries) {
+      const prev = prevMap.get(entry.player_id);
+      nextMeta[entry.player_id] = {
+        previousRank: prev?.rank ?? null,
+        rankDelta: prev ? prev.rank - entry.rank : null,
+        scoreDelta: prev ? entry.cumulative_score - prev.cumulative_score : entry.cumulative_score,
+        previousScore: prev?.cumulative_score ?? (entry.rank === 1 ? Math.max(0, entry.cumulative_score - entry.question_score) : 0),
+        isNew: !prev,
+      };
+    }
+
+    const nextLeader = entries[0] ?? null;
+    if (nextLeader && previousLeaderIdRef.current && previousLeaderIdRef.current !== nextLeader.player_id) {
+      setLeaderChange({
+        playerId: nextLeader.player_id,
+        displayName: nextLeader.display_name,
+        at: Date.now(),
+      });
+      if (leaderChangeTimerRef.current) clearTimeout(leaderChangeTimerRef.current);
+      leaderChangeTimerRef.current = setTimeout(() => {
+        setLeaderChange(null);
+        leaderChangeTimerRef.current = null;
+      }, 2200);
+    }
+
+    previousLeaderIdRef.current = nextLeader?.player_id ?? null;
+    previousLeaderboardRef.current = new Map(entries.map((entry) => [entry.player_id, entry]));
+    setLeaderboardFx(nextMeta);
+    setLeaderboard(entries);
+  }, []);
 
   // ── P0.3 + P0.4 — stats fetch (polling is the source of truth for answer counts)
   const fetchStats = useCallback(async () => {
@@ -564,7 +719,7 @@ export function DisplayPage() {
           .order('rank', { ascending: true })
           .limit(10);
         if (error) throw error;
-        setLeaderboard((data ?? []) as LeaderboardEntry[]);
+        applyLeaderboardSnapshot((data ?? []) as LeaderboardEntry[]);
       } catch (err) {
         console.error('[DisplayPage] leaderboard fetch failed:', err);
       }
@@ -594,9 +749,79 @@ export function DisplayPage() {
   // ── Route to phase component ────────────────────────────────────────────────
   const status = gameState?.status ?? 'waiting';
   const totalQs = stats?.total_questions ?? 0;
-
+  let screen: React.ReactNode;
   if (!gameState || status === 'waiting') {
-    return (
+    screen = (
+      <DsLobby
+        players={players}
+        newPlayerIds={newPlayerIds}
+        latestJoined={latestJoined}
+        realtimeStatus={realtimeStatus}
+        playersFetchError={playersFetchError}
+        gameStateFetchError={gameStateFetchError}
+        statsFetchError={statsFetchError}
+      />
+    );
+  } else if (status === 'countdown') {
+    screen = (
+      <DsCountdown
+        gameState={gameState}
+        question={question}
+        totalQs={totalQs}
+        getServerTime={getServerTime}
+        questionFetchError={questionFetchError}
+      />
+    );
+  } else if (status === 'question_open') {
+    screen = (
+      <DsQuestion
+        gameState={gameState}
+        question={question}
+        stats={stats}
+        totalQs={totalQs}
+        getServerTime={getServerTime}
+        questionFetchError={questionFetchError}
+      />
+    );
+  } else if (status === 'question_closed') {
+    screen = <DsClosed question={question} stats={stats} totalQs={totalQs} />;
+  } else if (status === 'reveal') {
+    screen = (
+      <DsReveal
+        gameState={gameState}
+        question={question}
+        stats={stats}
+        totalQs={totalQs}
+        getServerTime={getServerTime}
+        statsFetchError={statsFetchError}
+      />
+    );
+  } else if (status === 'leaderboard') {
+    screen = (
+      <DsLeaderboard
+        leaderboard={leaderboard}
+        leaderboardFx={leaderboardFx}
+        leaderChange={leaderChange}
+        question={question}
+        totalQs={totalQs}
+        isFinal={false}
+        reducedMotion={reducedMotion}
+      />
+    );
+  } else if (status === 'ended') {
+    screen = (
+      <DsLeaderboard
+        leaderboard={leaderboard}
+        leaderboardFx={leaderboardFx}
+        leaderChange={leaderChange}
+        question={question}
+        totalQs={totalQs}
+        isFinal
+        reducedMotion={reducedMotion}
+      />
+    );
+  } else {
+    screen = (
       <DsLobby
         players={players}
         newPlayerIds={newPlayerIds}
@@ -608,60 +833,11 @@ export function DisplayPage() {
       />
     );
   }
-  if (status === 'countdown') {
-    return (
-      <DsCountdown
-        gameState={gameState}
-        question={question}
-        totalQs={totalQs}
-        getServerTime={getServerTime}
-        questionFetchError={questionFetchError}
-      />
-    );
-  }
-  if (status === 'question_open') {
-    return (
-      <DsQuestion
-        gameState={gameState}
-        question={question}
-        stats={stats}
-        totalQs={totalQs}
-        getServerTime={getServerTime}
-        questionFetchError={questionFetchError}
-      />
-    );
-  }
-  if (status === 'question_closed') {
-    return <DsClosed question={question} stats={stats} totalQs={totalQs} />;
-  }
-  if (status === 'reveal') {
-    return (
-      <DsReveal
-        gameState={gameState}
-        question={question}
-        stats={stats}
-        totalQs={totalQs}
-        getServerTime={getServerTime}
-        statsFetchError={statsFetchError}
-      />
-    );
-  }
-  if (status === 'leaderboard') {
-    return <DsLeaderboard leaderboard={leaderboard} question={question} totalQs={totalQs} isFinal={false} />;
-  }
-  if (status === 'ended') {
-    return <DsLeaderboard leaderboard={leaderboard} question={question} totalQs={totalQs} isFinal />;
-  }
+
   return (
-    <DsLobby
-      players={players}
-      newPlayerIds={newPlayerIds}
-      latestJoined={latestJoined}
-      realtimeStatus={realtimeStatus}
-      playersFetchError={playersFetchError}
-      gameStateFetchError={gameStateFetchError}
-      statsFetchError={statsFetchError}
-    />
+    <DisplayTransition phase={status} reducedMotion={reducedMotion}>
+      {screen}
+    </DisplayTransition>
   );
 }
 
@@ -763,6 +939,7 @@ function DsLobby({
                 >
                   <div className="ds-chip-av" style={{ background: avGrad(i) }}>{initials(p.display_name)}</div>
                   <span className="ds-chip-name">{p.display_name}</span>
+                  {newPlayerIds.has(p.id) && <span className="ds-player-new-badge">NEW</span>}
                 </div>
               ))}
               {overflow > 0 && (
@@ -1075,12 +1252,15 @@ function DsReveal({
 // ── 6 + 7. LEADERBOARD / FINAL ────────────────────────────────────────────────
 
 function DsLeaderboard({
-  leaderboard, question, totalQs, isFinal,
+  leaderboard, leaderboardFx, leaderChange, question, totalQs, isFinal, reducedMotion,
 }: {
   leaderboard: LeaderboardEntry[];
+  leaderboardFx: Record<string, LeaderboardFxMeta>;
+  leaderChange: LeaderChangeState | null;
   question: DisplayQuestion | null;
   totalQs: number;
   isFinal: boolean;
+  reducedMotion: boolean;
 }) {
   const winner = leaderboard[0];
   const top = leaderboard.slice(0, 10);
@@ -1095,12 +1275,26 @@ function DsLeaderboard({
             <div className="ds-label ds-gold" style={{ letterSpacing: '.2em' }}>Final Leaderboard</div>
             <div className="ds-title" style={{ fontSize: 36 }}>จบเกม! 🏆</div>
             {winner && (
-              <div className="ds-stage-card ds-winner-card">
+              <div className={`ds-stage-card ds-winner-card${leaderChange?.playerId === winner.player_id ? ' ds-winner-card-leader' : ''}`}>
                 <div className="ds-label ds-gold">Champion</div>
+                <div className="ds-winner-crown">👑</div>
                 <div className="ds-winner-name">{winner.display_name}</div>
                 <div className="ds-winner-line">
-                  <span className="ds-mono ds-gold">{winner.cumulative_score.toLocaleString()} คะแนน</span>
+                  <span className="ds-mono ds-gold">
+                    <AnimatedScore
+                      value={winner.cumulative_score}
+                      from={leaderboardFx[winner.player_id]?.previousScore ?? winner.cumulative_score}
+                      reducedMotion={reducedMotion}
+                    /> คะแนน
+                  </span>
                 </div>
+                {!reducedMotion && (
+                  <div className="ds-final-burst" aria-hidden>
+                    {Array.from({ length: 12 }, (_, i) => (
+                      <span key={i} className="ds-final-burst-particle" style={{ '--ds-angle': `${i * 30}deg` } as CSSProperties} />
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </>
@@ -1112,6 +1306,9 @@ function DsLeaderboard({
                 : 'Leaderboard'}
             </div>
             <div className="ds-title" style={{ fontSize: 32 }}>ตารางคะแนน</div>
+            {leaderChange && (
+              <div className="ds-new-leader-banner">New Leader · {leaderChange.displayName}</div>
+            )}
           </>
         )}
       </div>
@@ -1121,17 +1318,24 @@ function DsLeaderboard({
           {podiumSlots.map((i) => (
             <div
               key={top[i].player_id}
-              className="ds-podium-slot"
+              className={`ds-podium-slot${i === 0 ? ' ds-podium-slot-leader' : ''}`}
               style={{
                 order: i === 0 ? 1 : i === 1 ? 0 : 2,
                 animationDelay: i === 0 ? '.3s' : i === 1 ? '.1s' : '.2s',
               }}
             >
               <div className="ds-pod-medal">{MEDALS[i]}</div>
+              {i === 0 && <div className="ds-pod-crown">👑</div>}
               <div className="ds-pod-av" style={{ background: avGrad(i) }}>{initials(top[i].display_name)}</div>
               <div className="ds-pod-name">{top[i].display_name}</div>
               <div className={`ds-pod-bar ds-pod-bar-${i}`}>
-                <span className="ds-mono ds-pod-score">{top[i].cumulative_score.toLocaleString()}</span>
+                <span className="ds-mono ds-pod-score">
+                  <AnimatedScore
+                    value={top[i].cumulative_score}
+                    from={leaderboardFx[top[i].player_id]?.previousScore ?? top[i].cumulative_score}
+                    reducedMotion={reducedMotion}
+                  />
+                </span>
               </div>
             </div>
           ))}
@@ -1142,13 +1346,29 @@ function DsLeaderboard({
         {(isFinal ? top.slice(3) : top).map((entry, idx) => (
           <div
             key={entry.player_id}
-            className={`ds-lb-row${entry.rank === 1 ? ' ds-lb-row-gold' : ''}`}
+            className={`ds-lb-row${entry.rank === 1 ? ' ds-lb-row-gold' : ''}${entry.rank <= 3 ? ' ds-lb-row-top3' : ''}${leaderboardFx[entry.player_id]?.isNew ? ' ds-lb-row-new' : ''}${leaderChange?.playerId === entry.player_id ? ' ds-lb-row-leader-change' : ''}`}
             style={{ animationDelay: `${Math.min(idx * 45, 320)}ms` }}
           >
             <span className="ds-lb-rank ds-mono">#{entry.rank}</span>
             <div className="ds-lb-av" style={{ background: avGrad(entry.rank - 1) }}>{initials(entry.display_name)}</div>
-            <span className="ds-lb-name">{entry.display_name}</span>
-            <span className="ds-lb-score ds-mono">{entry.cumulative_score.toLocaleString()}</span>
+            <div className="ds-lb-name-wrap">
+              <span className="ds-lb-name">
+                {entry.rank === 1 ? '👑 ' : entry.rank <= 3 ? `${MEDALS[entry.rank - 1]} ` : ''}{entry.display_name}
+              </span>
+              <div className="ds-lb-meta-line">
+                <RankDeltaBadge meta={leaderboardFx[entry.player_id]} />
+                {leaderboardFx[entry.player_id]?.scoreDelta > 0 && (
+                  <span className="ds-score-delta">+{leaderboardFx[entry.player_id].scoreDelta}</span>
+                )}
+              </div>
+            </div>
+            <span className="ds-lb-score ds-mono">
+              <AnimatedScore
+                value={entry.cumulative_score}
+                from={leaderboardFx[entry.player_id]?.previousScore ?? entry.cumulative_score}
+                reducedMotion={reducedMotion}
+              />
+            </span>
           </div>
         ))}
         {top.length === 0 && (

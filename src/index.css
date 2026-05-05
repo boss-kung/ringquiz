@@ -1197,6 +1197,7 @@ body.host-route {
   background: rgba(255,255,255,.04);
   border: 1px solid transparent;
   animation: grRowIn .3s ease-out both;
+  transition: transform .28s ease, box-shadow .28s ease, border-color .28s ease, background .28s ease;
 }
 .ds-lb-rank {
   width: clamp(28px,2.8vw,38px);
@@ -1216,7 +1217,6 @@ body.host-route {
   flex-shrink: 0;
 }
 .ds-lb-name {
-  flex: 1;
   font-size: clamp(13px,1.5vw,20px);
   font-weight: 600;
   overflow: hidden;
@@ -1224,11 +1224,68 @@ body.host-route {
   white-space: nowrap;
   color: var(--text);
 }
+.ds-lb-name-wrap {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.ds-lb-meta-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 18px;
+}
+.ds-rank-delta {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font: 800 clamp(9px,0.9vw,11px)/1 var(--font-sans);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  border: 1px solid transparent;
+}
+.ds-rank-delta-up {
+  color: #9ff6ca;
+  background: rgba(16,185,129,.12);
+  border-color: rgba(16,185,129,.22);
+}
+.ds-rank-delta-down {
+  color: #fecaca;
+  background: rgba(244,63,94,.12);
+  border-color: rgba(244,63,94,.22);
+}
+.ds-rank-delta-new {
+  color: #fde68a;
+  background: rgba(245,199,74,.12);
+  border-color: rgba(245,199,74,.24);
+}
+.ds-score-delta {
+  font: 800 clamp(10px,1vw,13px)/1 var(--font-mono);
+  color: var(--gold);
+}
 .ds-lb-score {
   font-size: clamp(14px,1.6vw,22px);
   font-weight: 800;
   color: var(--gold);
   flex-shrink: 0;
+}
+.ds-new-leader-banner {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 10px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: rgba(245,199,74,.12);
+  border: 1px solid rgba(245,199,74,.24);
+  color: #fff2bf;
+  font: 800 clamp(11px,1.1vw,14px)/1 var(--font-sans);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  animation: dsLeaderBannerIn .7s ease-out both;
 }
 
 /* ── NEW PLAYER HIGHLIGHT ──────────────────────────────────────────────────── */
@@ -1239,6 +1296,18 @@ body.host-route {
   border-color: rgba(245,199,74,.65);
   background: rgba(245,199,74,.1);
   box-shadow: 0 0 12px rgba(245,199,74,.25);
+  animation: dsPlayerJoinIn .55s ease-out both, dsPlayerJoinGlow 1.8s ease-out both;
+}
+.ds-player-new-badge {
+  margin-left: auto;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(245,199,74,.14);
+  border: 1px solid rgba(245,199,74,.22);
+  color: var(--gold);
+  font: 800 clamp(9px,0.95vw,11px)/1 var(--font-sans);
+  letter-spacing: .08em;
+  text-transform: uppercase;
 }
 .ds-overflow-chip {
   display: inline-flex;
@@ -1396,6 +1465,31 @@ body.host-route {
   to   { opacity: 1; transform: none; }
 }
 .ds-podium-slot { animation: dsPodIn .55s ease-out both; }
+@keyframes dsLeaderBannerIn {
+  from { opacity: 0; transform: translateY(-10px) scale(.96); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes dsLeaderPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(245,199,74,.12), 0 14px 32px rgba(245,199,74,.08); }
+  50% { box-shadow: 0 0 0 10px rgba(245,199,74,0), 0 18px 42px rgba(245,199,74,.18); }
+}
+@keyframes dsPlayerJoinIn {
+  from { opacity: 0; transform: translateY(12px) scale(.96); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes dsPlayerJoinGlow {
+  0% { box-shadow: 0 0 0 0 rgba(245,199,74,.28); }
+  100% { box-shadow: 0 0 0 18px rgba(245,199,74,0); }
+}
+@keyframes dsBurstOut {
+  0% { opacity: 0; transform: rotate(var(--ds-angle)) translateY(0) scale(.4); }
+  16% { opacity: 1; }
+  100% { opacity: 0; transform: rotate(var(--ds-angle)) translateY(-84px) scale(1); }
+}
+@keyframes dsPhaseIn {
+  from { opacity: 0; transform: translateY(16px) scale(.985); filter: blur(6px); }
+  to { opacity: 1; transform: none; filter: blur(0); }
+}
 
 /* ── LEADERBOARD ROW — rank 1 gold highlight ─────────────────────────────── */
 .ds-lb-row.ds-lb-row-gold {
@@ -1403,6 +1497,17 @@ body.host-route {
   border-color: rgba(245,199,74,.2);
 }
 .ds-lb-row.ds-lb-row-gold .ds-lb-rank { color: var(--gold); }
+.ds-lb-row.ds-lb-row-top3 {
+  background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.035));
+}
+.ds-lb-row.ds-lb-row-new {
+  border-color: rgba(129,140,248,.28);
+}
+.ds-lb-row.ds-lb-row-leader-change,
+.ds-podium-slot.ds-podium-slot-leader,
+.ds-winner-card.ds-winner-card-leader {
+  animation: dsLeaderPulse 1.4s ease-out 1;
+}
 
 /* ── REVEAL PHASE LAYOUT ───────────────────────────────────────────────────── */
 .ds-reveal-layout {
@@ -1641,11 +1746,23 @@ body.host-route {
 }
 
 .ds-reveal-left { justify-content: center; }
+.ds-phase-transition {
+  min-height: 100%;
+  animation: dsPhaseIn .58s ease-out both;
+}
+.ds-phase-transition.ds-phase-transition-reduced {
+  animation: none;
+}
 .ds-winner-card {
   margin: 18px auto 0;
   padding: 20px 26px;
   width: min(100%, 520px);
   text-align: center;
+  overflow: visible;
+}
+.ds-winner-crown {
+  font-size: clamp(24px, 2.6vw, 40px);
+  margin-top: 6px;
 }
 .ds-winner-name {
   margin-top: 8px;
@@ -1653,6 +1770,24 @@ body.host-route {
   font-weight: 900;
   color: var(--text);
   line-height: 1.05;
+}
+.ds-final-burst {
+  position: absolute;
+  left: 50%;
+  top: 26%;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+.ds-final-burst-particle {
+  position: absolute;
+  width: 14px;
+  height: 34px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(255,248,196,.98), rgba(245,199,74,.18));
+  box-shadow: 0 0 16px rgba(245,199,74,.42);
+  transform-origin: center bottom;
+  animation: dsBurstOut 1.05s ease-out both;
 }
 
 /* Display readability overrides for big-screen projection */
@@ -1690,6 +1825,7 @@ body.host-route {
 .ds-winner-line { font-size: clamp(20px,2.2vw,30px); }
 .ds-pod-name { font-size: clamp(15px,1.6vw,22px); }
 .ds-pod-score { font-size: clamp(16px,1.8vw,24px); font-weight: 900; }
+.ds-pod-crown { font-size: clamp(18px,2vw,28px); margin-bottom: -2px; }
 .ds-lb-row {
   padding: clamp(14px,1.8vh,22px) clamp(16px,1.8vw,26px);
 }
@@ -1726,6 +1862,12 @@ body.host-route {
 }
 .ds-lb-row.ds-lb-row-gold .ds-lb-score {
   font-size: clamp(24px,2.8vw,38px);
+}
+.ds-lb-row.ds-lb-row-top3 .ds-lb-name {
+  font-weight: 800;
+}
+.ds-lb-row.ds-lb-row-leader-change {
+  transform: translateY(-2px);
 }
 
 /* Reuse the same circular image system players see, but scale it for the stage */
@@ -1829,6 +1971,25 @@ body.host-route {
   .ds-qr-wrap {
     width: min(78vw, 360px);
     height: min(78vw, 360px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ds-phase-transition,
+  .ds-podium-slot,
+  .ds-lb-row,
+  .ds-new-leader-banner,
+  .ds-player-chip.ds-player-new,
+  .ds-lb-row.ds-lb-row-leader-change,
+  .ds-podium-slot.ds-podium-slot-leader,
+  .ds-winner-card.ds-winner-card-leader {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  .ds-final-burst,
+  .ds-player-new-badge {
+    display: none;
   }
 }
 
