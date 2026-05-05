@@ -1,6 +1,11 @@
 import { useRef, useState } from 'react';
 import type { ChangeEvent } from 'react';
 import { FUNCTIONS_URL, SUPABASE_ANON_KEY } from '../../lib/supabase';
+import {
+  buildQuestionImportTemplateCsv,
+  downloadQuestionImportTemplateCsv,
+  downloadQuestionImportTemplateZip,
+} from '../../lib/importTemplateDownloads';
 import { parseZipImport } from '../../lib/parseZipImport';
 import type { ZipFileStatus, ZipImportSummary, ZipParseResult, ZipValidatedRow } from '../../lib/zipImportTypes';
 import type { AdminQuestionPayload, AdminQuestionRequest, AdminQuestionResponse, AdminUploadAssetsResponse } from '../../lib/adminTypes';
@@ -95,6 +100,8 @@ export function ZipBulkImportPanel({
   const [importProgress, setImportProgress] = useState<{ current: number; total: number } | null>(null);
   const [importError, setImportError] = useState('');
   const [importSummary, setImportSummary] = useState<ZipImportSummary | null>(null);
+  const [templateError, setTemplateError] = useState('');
+  const [downloadingTemplate, setDownloadingTemplate] = useState<null | 'csv' | 'zip'>(null);
 
   const validRows = parseResult?.rows.filter((r) => r.valid) ?? [];
   const invalidRows = (parseResult?.rows.length ?? 0) - validRows.length;
@@ -125,6 +132,29 @@ export function ZipBulkImportPanel({
     } catch (err) {
       setParseError(err instanceof Error ? err.message : 'Failed to parse ZIP file.');
       setPhase('idle');
+    }
+  };
+
+  const handleDownloadCsvTemplate = () => {
+    setTemplateError('');
+
+    try {
+      downloadQuestionImportTemplateCsv();
+    } catch (err) {
+      setTemplateError(err instanceof Error ? err.message : 'Failed to download CSV template.');
+    }
+  };
+
+  const handleDownloadZipTemplate = async () => {
+    setTemplateError('');
+    setDownloadingTemplate('zip');
+
+    try {
+      await downloadQuestionImportTemplateZip();
+    } catch (err) {
+      setTemplateError(err instanceof Error ? err.message : 'Failed to download ZIP template.');
+    } finally {
+      setDownloadingTemplate(null);
     }
   };
 
@@ -202,6 +232,7 @@ export function ZipBulkImportPanel({
     setImportError('');
     setImportSummary(null);
     setImportProgress(null);
+    setTemplateError('');
   };
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -216,6 +247,27 @@ export function ZipBulkImportPanel({
           images, masks, and optional reveal images. Questions are imported into the Question Bank only —
           add them to a Game Set separately.
         </p>
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          <button
+            type="button"
+            onClick={handleDownloadCsvTemplate}
+            className="rounded-xl bg-white/10 px-4 py-3 text-sm font-semibold text-white disabled:opacity-50"
+          >
+            Download CSV Template
+          </button>
+          <button
+            type="button"
+            onClick={() => { void handleDownloadZipTemplate(); }}
+            disabled={downloadingTemplate === 'zip'}
+            className="rounded-xl bg-white/10 px-4 py-3 text-sm font-semibold text-white disabled:opacity-50"
+          >
+            {downloadingTemplate === 'zip' ? 'Downloading ZIP…' : 'Download ZIP Template'}
+          </button>
+        </div>
+        <div className="mt-3 space-y-1 text-xs text-slate-400">
+          <p>Use this template to prepare your ZIP import. Keep questions.csv at the root of the ZIP.</p>
+          <p>Place question images in images/, masks in masks/, and optional reveal images in reveals/.</p>
+        </div>
       </div>
 
       {/* File picker (always visible unless done) */}
@@ -266,6 +318,7 @@ export function ZipBulkImportPanel({
 
       {/* Import error */}
       {importError && <FeedbackBox tone="error" message={importError} />}
+      {templateError && <FeedbackBox tone="error" message={templateError} />}
 
       {/* Global CSV/ZIP parse errors */}
       {parseResult && parseResult.globalErrors.length > 0 && (
@@ -376,11 +429,11 @@ export function ZipBulkImportPanel({
             </code>
             <p className="font-semibold text-slate-300 mt-3">Optional columns:</p>
             <code className="block text-slate-300 bg-slate-950 rounded-lg p-3">
-              {`reveal_file,is_published`}
+              {`reveal_file,difficulty,tags,is_published`}
             </code>
             <p className="font-semibold text-slate-300 mt-3">Example row:</p>
             <code className="block whitespace-pre-wrap break-all text-slate-300 bg-slate-950 rounded-lg p-3">
-              {`หาโลโก้ที่ซ่อนอยู่,q1.jpg,q1_mask.png,q1_reveal.png,30,1000,100,0.10,true`}
+              {buildQuestionImportTemplateCsv()}
             </code>
             <p className="mt-2">
               <span className="text-slate-300">Note:</span> default_* values are recommended settings
