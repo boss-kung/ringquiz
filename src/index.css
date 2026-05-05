@@ -1728,6 +1728,20 @@ body.host-route {
 .ds-display-shell-full { --quiz-image-size: clamp(520px, 84vmin, 1060px); }
 .ds-display-mask { opacity: .96 !important; }
 
+/* Targeted display tweaks for projection readability */
+.ds-stage-card-clue {
+  padding: clamp(20px,2vw,28px) clamp(28px,3vw,46px) clamp(18px,1.8vw,24px);
+  overflow: visible;
+}
+.ds-q-body {
+  grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr);
+}
+.quiz-image-shell--display-question {
+  --quiz-image-size: clamp(500px, 82vmin, 1040px);
+  --quiz-image-max-width: calc(100vw - 1rem);
+  --quiz-image-max-height: calc(100vh - 12rem);
+}
+
 @media (max-width: 980px) {
   .ds-lobby-body,
   .ds-q-body,

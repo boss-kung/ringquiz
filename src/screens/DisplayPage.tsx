@@ -627,7 +627,6 @@ export function DisplayPage() {
         stats={stats}
         totalQs={totalQs}
         getServerTime={getServerTime}
-        statsFetchError={statsFetchError}
         questionFetchError={questionFetchError}
       />
     );
@@ -780,11 +779,6 @@ function DsLobby({
             </div>
           )}
 
-          {(playersFetchError || gameStateFetchError || statsFetchError) && (
-            <div className="ds-sync-warning">
-              ⚠ การเชื่อมต่อไม่เสถียร กำลังใช้ fallback sync อัตโนมัติ
-            </div>
-          )}
         </div>
       </div>
 
@@ -876,7 +870,7 @@ function DsCountdown({
           <div className="ds-stage-caption">ภาพปริศนาจะขึ้นทันทีเมื่อ countdown จบ</div>
         </div>
       ) : (
-        <div className="ds-stage-card ds-clue-wrap">
+        <div className="ds-stage-card ds-stage-card-clue ds-clue-wrap">
           <div className="ds-label ds-gold" style={{ marginBottom: 16, letterSpacing: '.2em' }}>ภาพปริศนา</div>
           {questionFetchError && !clueUrl ? (
             <div className="ds-muted">ไม่สามารถโหลดภาพคำถามได้</div>
@@ -893,14 +887,13 @@ function DsCountdown({
 // ── 3. QUESTION OPEN ──────────────────────────────────────────────────────────
 
 function DsQuestion({
-  gameState, question, stats, totalQs, getServerTime, statsFetchError, questionFetchError,
+  gameState, question, stats, totalQs, getServerTime, questionFetchError,
 }: {
   gameState: GameState;
   question: DisplayQuestion | null;
   stats: DisplayStatsResponse | null;
   totalQs: number;
   getServerTime: () => number;
-  statsFetchError: boolean;
   questionFetchError: boolean;
 }) {
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
@@ -930,8 +923,6 @@ function DsQuestion({
         <div className="ds-q-meta">
           {submittedCount !== null && playerCount !== null ? (
             <span className="ds-stat-pill">ตอบแล้ว {submittedCount} / {playerCount}</span>
-          ) : statsFetchError ? (
-            <span className="ds-stat-pill" style={{ color: 'var(--text-3)' }}>Stats delayed</span>
           ) : null}
         </div>
       </div>
@@ -1072,7 +1063,6 @@ function DsReveal({
           {showReveal && submittedCount === 0 && !statsFetchError && (
             <div className="ds-muted">ยังไม่มีคำตอบในข้อนี้</div>
           )}
-          {statsFetchError && <div className="ds-muted">สถิติยังมาไม่ครบ กำลังซิงก์...</div>}
         </div>
 
         <div className="ds-stage-card ds-stage-card-visual ds-reveal-right">
