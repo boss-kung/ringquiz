@@ -23,7 +23,9 @@
           .join('')
           .replace(/~and~/g, '&');
 
-        const newUrl = window.location.pathname.replace(/\/$/, '') + decoded + window.location.hash;
+        const basePath = window.location.pathname.replace(/\/$/, '');
+        const normalizedRoute = decoded.startsWith('/') ? decoded : `/${decoded}`;
+        const newUrl = basePath + normalizedRoute + window.location.hash;
         window.history.replaceState(null, '', newUrl);
       })();
     </script>
