@@ -42,6 +42,7 @@ type ChannelStatus = 'idle' | 'connecting' | 'subscribed' | 'error' | 'timeout';
 interface RealtimeStatus {
   game: ChannelStatus;
   players: ChannelStatus;
+  answers: ChannelStatus;
   leaderboard: ChannelStatus;
 }
 
@@ -56,17 +57,29 @@ function toChannelStatus(supabaseStatus: string): ChannelStatus {
 }
 
 type ConnBadgeCls = 'ds-conn-ok' | 'ds-conn-fallback' | 'ds-conn-warn' | 'ds-conn-neutral';
+const DISPLAY_RT_DEBUG = import.meta.env.DEV;
+
+function logDisplayRt(channel: string, status: string) {
+  if (!DISPLAY_RT_DEBUG) return;
+  console.log(`[Display] ${channel} channel:`, status);
+}
 
 function deriveConnBadge(
   rt: RealtimeStatus,
   playersError: boolean,
+  gameStateError: boolean,
+  statsError: boolean,
 ): { label: string; cls: ConnBadgeCls } {
   const gameOk = rt.game === 'subscribed';
   const playersOk = rt.players === 'subscribed';
+  const answersOk = rt.answers === 'subscribed' || rt.answers === 'idle';
+  const leaderboardOk = rt.leaderboard === 'subscribed' || rt.leaderboard === 'idle';
   if (rt.game === 'idle' && rt.players === 'idle') return { label: 'Connecting...', cls: 'ds-conn-neutral' };
-  if (gameOk && playersOk)                         return { label: 'Realtime OK',   cls: 'ds-conn-ok'      };
-  if (gameOk && !playersOk && !playersError)        return { label: 'Fallback Sync', cls: 'ds-conn-fallback' };
-  if (playersError)                                 return { label: 'Sync Issue',    cls: 'ds-conn-warn'    };
+  if (gameOk && playersOk && answersOk && leaderboardOk && !gameStateError && !statsError && !playersError) {
+    return { label: 'Realtime OK', cls: 'ds-conn-ok' };
+  }
+  if (gameStateError || playersError || statsError) return { label: 'Sync Issue', cls: 'ds-conn-warn' };
+  if (gameOk && !playersOk) return { label: 'Fallback Sync', cls: 'ds-conn-fallback' };
   return { label: 'Connecting...', cls: 'ds-conn-neutral' };
 }
 
@@ -245,7 +258,7 @@ export function DisplayPage() {
 
   // P0.1 — truthful per-channel status
   const [realtimeStatus, setRealtimeStatus] = useState<RealtimeStatus>({
-    game: 'idle', players: 'idle', leaderboard: 'idle',
+    game: 'idle', players: 'idle', answers: 'idle', leaderboard: 'idle',
   });
 
   // P0.2 — new player highlight (works for both realtime and polling)
@@ -260,10 +273,12 @@ export function DisplayPage() {
   const [playersFetchError, setPlayersFetchError] = useState(false);
   const [statsFetchError, setStatsFetchError] = useState(false);
   const [questionFetchError, setQuestionFetchError] = useState(false);
+  const [gameStateFetchError, setGameStateFetchError] = useState(false);
 
   // P0.4 — throttle repeated error logs
   const lastPlayersErrLogRef = useRef(0);
   const lastStatsErrLogRef = useRef(0);
+  const lastGameStateErrLogRef = useRef(0);
 
   const getServerTime = useDisplayServerTime();
   const prevQuestionKeyRef = useRef<string | null>(null);
@@ -320,6 +335,29 @@ export function DisplayPage() {
     setPlayers(sorted);
   }, [highlightPlayer]);
 
+  const fetchGameState = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('game_state')
+        .select('*')
+        .eq('id', GAME_STATE_ID)
+        .single();
+
+      if (error) throw error;
+      if (data) {
+        setGameState(data as GameState);
+        setGameStateFetchError(false);
+      }
+    } catch (err) {
+      const now = Date.now();
+      if (now - lastGameStateErrLogRef.current > 10_000) {
+        console.error('[DisplayPage] game_state fetch failed:', err);
+        lastGameStateErrLogRef.current = now;
+      }
+      setGameStateFetchError(true);
+    }
+  }, []);
+
   // ── P0.4 — players fetch with error tracking ─────────────────────────────────
   const fetchPlayers = useCallback(async () => {
     try {
@@ -373,11 +411,7 @@ export function DisplayPage() {
 
   // ── 2. Game state subscription ──────────────────────────────────────────────
   useEffect(() => {
-    supabase
-      .from('game_state').select('*').eq('id', GAME_STATE_ID).single()
-      .then(({ data }) => {
-        if (data) { setGameState(data as GameState); void fetchStats(); }
-      });
+    void fetchGameState().then(() => { void fetchStats(); });
 
     const ch = supabase.channel('display-game')
       .on('postgres_changes', {
@@ -385,16 +419,17 @@ export function DisplayPage() {
         filter: `id=eq.${GAME_STATE_ID}`,
       }, (payload) => {
         setGameState(payload.new as GameState);
+        setGameStateFetchError(false);
         void fetchStats();
       })
       .subscribe((s) => {
         const cs = toChannelStatus(s);
-        console.log('[Display] game_state channel:', s);
+        logDisplayRt('display-game', s);
         setRealtimeStatus((prev) => ({ ...prev, game: cs }));
       });
 
     return () => { supabase.removeChannel(ch); };
-  }, [fetchStats]);
+  }, [fetchGameState, fetchStats]);
 
   // ── 3. Players subscription (P0.1 + P0.2) ───────────────────────────────────
   useEffect(() => {
@@ -420,7 +455,7 @@ export function DisplayPage() {
       })
       .subscribe((s) => {
         const cs = toChannelStatus(s);
-        console.log('[Display] players channel:', s);
+        logDisplayRt('display-players', s);
         setRealtimeStatus((prev) => ({ ...prev, players: cs }));
       });
 
@@ -438,10 +473,14 @@ export function DisplayPage() {
         void fetchStats(); // best-effort acceleration — polling is the source of truth
       })
       .subscribe((s) => {
-        // answers channel status deliberately excluded from badge health calculation
-        console.log('[Display] answers channel (best-effort):', s);
+        const cs = toChannelStatus(s);
+        logDisplayRt('display-answers', s);
+        setRealtimeStatus((prev) => ({ ...prev, answers: cs }));
       });
-    return () => { supabase.removeChannel(ch); };
+    return () => {
+      supabase.removeChannel(ch);
+      setRealtimeStatus((prev) => ({ ...prev, answers: 'idle' }));
+    };
   }, [fetchStats]);
 
   // ── 5. Fallback polling — players during lobby (P0.2) ───────────────────────
@@ -451,6 +490,17 @@ export function DisplayPage() {
     const id = setInterval(() => { void fetchPlayers(); }, 4000);
     return () => clearInterval(id);
   }, [currentStatus, fetchPlayers]);
+
+  // ── 5.5 Game state fallback polling — keeps the stage moving if realtime blips
+  useEffect(() => {
+    const interval =
+      currentStatus === 'waiting' ? 4000 :
+      currentStatus === 'leaderboard' || currentStatus === 'ended' ? 2500 :
+      1500;
+
+    const id = setInterval(() => { void fetchGameState(); }, interval);
+    return () => clearInterval(id);
+  }, [currentStatus, fetchGameState]);
 
   // ── 6. Stats polling during active phases (P0.3) ────────────────────────────
   // Polling is the correctness path for answered/correct counts.
@@ -560,7 +610,7 @@ export function DisplayPage() {
       }, () => void fetchLb())
       .subscribe((s) => {
         const cs = toChannelStatus(s);
-        console.log('[Display] leaderboard channel:', s);
+        logDisplayRt('display-leaderboard', s);
         setRealtimeStatus((prev) => ({ ...prev, leaderboard: cs }));
       });
 
@@ -583,6 +633,8 @@ export function DisplayPage() {
         latestJoined={latestJoined}
         realtimeStatus={realtimeStatus}
         playersFetchError={playersFetchError}
+        gameStateFetchError={gameStateFetchError}
+        statsFetchError={statsFetchError}
       />
     );
   }
@@ -621,6 +673,7 @@ export function DisplayPage() {
         stats={stats}
         totalQs={totalQs}
         getServerTime={getServerTime}
+        statsFetchError={statsFetchError}
       />
     );
   }
@@ -637,6 +690,8 @@ export function DisplayPage() {
       latestJoined={latestJoined}
       realtimeStatus={realtimeStatus}
       playersFetchError={playersFetchError}
+      gameStateFetchError={gameStateFetchError}
+      statsFetchError={statsFetchError}
     />
   );
 }
@@ -672,24 +727,29 @@ function DsLobby({
   latestJoined,
   realtimeStatus,
   playersFetchError,
+  gameStateFetchError,
+  statsFetchError,
 }: {
   players: Player[];
   newPlayerIds: Set<string>;
   latestJoined: Player | null;
   realtimeStatus: RealtimeStatus;
   playersFetchError: boolean;
+  gameStateFetchError: boolean;
+  statsFetchError: boolean;
 }) {
   const joinUrl = window.location.origin + (import.meta.env.BASE_URL || '/');
   const visible = players.slice(0, MAX_VISIBLE_PLAYERS);
   const overflow = players.length - MAX_VISIBLE_PLAYERS;
-  const badge = deriveConnBadge(realtimeStatus, playersFetchError);
+  const badge = deriveConnBadge(realtimeStatus, playersFetchError, gameStateFetchError, statsFetchError);
 
   return (
     <DsShell>
       <div className="ds-lobby-header">
         <div>
-          <div className="ds-label">Golden Ring · Lobby</div>
+          <div className="ds-label">Golden Ring Stage · Display Lobby</div>
           <div className="ds-title">เกมวงแหวนปริศนา</div>
+          <div className="ds-lobby-subtitle">สแกนเพื่อเข้าร่วม และรอพิธีกรเปิดเวที</div>
         </div>
         <div className="ds-lobby-badges">
           <div className="ds-live-badge">
@@ -702,22 +762,28 @@ function DsLobby({
       </div>
 
       <div className="ds-lobby-body">
-        {/* Left: QR + join URL + hero player count */}
-        <div className="ds-lobby-left">
-          <div className="ds-label" style={{ marginBottom: 12, textAlign: 'center' }}>สแกนเพื่อเข้าร่วม</div>
+        <div className="ds-stage-card ds-stage-card-hero ds-lobby-left">
+          <div className="ds-stage-rings" aria-hidden />
+          <div className="ds-label ds-gold" style={{ marginBottom: 12, textAlign: 'center' }}>Join The Game</div>
           <QRCode url={joinUrl} />
           <div className="ds-join-url">{joinUrl}</div>
-          <div className="ds-player-count">
+          <div className="ds-lobby-steps">
+            <div className="ds-lobby-step"><span>1</span>สแกน QR หรือเปิดลิงก์</div>
+            <div className="ds-lobby-step"><span>2</span>กรอกชื่อเล่นของคุณ</div>
+            <div className="ds-lobby-step"><span>3</span>รอพิธีกรเริ่มเกม</div>
+          </div>
+          <div className="ds-player-count ds-stage-inset">
             <div className="ds-lobby-player-count-hero">{players.length}</div>
             <div className="ds-lobby-player-count-label">ผู้เล่น</div>
           </div>
         </div>
 
-        {/* Right: player wall */}
-        <div className="ds-lobby-right">
-          <div className="ds-label" style={{ marginBottom: latestJoined ? 8 : 14 }}>ผู้เล่นในห้อง</div>
+        <div className="ds-stage-card ds-stage-card-soft ds-lobby-right">
+          <div className="ds-lobby-wall-header">
+            <div className="ds-label">{latestJoined ? 'ผู้เล่นใหม่กำลังเข้าห้อง' : 'ผู้เล่นในห้อง'}</div>
+            <div className="ds-stage-pill">{players.length} joined</div>
+          </div>
 
-          {/* P0.2 — latest joined spotlight */}
           {latestJoined && (
             <div className="ds-latest-joined">
               🎉 {truncate(latestJoined.display_name, 24)} เข้าร่วมแล้ว!
@@ -739,15 +805,14 @@ function DsLobby({
                 </div>
               ))}
               {overflow > 0 && (
-                <div className="ds-overflow-chip">+{overflow} more</div>
+                <div className="ds-overflow-chip">+{overflow} more players</div>
               )}
             </div>
           )}
 
-          {/* P0.4 — compact sync warning (does not cover player wall) */}
-          {playersFetchError && (
-            <div className="ds-muted" style={{ marginTop: 8, fontSize: 'clamp(10px,.9vw,12px)' }}>
-              ⚠ Sync issue — retrying...
+          {(playersFetchError || gameStateFetchError || statsFetchError) && (
+            <div className="ds-sync-warning">
+              ⚠ การเชื่อมต่อไม่เสถียร กำลังใช้ fallback sync อัตโนมัติ
             </div>
           )}
         </div>
@@ -820,7 +885,9 @@ function DsCountdown({
       <QPos question={question} totalQs={totalQs} />
 
       {!showClue ? (
-        <div className="ds-countdown-wrap">
+        <div className="ds-countdown-stage">
+          <div className="ds-stage-kicker">Next Round</div>
+          <div className="ds-countdown-wrap">
           <svg className="ds-ring-svg" viewBox="0 0 260 260" aria-hidden>
             <defs>
               <linearGradient id="dsRingGrad" x1="0" y1="0" x2="1" y2="1">
@@ -837,9 +904,11 @@ function DsCountdown({
             <div className="ds-label" style={{ marginBottom: 8 }}>เตรียมพร้อม!</div>
             <div key={count} className="ds-big-num">{count > 0 ? count : '●'}</div>
           </div>
+          </div>
+          <div className="ds-stage-caption">ภาพปริศนาจะขึ้นทันทีเมื่อ countdown จบ</div>
         </div>
       ) : (
-        <div className="ds-clue-wrap">
+        <div className="ds-stage-card ds-clue-wrap">
           <div className="ds-label ds-gold" style={{ marginBottom: 16, letterSpacing: '.2em' }}>ภาพปริศนา</div>
           {questionFetchError && !clueUrl ? (
             <div className="ds-muted">ไม่สามารถโหลดภาพคำถามได้</div>
@@ -902,12 +971,18 @@ function DsQuestion({
       </div>
 
       <div className="ds-q-body">
-        <div className="ds-q-left">
+        <div className="ds-stage-card ds-stage-card-soft ds-q-left">
           {questionFetchError && !question ? (
             <div className="ds-muted">ไม่สามารถโหลดคำถามได้</div>
           ) : (
             <div className="ds-q-text">{question?.text ?? 'กำลังโหลด...'}</div>
           )}
+          <div className="ds-q-progress-meta">
+            <div className="ds-stage-kicker">Live Question</div>
+            {submittedCount !== null && playerCount !== null ? (
+              <div className="ds-stage-pill">{submittedCount} / {playerCount} answered</div>
+            ) : null}
+          </div>
           <div className={`ds-big-timer ${urgent ? 'ds-timer-urgent' : ''}`}>
             {timeLeft != null ? timeLeft.toFixed(1) : '—'}
             <span className="ds-timer-unit">s</span>
@@ -921,7 +996,7 @@ function DsQuestion({
           <div className="ds-muted" style={{ marginTop: 8 }}>กำลังรับคำตอบ...</div>
         </div>
 
-        <div className="ds-q-right">
+        <div className="ds-stage-card ds-stage-card-visual ds-q-right">
           <DisplayImageStage imageUrl={imgUrl} aspectRatio={ar} />
         </div>
       </div>
@@ -960,12 +1035,14 @@ function DsClosed({
 
 function DsReveal({
   gameState, question, stats, totalQs, getServerTime,
+  statsFetchError,
 }: {
   gameState: GameState;
   question: DisplayQuestion | null;
   stats: DisplayStatsResponse | null;
   totalQs: number;
   getServerTime: () => number;
+  statsFetchError: boolean;
 }) {
   const [showReveal, setShowReveal] = useState(false);
 
@@ -1009,7 +1086,7 @@ function DsReveal({
       </div>
 
       <div className="ds-reveal-layout">
-        <div className="ds-reveal-left">
+        <div className="ds-stage-card ds-stage-card-soft ds-reveal-left">
           <div className="ds-reveal-text">{question.text}</div>
 
           {showReveal && submittedCount > 0 && (
@@ -1027,11 +1104,15 @@ function DsReveal({
           )}
 
           {!showReveal && (
-            <div className="ds-muted">กำลังแสดงเฉลย...</div>
+            <div className="ds-muted">กำลังส่องวงเฉลย...</div>
           )}
+          {showReveal && submittedCount === 0 && !statsFetchError && (
+            <div className="ds-muted">ยังไม่มีคำตอบในข้อนี้</div>
+          )}
+          {statsFetchError && <div className="ds-muted">สถิติยังมาไม่ครบ กำลังซิงก์...</div>}
         </div>
 
-        <div className="ds-reveal-right">
+        <div className="ds-stage-card ds-stage-card-visual ds-reveal-right">
           <DisplayImageStage
             imageUrl={baseImg}
             maskUrl={maskUrl}
@@ -1069,9 +1150,12 @@ function DsLeaderboard({
             <div className="ds-label ds-gold" style={{ letterSpacing: '.2em' }}>Final Leaderboard</div>
             <div className="ds-title" style={{ fontSize: 36 }}>จบเกม! 🏆</div>
             {winner && (
-              <div className="ds-winner-line">
-                ผู้ชนะ — <strong className="ds-gold">{winner.display_name}</strong>
-                &nbsp;<span className="ds-mono ds-gold">({winner.cumulative_score.toLocaleString()} คะแนน)</span>
+              <div className="ds-stage-card ds-winner-card">
+                <div className="ds-label ds-gold">Champion</div>
+                <div className="ds-winner-name">{winner.display_name}</div>
+                <div className="ds-winner-line">
+                  <span className="ds-mono ds-gold">{winner.cumulative_score.toLocaleString()} คะแนน</span>
+                </div>
               </div>
             )}
           </>
@@ -1109,7 +1193,7 @@ function DsLeaderboard({
         </div>
       )}
 
-      <div className="ds-lb-list">
+      <div className="ds-stage-card ds-stage-card-soft ds-lb-list">
         {(isFinal ? top.slice(3) : top).map((entry, idx) => (
           <div
             key={entry.player_id}

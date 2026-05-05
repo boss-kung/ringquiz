@@ -14,6 +14,52 @@ interface Props {
   shellClassName?: string;
 }
 
+// ── Coordinate helpers ───────────────────────────────────────────────────────
+//
+// Coordinate convention: xRatio and yRatio are normalised to the FULL image
+// pixel dimensions [0, 1] — NOT to the CSS container box.
+//
+// The .quiz-image-shell container is always a 1:1 square, and the <img> uses
+// object-fit: cover, which center-crops non-square images. Without correction,
+// a raw getBoundingClientRect() ratio would be in container-box space and
+// would disagree with the scoring backend (mask-check.ts), which maps
+// xRatio * mask.width → pixel coordinate in the original image.
+//
+// For a 16:9 image in a square: scale = containerSize / imgH (height fills),
+// renderedW > containerSize, so offsetX > 0 (left/right cropped).
+// For a portrait image: scale = containerSize / imgW (width fills),
+// renderedH > containerSize, so offsetY > 0 (top/bottom cropped).
+// For a 1:1 image: offsets are both 0 — no change in behaviour.
+
+function containerToImageRatio(
+  clickX: number,     // pixels from container left edge
+  clickY: number,     // pixels from container top edge
+  containerSize: number,
+  naturalWidth: number,
+  naturalHeight: number,
+): CirclePosition {
+  if (containerSize === 0 || naturalWidth === 0 || naturalHeight === 0) {
+    return {
+      xRatio: Math.max(0, Math.min(1, clickX / (containerSize || 1))),
+      yRatio: Math.max(0, Math.min(1, clickY / (containerSize || 1))),
+    };
+  }
+
+  // object-fit: cover in a square container
+  const scale = Math.max(containerSize / naturalWidth, containerSize / naturalHeight);
+  const renderedW = naturalWidth * scale;
+  const renderedH = naturalHeight * scale;
+
+  // How much of the rendered image extends beyond each container edge (per side)
+  const offsetX = (renderedW - containerSize) / 2;
+  const offsetY = (renderedH - containerSize) / 2;
+
+  return {
+    xRatio: Math.max(0, Math.min(1, (clickX + offsetX) / renderedW)),
+    yRatio: Math.max(0, Math.min(1, (clickY + offsetY) / renderedH)),
+  };
+}
+
 export function QuestionImage({
   imageUrl,
   circleRadiusRatio,
@@ -56,18 +102,17 @@ export function QuestionImage({
 
   const coordsFromEvent = useCallback((clientX: number, clientY: number): CirclePosition | null => {
     const img = imgRef.current;
-    if (!img) {
-      return null;
-    }
+    if (!img) return null;
 
     const rect = img.getBoundingClientRect();
-    const xRatio = (clientX - rect.left) / rect.width;
-    const yRatio = (clientY - rect.top) / rect.height;
-
-    return {
-      xRatio: Math.max(0, Math.min(1, xRatio)),
-      yRatio: Math.max(0, Math.min(1, yRatio)),
-    };
+    // Container is square; rect.width === rect.height (or close enough)
+    return containerToImageRatio(
+      clientX - rect.left,
+      clientY - rect.top,
+      rect.width,
+      img.naturalWidth,
+      img.naturalHeight,
+    );
   }, []);
 
   const handlePointerDown = useCallback((e: ReactPointerEvent<HTMLImageElement>) => {
