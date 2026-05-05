@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ChangeEvent, ReactNode } from 'react';
 import { FUNCTIONS_URL, SUPABASE_ANON_KEY } from '../../lib/supabase';
+import { ZipBulkImportPanel } from './ZipBulkImportPanel';
 import {
   getLocalImageDimensions,
   resolveQuestionImageUrl,
@@ -21,6 +22,7 @@ import type {
 } from '../../lib/adminTypes';
 
 type AdminTab = 'manual' | 'bulk' | 'bank';
+type BulkMode = 'zip' | 'json';
 type EditorMode = 'create' | 'edit';
 
 type EditorFormState = {
@@ -213,6 +215,7 @@ function issuesToFieldMap(issues: AdminQuestionValidationIssue[]): Record<string
 
 export function AdminQuestionManager({ secret }: { secret: string }) {
   const [activeTab, setActiveTab] = useState<AdminTab>('manual');
+  const [bulkMode, setBulkMode] = useState<BulkMode>('zip');
   const [questions, setQuestions] = useState<AdminQuestionRecord[]>([]);
   const [bankLoading, setBankLoading] = useState(false);
   const [bankError, setBankError] = useState('');
@@ -864,98 +867,138 @@ export function AdminQuestionManager({ secret }: { secret: string }) {
 
       {activeTab === 'bulk' && (
         <div className="space-y-4">
-          {bulkError && <FeedbackBox tone="error" message={bulkError} />}
-          {bulkMessage && <FeedbackBox tone="success" message={bulkMessage} />}
-          {bulkGlobalErrors.length > 0 && <FeedbackBox tone="error" message={bulkGlobalErrors.join(' ')} />}
+          {/* Bulk mode sub-tabs */}
+          <div className="grid grid-cols-2 gap-2 rounded-xl bg-slate-900/50 p-1">
+            <button
+              type="button"
+              onClick={() => setBulkMode('zip')}
+              className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                bulkMode === 'zip' ? 'bg-indigo-600 text-white' : 'text-slate-300 hover:bg-white/5'
+              }`}
+            >
+              ZIP Import
+            </button>
+            <button
+              type="button"
+              onClick={() => setBulkMode('json')}
+              className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                bulkMode === 'json' ? 'bg-indigo-600 text-white' : 'text-slate-300 hover:bg-white/5'
+              }`}
+            >
+              Advanced JSON Import
+            </button>
+          </div>
 
-          <div className="space-y-2">
-            <p className="text-sm font-medium text-slate-200">Paste JSON array</p>
-            <textarea
-              value={bulkText}
-              onChange={(event) => {
-                setBulkText(event.target.value);
-                setBulkMessage('');
-                setBulkError('');
+          {/* ZIP Import panel */}
+          {bulkMode === 'zip' && (
+            <ZipBulkImportPanel
+              secret={secret}
+              onImportSuccess={async () => {
+                await loadQuestions();
+                setBankMessage('Question bank refreshed after ZIP import.');
               }}
-              rows={14}
-              className={inputClassName(false)}
+              onViewBank={() => setActiveTab('bank')}
             />
-            <p className="text-xs text-slate-400">
-              Bulk import still assumes the assets already exist in Supabase Storage, so each row should include
-              both `image_url` and `mask_storage_path`.
-            </p>
-          </div>
+          )}
 
-          <div className="flex gap-3">
-            <button
-              type="button"
-              onClick={handleBulkValidate}
-              disabled={busyAction !== null}
-              className="flex-1 rounded-xl bg-white/10 px-4 py-3 font-semibold text-white disabled:opacity-50"
-            >
-              Validate & Preview
-            </button>
-            <button
-              type="button"
-              onClick={() => { void handleBulkSave(); }}
-              disabled={busyAction !== null}
-              className="flex-1 rounded-xl bg-indigo-600 px-4 py-3 font-bold text-white disabled:opacity-50"
-            >
-              {busyAction === 'bulk-save' ? 'Saving…' : 'Save Valid Questions'}
-            </button>
-          </div>
+          {/* Advanced JSON Import (existing) */}
+          {bulkMode === 'json' && (
+            <div className="space-y-4">
+              {bulkError && <FeedbackBox tone="error" message={bulkError} />}
+              {bulkMessage && <FeedbackBox tone="success" message={bulkMessage} />}
+              {bulkGlobalErrors.length > 0 && <FeedbackBox tone="error" message={bulkGlobalErrors.join(' ')} />}
 
-          {bulkPreview.length > 0 && (
-            <div className="space-y-3">
-              <div className="grid gap-3 md:grid-cols-3">
-                <StatCard label="Valid" value={String(validCount)} tone="success" />
-                <StatCard label="Invalid" value={String(invalidCount)} tone="error" />
-                <StatCard label="Total" value={String(bulkPreview.length)} />
+              <div className="rounded-xl border border-amber-500/20 bg-amber-900/10 px-4 py-3 text-sm text-amber-200">
+                Advanced mode — assumes question and mask assets already exist in Supabase Storage.
+                Each row must include <code>image_url</code> and <code>mask_storage_path</code>.
               </div>
 
-              <div className="space-y-3">
-                {bulkPreview.map((item) => (
-                  <div
-                    key={item.index}
-                    className={`rounded-xl border px-4 py-3 ${
-                      item.valid
-                        ? 'border-emerald-500/30 bg-emerald-900/10'
-                        : 'border-red-500/30 bg-red-900/10'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="font-semibold text-white">Row {item.index + 1}</p>
-                      <span className={`text-xs font-bold uppercase tracking-wide ${
-                        item.valid ? 'text-emerald-300' : 'text-red-300'
-                      }`}>
-                        {item.valid ? 'Valid' : 'Invalid'}
-                      </span>
-                    </div>
+              <div className="space-y-2">
+                <p className="text-sm font-medium text-slate-200">Paste JSON array</p>
+                <textarea
+                  value={bulkText}
+                  onChange={(event) => {
+                    setBulkText(event.target.value);
+                    setBulkMessage('');
+                    setBulkError('');
+                  }}
+                  rows={14}
+                  className={inputClassName(false)}
+                />
+              </div>
 
-                    {item.normalizedQuestion && (
-                      <div className="mt-2 space-y-1 text-sm text-slate-200">
-                        <p>{item.normalizedQuestion.text}</p>
-                        <p className="text-slate-400">
-                          order {item.normalizedQuestion.order_index ?? 'auto'} • time {item.normalizedQuestion.time_limit_seconds}s •
-                          score {item.normalizedQuestion.min_correct_score}-{item.normalizedQuestion.max_score}
-                        </p>
-                        <p className="text-slate-400">
-                          image {item.normalizedQuestion.image_width}×{item.normalizedQuestion.image_height} •
-                          file {item.normalizedQuestion.image_url}
-                        </p>
-                      </div>
-                    )}
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={handleBulkValidate}
+                  disabled={busyAction !== null}
+                  className="flex-1 rounded-xl bg-white/10 px-4 py-3 font-semibold text-white disabled:opacity-50"
+                >
+                  Validate & Preview
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { void handleBulkSave(); }}
+                  disabled={busyAction !== null}
+                  className="flex-1 rounded-xl bg-indigo-600 px-4 py-3 font-bold text-white disabled:opacity-50"
+                >
+                  {busyAction === 'bulk-save' ? 'Saving…' : 'Save Valid Questions'}
+                </button>
+              </div>
 
-                    {item.errors.length > 0 && (
-                      <div className="mt-2 space-y-1 text-sm text-red-200">
-                        {item.errors.map((error, index) => (
-                          <p key={`${item.index}-${error.field}-${index}`}>• {error.message}</p>
-                        ))}
-                      </div>
-                    )}
+              {bulkPreview.length > 0 && (
+                <div className="space-y-3">
+                  <div className="grid gap-3 md:grid-cols-3">
+                    <StatCard label="Valid" value={String(validCount)} tone="success" />
+                    <StatCard label="Invalid" value={String(invalidCount)} tone="error" />
+                    <StatCard label="Total" value={String(bulkPreview.length)} />
                   </div>
-                ))}
-              </div>
+
+                  <div className="space-y-3">
+                    {bulkPreview.map((item) => (
+                      <div
+                        key={item.index}
+                        className={`rounded-xl border px-4 py-3 ${
+                          item.valid
+                            ? 'border-emerald-500/30 bg-emerald-900/10'
+                            : 'border-red-500/30 bg-red-900/10'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="font-semibold text-white">Row {item.index + 1}</p>
+                          <span className={`text-xs font-bold uppercase tracking-wide ${
+                            item.valid ? 'text-emerald-300' : 'text-red-300'
+                          }`}>
+                            {item.valid ? 'Valid' : 'Invalid'}
+                          </span>
+                        </div>
+
+                        {item.normalizedQuestion && (
+                          <div className="mt-2 space-y-1 text-sm text-slate-200">
+                            <p>{item.normalizedQuestion.text}</p>
+                            <p className="text-slate-400">
+                              order {item.normalizedQuestion.order_index ?? 'auto'} • time {item.normalizedQuestion.time_limit_seconds}s •
+                              score {item.normalizedQuestion.min_correct_score}-{item.normalizedQuestion.max_score}
+                            </p>
+                            <p className="text-slate-400">
+                              image {item.normalizedQuestion.image_width}×{item.normalizedQuestion.image_height} •
+                              file {item.normalizedQuestion.image_url}
+                            </p>
+                          </div>
+                        )}
+
+                        {item.errors.length > 0 && (
+                          <div className="mt-2 space-y-1 text-sm text-red-200">
+                            {item.errors.map((error, index) => (
+                              <p key={`${item.index}-${error.field}-${index}`}>• {error.message}</p>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
