@@ -1,0 +1,14 @@
+<svg width="1200" height="900" viewBox="0 0 1200 900" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="revealGlow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(786 456) rotate(90) scale(170 210)">
+      <stop stop-color="#FFE88D" stop-opacity="0.9"/>
+      <stop offset="0.48" stop-color="#F7C94E" stop-opacity="0.54"/>
+      <stop offset="1" stop-color="#F7C94E" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1200" height="900" fill="transparent"/>
+  <ellipse cx="786" cy="456" rx="170" ry="190" fill="url(#revealGlow)"/>
+  <ellipse cx="786" cy="456" rx="122" ry="144" fill="#F7C94E" fill-opacity="0.18" stroke="#FFF2BF" stroke-width="14"/>
+  <circle cx="786" cy="456" r="64" stroke="#FFF2BF" stroke-width="18"/>
+  <circle cx="786" cy="456" r="24" fill="#FFF2BF"/>
+</svg>
