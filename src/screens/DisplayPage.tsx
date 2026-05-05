@@ -1,7 +1,18 @@
 /**
  * DisplayPage — read-only big-screen / TV / projector view.
  * Fully standalone: no player state, no host controls, no answer submission.
- * Manages its own Supabase subscriptions with distinct channel names.
+ *
+ * Reliability notes (P0):
+ * - Realtime subscription status is tracked per-channel; badge derives from
+ *   game + players channels, not just game.
+ * - Fallback polling for players (4s during lobby) and stats (2s during active
+ *   phases) is the source of truth — realtime is an accelerant only.
+ * - Answers realtime subscription is BEST-EFFORT. Anonymous/display clients may
+ *   not receive all answer INSERTs due to RLS. Stats correctness relies on the
+ *   get-display-stats edge function via polling, not raw answers realtime.
+ * - New player highlighting works for both realtime INSERT and polling detection.
+ * - Images are preloaded when the current question is known.
+ * - All image/mask layers use object-fit:contain to preserve coordinate alignment.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase, GAME_STATE_ID, FUNCTIONS_URL, SUPABASE_ANON_KEY } from '../lib/supabase';
@@ -26,6 +37,39 @@ interface DisplayQuestion {
   play_order: number;
 }
 
+// P0.1 — per-channel realtime status
+type ChannelStatus = 'idle' | 'connecting' | 'subscribed' | 'error' | 'timeout';
+interface RealtimeStatus {
+  game: ChannelStatus;
+  players: ChannelStatus;
+  leaderboard: ChannelStatus;
+}
+
+function toChannelStatus(supabaseStatus: string): ChannelStatus {
+  switch (supabaseStatus) {
+    case 'SUBSCRIBED':    return 'subscribed';
+    case 'CHANNEL_ERROR': return 'error';
+    case 'TIMED_OUT':     return 'timeout';
+    case 'CLOSED':        return 'idle';
+    default:              return 'connecting';
+  }
+}
+
+type ConnBadgeCls = 'ds-conn-ok' | 'ds-conn-fallback' | 'ds-conn-warn' | 'ds-conn-neutral';
+
+function deriveConnBadge(
+  rt: RealtimeStatus,
+  playersError: boolean,
+): { label: string; cls: ConnBadgeCls } {
+  const gameOk = rt.game === 'subscribed';
+  const playersOk = rt.players === 'subscribed';
+  if (rt.game === 'idle' && rt.players === 'idle') return { label: 'Connecting...', cls: 'ds-conn-neutral' };
+  if (gameOk && playersOk)                         return { label: 'Realtime OK',   cls: 'ds-conn-ok'      };
+  if (gameOk && !playersOk && !playersError)        return { label: 'Fallback Sync', cls: 'ds-conn-fallback' };
+  if (playersError)                                 return { label: 'Sync Issue',    cls: 'ds-conn-warn'    };
+  return { label: 'Connecting...', cls: 'ds-conn-neutral' };
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 const AV_GRADS = [
@@ -39,9 +83,33 @@ function initials(name: string) {
   return name.trim().split(/\s+/).slice(0, 2).map((p) => p[0]?.toUpperCase() ?? '').join('');
 }
 
+function truncate(s: string, max: number) {
+  return s.length > max ? s.slice(0, max - 1) + '…' : s;
+}
+
 function sortNewest(players: Player[]): Player[] {
   return [...players].sort((a, b) => new Date(b.joined_at).getTime() - new Date(a.joined_at).getTime());
 }
+
+// ── P0.6 — image preload hook ─────────────────────────────────────────────────
+
+function usePreloadImages(...urls: (string | null | undefined)[]) {
+  const urlKey = urls.filter((u): u is string => !!u).join('\0');
+  useEffect(() => {
+    if (!urlKey) return;
+    const imgs = urlKey.split('\0').map((url) => {
+      const img = new Image();
+      img.src = url;
+      img.onerror = () => console.warn('[Display] preload failed:', url.split('?')[0]);
+      return img;
+    });
+    return () => { imgs.forEach((img) => { img.src = ''; }); };
+  // urlKey is a derived stable string — intentional dep instead of the raw array
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlKey]);
+}
+
+// ── Server-time sync hook ─────────────────────────────────────────────────────
 
 function useDisplayServerTime() {
   const offset = useRef(0);
@@ -88,7 +156,10 @@ function QRCode({ url }: { url: string }) {
   );
 }
 
-// ── DisplayImageStage — reusable golden-ring image container ─────────────────
+// ── P0.5 — DisplayImageStage ─────────────────────────────────────────────────
+// All layers use object-fit:contain so image and mask share the same coordinate
+// space. If aspectRatio metadata is available, use it; otherwise detect from the
+// base image's naturalWidth/naturalHeight after it loads.
 
 function DisplayImageStage({
   imageUrl,
@@ -105,12 +176,24 @@ function DisplayImageStage({
   aspectRatio?: number | null;
   fullWidth?: boolean;
 }) {
-  const ar = aspectRatio ?? (4 / 3);
+  // Fallback: detect AR from natural image size when metadata is absent
+  const [detectedAr, setDetectedAr] = useState<number | null>(null);
+  const effectiveAr = aspectRatio ?? detectedAr ?? (4 / 3);
+
+  const handleBaseLoad = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
+    if (aspectRatio) return; // metadata already provided — no need to detect
+    const img = e.currentTarget;
+    if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+      setDetectedAr(img.naturalWidth / img.naturalHeight);
+    }
+  }, [aspectRatio]);
+
+  const cls = `ds-img-stage${fullWidth ? ' ds-img-stage-full' : ''}`;
 
   if (!imageUrl) {
     return (
-      <div className={`ds-img-stage${fullWidth ? ' ds-img-stage-full' : ''}`}>
-        <div className="ds-img-stage-inner" style={{ aspectRatio: String(ar) }}>
+      <div className={cls}>
+        <div className="ds-img-stage-inner" style={{ aspectRatio: String(effectiveAr) }}>
           <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <div className="ds-muted" style={{ textAlign: 'center', padding: 24 }}>ไม่มีภาพสำหรับคำถามนี้</div>
           </div>
@@ -120,9 +203,12 @@ function DisplayImageStage({
   }
 
   return (
-    <div className={`ds-img-stage${fullWidth ? ' ds-img-stage-full' : ''}`}>
-      <div className="ds-img-stage-inner" style={{ aspectRatio: String(ar) }}>
-        <img src={imageUrl} alt="" className="ds-img-base" />
+    <div className={cls}>
+      <div className="ds-img-stage-inner" style={{ aspectRatio: String(effectiveAr) }}>
+        {/* Base image — object-fit:contain (see CSS) */}
+        <img src={imageUrl} alt="" className="ds-img-base" onLoad={handleBaseLoad} />
+
+        {/* Reveal layer — same object-fit:contain so it overlays the base exactly */}
         {revealImageUrl && (
           <img
             src={revealImageUrl}
@@ -130,6 +216,8 @@ function DisplayImageStage({
             className={`ds-img-reveal${showReveal ? ' ds-img-reveal-visible' : ''}`}
           />
         )}
+
+        {/* Mask — same object-fit:contain so the circle lands on the correct image region */}
         {maskUrl && (
           <img
             src={maskUrl}
@@ -154,17 +242,120 @@ export function DisplayPage() {
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [stats, setStats] = useState<DisplayStatsResponse | null>(null);
   const [authReady, setAuthReady] = useState(false);
-  const [wsConnected, setWsConnected] = useState<boolean | null>(null);
+
+  // P0.1 — truthful per-channel status
+  const [realtimeStatus, setRealtimeStatus] = useState<RealtimeStatus>({
+    game: 'idle', players: 'idle', leaderboard: 'idle',
+  });
+
+  // P0.2 — new player highlight (works for both realtime and polling)
   const [newPlayerIds, setNewPlayerIds] = useState<Set<string>>(new Set());
-  const newPlayerTimeouts = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const [latestJoined, setLatestJoined] = useState<Player | null>(null);
+  const knownPlayerIdsRef = useRef<Set<string>>(new Set());
+  const isFirstLoadRef = useRef(true);
+  const newPlayerTimeoutsRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const latestJoinedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // P0.4 — fetch error states
+  const [playersFetchError, setPlayersFetchError] = useState(false);
+  const [statsFetchError, setStatsFetchError] = useState(false);
+  const [questionFetchError, setQuestionFetchError] = useState(false);
+
+  // P0.4 — throttle repeated error logs
+  const lastPlayersErrLogRef = useRef(0);
+  const lastStatsErrLogRef = useRef(0);
+
   const getServerTime = useDisplayServerTime();
   const prevQuestionKeyRef = useRef<string | null>(null);
 
-  // Clean up timeout refs on unmount
+  // Clean up all timers on unmount
   useEffect(() => {
     return () => {
-      newPlayerTimeouts.current.forEach((tid) => clearTimeout(tid));
+      newPlayerTimeoutsRef.current.forEach((t) => clearTimeout(t));
+      if (latestJoinedTimerRef.current) clearTimeout(latestJoinedTimerRef.current);
     };
+  }, []);
+
+  // ── P0.2 — unified highlight helper ─────────────────────────────────────────
+  // Called from both realtime INSERT callback and polling reconcile.
+  // Immediately updates knownPlayerIds to prevent double-highlight from the
+  // other path that may run shortly after.
+  const highlightPlayer = useCallback((p: Player) => {
+    knownPlayerIdsRef.current.add(p.id);
+
+    setNewPlayerIds((prev) => new Set([...prev, p.id]));
+
+    setLatestJoined(p);
+    if (latestJoinedTimerRef.current) clearTimeout(latestJoinedTimerRef.current);
+    latestJoinedTimerRef.current = setTimeout(() => {
+      setLatestJoined(null);
+      latestJoinedTimerRef.current = null;
+    }, 3000);
+
+    const existing = newPlayerTimeoutsRef.current.get(p.id);
+    if (existing) clearTimeout(existing);
+    const tid = setTimeout(() => {
+      setNewPlayerIds((prev) => { const s = new Set(prev); s.delete(p.id); return s; });
+      newPlayerTimeoutsRef.current.delete(p.id);
+    }, 2500);
+    newPlayerTimeoutsRef.current.set(p.id, tid);
+  }, []);
+
+  // ── P0.2 — polling reconcile: compares against knownPlayerIds ───────────────
+  // First load skips highlighting (players were already in the room before we loaded).
+  const reconcilePlayers = useCallback((sorted: Player[]) => {
+    if (isFirstLoadRef.current) {
+      knownPlayerIdsRef.current = new Set(sorted.map((p) => p.id));
+      isFirstLoadRef.current = false;
+      setPlayers(sorted);
+      return;
+    }
+    // Detect newcomers — sorted newest-first so we find the most recently joined first
+    for (const p of sorted) {
+      if (!knownPlayerIdsRef.current.has(p.id)) {
+        highlightPlayer(p);
+      }
+    }
+    knownPlayerIdsRef.current = new Set(sorted.map((p) => p.id));
+    setPlayers(sorted);
+  }, [highlightPlayer]);
+
+  // ── P0.4 — players fetch with error tracking ─────────────────────────────────
+  const fetchPlayers = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('players').select('id, display_name, total_score, joined_at');
+      if (error) throw error;
+      reconcilePlayers(sortNewest((data ?? []) as Player[]));
+      setPlayersFetchError(false);
+    } catch (err) {
+      const now = Date.now();
+      if (now - lastPlayersErrLogRef.current > 10_000) {
+        console.error('[DisplayPage] players fetch failed:', err);
+        lastPlayersErrLogRef.current = now;
+      }
+      setPlayersFetchError(true);
+    }
+  }, [reconcilePlayers]);
+
+  // ── P0.3 + P0.4 — stats fetch (polling is the source of truth for answer counts)
+  const fetchStats = useCallback(async () => {
+    try {
+      const res = await fetch(`${FUNCTIONS_URL}/get-display-stats`, {
+        headers: { 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` },
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json() as DisplayStatsResponse;
+      setStats(data);
+      setStatsFetchError(false);
+    } catch (err) {
+      const now = Date.now();
+      if (now - lastStatsErrLogRef.current > 10_000) {
+        console.error('[DisplayPage] stats fetch failed:', err);
+        lastStatsErrLogRef.current = now;
+      }
+      setStatsFetchError(true);
+    }
   }, []);
 
   // ── 1. Anonymous auth ───────────────────────────────────────────────────────
@@ -175,24 +366,12 @@ export function DisplayPage() {
       } else {
         supabase.auth.signInAnonymously()
           .then(() => setAuthReady(true))
-          .catch(() => setAuthReady(true));
+          .catch(() => setAuthReady(true)); // proceed anyway; RLS allows anon reads
       }
     });
   }, []);
 
-  // ── 2. Fetch display stats ──────────────────────────────────────────────────
-  const fetchStats = useCallback(async () => {
-    try {
-      const res = await fetch(`${FUNCTIONS_URL}/get-display-stats`, {
-        headers: { 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` },
-      });
-      if (!res.ok) return;
-      const data = await res.json() as DisplayStatsResponse;
-      setStats(data);
-    } catch { /* non-critical */ }
-  }, []);
-
-  // ── 3. Game state subscription ──────────────────────────────────────────────
+  // ── 2. Game state subscription ──────────────────────────────────────────────
   useEffect(() => {
     supabase
       .from('game_state').select('*').eq('id', GAME_STATE_ID).single()
@@ -208,80 +387,82 @@ export function DisplayPage() {
         setGameState(payload.new as GameState);
         void fetchStats();
       })
-      .subscribe((status) => {
-        console.log('[Display] display-game:', status);
-        setWsConnected(status === 'SUBSCRIBED');
+      .subscribe((s) => {
+        const cs = toChannelStatus(s);
+        console.log('[Display] game_state channel:', s);
+        setRealtimeStatus((prev) => ({ ...prev, game: cs }));
       });
 
     return () => { supabase.removeChannel(ch); };
   }, [fetchStats]);
 
-  // ── 4. Players subscription ─────────────────────────────────────────────────
+  // ── 3. Players subscription (P0.1 + P0.2) ───────────────────────────────────
   useEffect(() => {
-    supabase.from('players').select('id, display_name, total_score, joined_at')
-      .then(({ data }) => { if (data) setPlayers(sortNewest(data as Player[])); });
+    void fetchPlayers(); // initial load — reconcilePlayers skips highlights on first run
 
     const ch = supabase.channel('display-players')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'players' }, (payload) => {
         if (payload.eventType === 'INSERT') {
           const p = payload.new as Player;
           setPlayers((cur) => sortNewest([...cur.filter((x) => x.id !== p.id), p]));
-
-          // Highlight new player for 2.5s
-          setNewPlayerIds((prev) => new Set([...prev, p.id]));
-          const existing = newPlayerTimeouts.current.get(p.id);
-          if (existing) clearTimeout(existing);
-          const tid = setTimeout(() => {
-            setNewPlayerIds((prev) => { const s = new Set(prev); s.delete(p.id); return s; });
-            newPlayerTimeouts.current.delete(p.id);
-          }, 2500);
-          newPlayerTimeouts.current.set(p.id, tid);
+          // Only highlight if not already known (polling may have detected this player first)
+          if (!knownPlayerIdsRef.current.has(p.id)) {
+            highlightPlayer(p);
+          }
         } else if (payload.eventType === 'UPDATE') {
           const p = payload.new as Player;
           setPlayers((cur) => sortNewest(cur.map((x) => x.id === p.id ? p : x)));
         } else if (payload.eventType === 'DELETE') {
           const p = payload.old as Player;
           setPlayers((cur) => cur.filter((x) => x.id !== p.id));
+          knownPlayerIdsRef.current.delete(p.id);
         }
       })
-      .subscribe((status) => {
-        console.log('[Display] display-players:', status);
+      .subscribe((s) => {
+        const cs = toChannelStatus(s);
+        console.log('[Display] players channel:', s);
+        setRealtimeStatus((prev) => ({ ...prev, players: cs }));
       });
 
     return () => { supabase.removeChannel(ch); };
-  }, []);
+  }, [fetchPlayers, highlightPlayer]);
 
-  // ── 5. Answers subscription → stat refresh ──────────────────────────────────
+  // ── 4. Answers subscription — BEST-EFFORT accelerant only (P0.3) ─────────────
+  // Anonymous clients may not receive all answer INSERTs due to RLS on the answers
+  // table. Do NOT rely on this for correctness. Stats accuracy comes from polling
+  // get-display-stats every 2 seconds (see effect below). This subscription just
+  // triggers an early stat refresh when realtime does fire — a nice-to-have.
   useEffect(() => {
     const ch = supabase.channel('display-answers')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'answers' }, () => {
-        void fetchStats();
+        void fetchStats(); // best-effort acceleration — polling is the source of truth
       })
-      .subscribe((status) => {
-        console.log('[Display] display-answers:', status);
+      .subscribe((s) => {
+        // answers channel status deliberately excluded from badge health calculation
+        console.log('[Display] answers channel (best-effort):', s);
       });
     return () => { supabase.removeChannel(ch); };
   }, [fetchStats]);
 
-  // ── 6. Fallback polling — players during lobby ──────────────────────────────
+  // ── 5. Fallback polling — players during lobby (P0.2) ───────────────────────
   const currentStatus = gameState?.status ?? 'waiting';
   useEffect(() => {
     if (currentStatus !== 'waiting') return;
-    const id = setInterval(() => {
-      supabase.from('players').select('id, display_name, total_score, joined_at')
-        .then(({ data }) => { if (data) setPlayers(sortNewest(data as Player[])); });
-    }, 4000);
+    const id = setInterval(() => { void fetchPlayers(); }, 4000);
     return () => clearInterval(id);
-  }, [currentStatus]);
+  }, [currentStatus, fetchPlayers]);
 
-  // ── 7. Fallback polling — stats during question phases ──────────────────────
+  // ── 6. Stats polling during active phases (P0.3) ────────────────────────────
+  // Polling is the correctness path for answered/correct counts.
+  // Answers realtime (effect above) is supplemental.
   useEffect(() => {
     if (!['question_open', 'question_closed', 'reveal'].includes(currentStatus)) return;
-    const id = setInterval(() => { void fetchStats(); }, 2000);
+    const interval = currentStatus === 'question_open' ? 1500 : 2500;
+    const id = setInterval(() => { void fetchStats(); }, interval);
     return () => clearInterval(id);
   }, [currentStatus, fetchStats]);
 
-  // ── 8. Fetch question with game_set_questions snapshot overlay ───────────────
+  // ── 7. Question fetch with error tracking (P0.4) ────────────────────────────
   useEffect(() => {
     if (!authReady) return;
     const qId = gameState?.current_question_id ?? null;
@@ -294,68 +475,79 @@ export function DisplayPage() {
     prevQuestionKeyRef.current = key;
 
     const fetch_ = async () => {
-      const { data: qData } = await supabase
-        .from('questions')
-        .select('id, order_index, text, image_url, circle_radius_ratio, time_limit_seconds, max_score, min_correct_score, image_width, image_height, reveal_image_url')
-        .eq('id', qId)
-        .single();
-
-      if (!qData) return;
-
-      let dq: DisplayQuestion = {
-        id: qData.id,
-        text: qData.text,
-        image_url: qData.image_url,
-        reveal_image_url: qData.reveal_image_url,
-        image_width: qData.image_width,
-        image_height: qData.image_height,
-        order_index: qData.order_index,
-        time_limit_seconds: qData.time_limit_seconds,
-        max_score: qData.max_score,
-        min_correct_score: qData.min_correct_score,
-        circle_radius_ratio: qData.circle_radius_ratio,
-        play_order: qData.order_index,
-      };
-
-      if (gsqId) {
-        const { data: gsqData } = await supabase
-          .from('game_set_questions')
-          .select('play_order, time_limit_seconds, max_score, min_correct_score, circle_radius_ratio')
-          .eq('id', gsqId)
+      try {
+        const { data: qData, error } = await supabase
+          .from('questions')
+          .select('id, order_index, text, image_url, circle_radius_ratio, time_limit_seconds, max_score, min_correct_score, image_width, image_height, reveal_image_url')
+          .eq('id', qId)
           .single();
 
-        if (gsqData) {
-          dq = {
-            ...dq,
-            play_order: gsqData.play_order,
-            time_limit_seconds: gsqData.time_limit_seconds,
-            max_score: gsqData.max_score,
-            min_correct_score: gsqData.min_correct_score,
-            circle_radius_ratio: gsqData.circle_radius_ratio,
-          };
-        }
-      }
+        if (error) throw error;
+        if (!qData) throw new Error('no data returned');
 
-      setQuestion(dq);
+        let dq: DisplayQuestion = {
+          id: qData.id,
+          text: qData.text,
+          image_url: qData.image_url,
+          reveal_image_url: qData.reveal_image_url,
+          image_width: qData.image_width,
+          image_height: qData.image_height,
+          order_index: qData.order_index,
+          time_limit_seconds: qData.time_limit_seconds,
+          max_score: qData.max_score,
+          min_correct_score: qData.min_correct_score,
+          circle_radius_ratio: qData.circle_radius_ratio,
+          play_order: qData.order_index,
+        };
+
+        if (gsqId) {
+          const { data: gsqData } = await supabase
+            .from('game_set_questions')
+            .select('play_order, time_limit_seconds, max_score, min_correct_score, circle_radius_ratio')
+            .eq('id', gsqId)
+            .single();
+          if (gsqData) {
+            dq = { ...dq, play_order: gsqData.play_order, time_limit_seconds: gsqData.time_limit_seconds,
+              max_score: gsqData.max_score, min_correct_score: gsqData.min_correct_score,
+              circle_radius_ratio: gsqData.circle_radius_ratio };
+          }
+        }
+
+        setQuestion(dq);
+        setQuestionFetchError(false);
+      } catch (err) {
+        console.error('[DisplayPage] question fetch failed:', err);
+        setQuestionFetchError(true);
+      }
     };
 
     void fetch_();
   }, [authReady, gameState?.current_question_id, gameState?.current_game_set_question_id]);
 
-  // ── 9. Leaderboard — fetch + retry + subscription ───────────────────────────
+  // ── P0.6 — Preload question images when question becomes known ───────────────
+  const preloadImageUrl = question ? resolveQuestionImageUrl(question.image_url) : null;
+  const preloadRevealUrl = question ? resolveRevealImageUrl(question.reveal_image_url) : null;
+  usePreloadImages(preloadImageUrl, preloadRevealUrl);
+
+  // ── 8. Leaderboard fetch + subscription ─────────────────────────────────────
   useEffect(() => {
     const status = gameState?.status;
     const qId = gameState?.current_question_id;
     if ((status !== 'leaderboard' && status !== 'ended') || !qId) return;
 
     const fetchLb = async () => {
-      const { data } = await supabase
-        .from('leaderboard_snapshot')
-        .select('question_id, player_id, rank, display_name, question_score, cumulative_score')
-        .eq('question_id', qId)
-        .order('rank', { ascending: true })
-        .limit(10);
-      setLeaderboard((data ?? []) as LeaderboardEntry[]);
+      try {
+        const { data, error } = await supabase
+          .from('leaderboard_snapshot')
+          .select('question_id, player_id, rank, display_name, question_score, cumulative_score')
+          .eq('question_id', qId)
+          .order('rank', { ascending: true })
+          .limit(10);
+        if (error) throw error;
+        setLeaderboard((data ?? []) as LeaderboardEntry[]);
+      } catch (err) {
+        console.error('[DisplayPage] leaderboard fetch failed:', err);
+      }
     };
 
     void fetchLb();
@@ -366,11 +558,17 @@ export function DisplayPage() {
         event: 'INSERT', schema: 'public', table: 'leaderboard_snapshot',
         filter: `question_id=eq.${qId}`,
       }, () => void fetchLb())
-      .subscribe((status) => {
-        console.log('[Display] display-leaderboard:', status);
+      .subscribe((s) => {
+        const cs = toChannelStatus(s);
+        console.log('[Display] leaderboard channel:', s);
+        setRealtimeStatus((prev) => ({ ...prev, leaderboard: cs }));
       });
 
-    return () => { clearTimeout(retryTimer); supabase.removeChannel(ch); };
+    return () => {
+      clearTimeout(retryTimer);
+      supabase.removeChannel(ch);
+      setRealtimeStatus((prev) => ({ ...prev, leaderboard: 'idle' }));
+    };
   }, [gameState?.status, gameState?.current_question_id]);
 
   // ── Route to phase component ────────────────────────────────────────────────
@@ -378,19 +576,53 @@ export function DisplayPage() {
   const totalQs = stats?.total_questions ?? 0;
 
   if (!gameState || status === 'waiting') {
-    return <DsLobby players={players} newPlayerIds={newPlayerIds} wsConnected={wsConnected} />;
+    return (
+      <DsLobby
+        players={players}
+        newPlayerIds={newPlayerIds}
+        latestJoined={latestJoined}
+        realtimeStatus={realtimeStatus}
+        playersFetchError={playersFetchError}
+      />
+    );
   }
   if (status === 'countdown') {
-    return <DsCountdown gameState={gameState} question={question} totalQs={totalQs} getServerTime={getServerTime} />;
+    return (
+      <DsCountdown
+        gameState={gameState}
+        question={question}
+        totalQs={totalQs}
+        getServerTime={getServerTime}
+        questionFetchError={questionFetchError}
+      />
+    );
   }
   if (status === 'question_open') {
-    return <DsQuestion gameState={gameState} question={question} stats={stats} totalQs={totalQs} getServerTime={getServerTime} />;
+    return (
+      <DsQuestion
+        gameState={gameState}
+        question={question}
+        stats={stats}
+        totalQs={totalQs}
+        getServerTime={getServerTime}
+        statsFetchError={statsFetchError}
+        questionFetchError={questionFetchError}
+      />
+    );
   }
   if (status === 'question_closed') {
     return <DsClosed question={question} stats={stats} totalQs={totalQs} />;
   }
   if (status === 'reveal') {
-    return <DsReveal gameState={gameState} question={question} stats={stats} totalQs={totalQs} getServerTime={getServerTime} />;
+    return (
+      <DsReveal
+        gameState={gameState}
+        question={question}
+        stats={stats}
+        totalQs={totalQs}
+        getServerTime={getServerTime}
+      />
+    );
   }
   if (status === 'leaderboard') {
     return <DsLeaderboard leaderboard={leaderboard} question={question} totalQs={totalQs} isFinal={false} />;
@@ -398,7 +630,15 @@ export function DisplayPage() {
   if (status === 'ended') {
     return <DsLeaderboard leaderboard={leaderboard} question={question} totalQs={totalQs} isFinal />;
   }
-  return <DsLobby players={players} newPlayerIds={newPlayerIds} wsConnected={wsConnected} />;
+  return (
+    <DsLobby
+      players={players}
+      newPlayerIds={newPlayerIds}
+      latestJoined={latestJoined}
+      realtimeStatus={realtimeStatus}
+      playersFetchError={playersFetchError}
+    />
+  );
 }
 
 // ── Shell wrapper ─────────────────────────────────────────────────────────────
@@ -429,15 +669,20 @@ function QPos({ question, totalQs, small }: { question: DisplayQuestion | null; 
 function DsLobby({
   players,
   newPlayerIds,
-  wsConnected,
+  latestJoined,
+  realtimeStatus,
+  playersFetchError,
 }: {
   players: Player[];
   newPlayerIds: Set<string>;
-  wsConnected: boolean | null;
+  latestJoined: Player | null;
+  realtimeStatus: RealtimeStatus;
+  playersFetchError: boolean;
 }) {
   const joinUrl = window.location.origin + (import.meta.env.BASE_URL || '/');
   const visible = players.slice(0, MAX_VISIBLE_PLAYERS);
   const overflow = players.length - MAX_VISIBLE_PLAYERS;
+  const badge = deriveConnBadge(realtimeStatus, playersFetchError);
 
   return (
     <DsShell>
@@ -450,16 +695,9 @@ function DsLobby({
           <div className="ds-live-badge">
             <span className="ds-live-dot" />LIVE
           </div>
-          {wsConnected === false && (
-            <div className="ds-conn-badge ds-conn-warn">
-              <span className="ds-conn-dot" />Reconnecting
-            </div>
-          )}
-          {wsConnected === true && (
-            <div className="ds-conn-badge ds-conn-ok">
-              <span className="ds-conn-dot" />Connected
-            </div>
-          )}
+          <div className={`ds-conn-badge ${badge.cls}`}>
+            <span className="ds-conn-dot" />{badge.label}
+          </div>
         </div>
       </div>
 
@@ -475,9 +713,17 @@ function DsLobby({
           </div>
         </div>
 
-        {/* Right: player wall — newest first, highlight new joiners */}
+        {/* Right: player wall */}
         <div className="ds-lobby-right">
-          <div className="ds-label" style={{ marginBottom: 14 }}>ผู้เล่นในห้อง</div>
+          <div className="ds-label" style={{ marginBottom: latestJoined ? 8 : 14 }}>ผู้เล่นในห้อง</div>
+
+          {/* P0.2 — latest joined spotlight */}
+          {latestJoined && (
+            <div className="ds-latest-joined">
+              🎉 {truncate(latestJoined.display_name, 24)} เข้าร่วมแล้ว!
+            </div>
+          )}
+
           {players.length === 0 ? (
             <p className="ds-muted">รอผู้เล่นเข้าร่วม...</p>
           ) : (
@@ -497,6 +743,13 @@ function DsLobby({
               )}
             </div>
           )}
+
+          {/* P0.4 — compact sync warning (does not cover player wall) */}
+          {playersFetchError && (
+            <div className="ds-muted" style={{ marginTop: 8, fontSize: 'clamp(10px,.9vw,12px)' }}>
+              ⚠ Sync issue — retrying...
+            </div>
+          )}
         </div>
       </div>
 
@@ -508,12 +761,13 @@ function DsLobby({
 // ── 2. COUNTDOWN ──────────────────────────────────────────────────────────────
 
 function DsCountdown({
-  gameState, question, totalQs, getServerTime,
+  gameState, question, totalQs, getServerTime, questionFetchError,
 }: {
   gameState: GameState;
   question: DisplayQuestion | null;
   totalQs: number;
   getServerTime: () => number;
+  questionFetchError: boolean;
 }) {
   const totalMs = COUNTDOWN_DISPLAY_SECONDS * 1000;
   const [remainingMs, setRemainingMs] = useState(totalMs);
@@ -553,8 +807,13 @@ function DsCountdown({
   const offset = progress >= 1 ? 0 : circ * (1 - progress);
   const clueUrl = question ? resolveQuestionImageUrl(question.image_url) : null;
   const ar = question?.image_width && question?.image_height
-    ? question.image_width / question.image_height
+    ? question.image_width / question.image_height : null;
+
+  // P0.6 — preload mask at reveal-phase ahead of time
+  const maskUrl = question
+    ? `${FUNCTIONS_URL}/get-reveal-mask?questionId=${encodeURIComponent(question.id)}&updatedAt=${encodeURIComponent(gameState.updated_at ?? '')}`
     : null;
+  usePreloadImages(maskUrl);
 
   return (
     <DsShell centered>
@@ -582,10 +841,11 @@ function DsCountdown({
       ) : (
         <div className="ds-clue-wrap">
           <div className="ds-label ds-gold" style={{ marginBottom: 16, letterSpacing: '.2em' }}>ภาพปริศนา</div>
-          <DisplayImageStage
-            imageUrl={clueUrl}
-            aspectRatio={ar}
-          />
+          {questionFetchError && !clueUrl ? (
+            <div className="ds-muted">ไม่สามารถโหลดภาพคำถามได้</div>
+          ) : (
+            <DisplayImageStage imageUrl={clueUrl} aspectRatio={ar} />
+          )}
           <div className="ds-muted" style={{ marginTop: 16 }}>ดูภาพให้ดีก่อนตอบ</div>
         </div>
       )}
@@ -596,13 +856,15 @@ function DsCountdown({
 // ── 3. QUESTION OPEN ──────────────────────────────────────────────────────────
 
 function DsQuestion({
-  gameState, question, stats, totalQs, getServerTime,
+  gameState, question, stats, totalQs, getServerTime, statsFetchError, questionFetchError,
 }: {
   gameState: GameState;
   question: DisplayQuestion | null;
   stats: DisplayStatsResponse | null;
   totalQs: number;
   getServerTime: () => number;
+  statsFetchError: boolean;
+  questionFetchError: boolean;
 }) {
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
 
@@ -621,8 +883,7 @@ function DsQuestion({
   const urgent = timeLeft != null && timeLeft <= 5;
   const imgUrl = question ? resolveQuestionImageUrl(question.image_url) : null;
   const ar = question?.image_width && question?.image_height
-    ? question.image_width / question.image_height
-    : null;
+    ? question.image_width / question.image_height : null;
 
   const submittedCount = stats?.submitted_count ?? null;
   const playerCount = stats?.player_count ?? null;
@@ -632,17 +893,21 @@ function DsQuestion({
       <div className="ds-q-bar">
         <QPos question={question} totalQs={totalQs} small />
         <div className="ds-q-meta">
-          {submittedCount !== null && playerCount !== null && (
-            <span className="ds-stat-pill">
-              ตอบแล้ว {submittedCount} / {playerCount}
-            </span>
-          )}
+          {submittedCount !== null && playerCount !== null ? (
+            <span className="ds-stat-pill">ตอบแล้ว {submittedCount} / {playerCount}</span>
+          ) : statsFetchError ? (
+            <span className="ds-stat-pill" style={{ color: 'var(--text-3)' }}>Stats delayed</span>
+          ) : null}
         </div>
       </div>
 
       <div className="ds-q-body">
         <div className="ds-q-left">
-          <div className="ds-q-text">{question?.text ?? 'กำลังโหลด...'}</div>
+          {questionFetchError && !question ? (
+            <div className="ds-muted">ไม่สามารถโหลดคำถามได้</div>
+          ) : (
+            <div className="ds-q-text">{question?.text ?? 'กำลังโหลด...'}</div>
+          )}
           <div className={`ds-big-timer ${urgent ? 'ds-timer-urgent' : ''}`}>
             {timeLeft != null ? timeLeft.toFixed(1) : '—'}
             <span className="ds-timer-unit">s</span>
@@ -727,8 +992,10 @@ function DsReveal({
   const revealImg = resolveRevealImageUrl(question.reveal_image_url);
   const maskUrl = `${FUNCTIONS_URL}/get-reveal-mask?questionId=${encodeURIComponent(question.id)}&updatedAt=${encodeURIComponent(gameState.updated_at ?? '')}`;
   const ar = question.image_width && question.image_height
-    ? question.image_width / question.image_height
-    : null;
+    ? question.image_width / question.image_height : null;
+
+  // P0.6 — preload mask early so it's cached before the reveal moment
+  usePreloadImages(maskUrl);
 
   const submittedCount = stats?.submitted_count ?? 0;
   const correctCount = stats?.correct_count ?? 0;
@@ -745,7 +1012,6 @@ function DsReveal({
         <div className="ds-reveal-left">
           <div className="ds-reveal-text">{question.text}</div>
 
-          {/* Stats — revealed after 5s */}
           {showReveal && submittedCount > 0 && (
             <div className="ds-reveal-stats">
               <div className="ds-reveal-stat-item">
@@ -793,8 +1059,6 @@ function DsLeaderboard({
   const winner = leaderboard[0];
   const top = leaderboard.slice(0, 10);
   const MEDALS = ['🥇', '🥈', '🥉'];
-
-  // Podium order: silver (idx 1) left, gold (idx 0) center, bronze (idx 2) right
   const podiumSlots = [1, 0, 2].filter((i) => top[i]);
 
   return (
@@ -846,21 +1110,18 @@ function DsLeaderboard({
       )}
 
       <div className="ds-lb-list">
-        {(isFinal ? top.slice(3) : top).map((entry, idx) => {
-          const isGold = entry.rank === 1;
-          return (
-            <div
-              key={entry.player_id}
-              className={`ds-lb-row${isGold ? ' ds-lb-row-gold' : ''}`}
-              style={{ animationDelay: `${Math.min(idx * 45, 320)}ms` }}
-            >
-              <span className="ds-lb-rank ds-mono">#{entry.rank}</span>
-              <div className="ds-lb-av" style={{ background: avGrad(entry.rank - 1) }}>{initials(entry.display_name)}</div>
-              <span className="ds-lb-name">{entry.display_name}</span>
-              <span className="ds-lb-score ds-mono">{entry.cumulative_score.toLocaleString()}</span>
-            </div>
-          );
-        })}
+        {(isFinal ? top.slice(3) : top).map((entry, idx) => (
+          <div
+            key={entry.player_id}
+            className={`ds-lb-row${entry.rank === 1 ? ' ds-lb-row-gold' : ''}`}
+            style={{ animationDelay: `${Math.min(idx * 45, 320)}ms` }}
+          >
+            <span className="ds-lb-rank ds-mono">#{entry.rank}</span>
+            <div className="ds-lb-av" style={{ background: avGrad(entry.rank - 1) }}>{initials(entry.display_name)}</div>
+            <span className="ds-lb-name">{entry.display_name}</span>
+            <span className="ds-lb-score ds-mono">{entry.cumulative_score.toLocaleString()}</span>
+          </div>
+        ))}
         {top.length === 0 && (
           <div className="ds-muted" style={{ textAlign: 'center', padding: '40px 0' }}>กำลังโหลด...</div>
         )}

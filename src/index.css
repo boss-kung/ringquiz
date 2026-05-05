@@ -1269,16 +1269,51 @@ body.host-route {
   border: 1px solid rgba(52,211,153,.3);
   color: var(--emerald);
 }
-.ds-conn-badge.ds-conn-warn {
-  background: rgba(245,158,11,.1);
-  border: 1px solid rgba(245,158,11,.3);
+.ds-conn-badge.ds-conn-fallback {
+  background: rgba(245,158,11,.08);
+  border: 1px solid rgba(245,158,11,.25);
   color: #F5A623;
+}
+.ds-conn-badge.ds-conn-warn {
+  background: rgba(251,113,133,.1);
+  border: 1px solid rgba(251,113,133,.3);
+  color: var(--rose);
   animation: grBlink 1.4s ease-in-out infinite;
+}
+.ds-conn-badge.ds-conn-neutral {
+  background: rgba(255,255,255,.05);
+  border: 1px solid var(--border);
+  color: var(--text-3);
 }
 .ds-conn-dot {
   width: 6px; height: 6px;
   border-radius: 50%;
   background: currentColor;
+}
+
+/* ── LATEST JOINED SPOTLIGHT ───────────────────────────────────────────────── */
+.ds-latest-joined {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 16px;
+  border-radius: 999px;
+  background: rgba(245,199,74,.12);
+  border: 1px solid rgba(245,199,74,.35);
+  color: var(--gold);
+  font-size: clamp(12px,1.3vw,16px);
+  font-weight: 700;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  animation: dsLatestJoin .35s ease-out;
+  margin-bottom: 10px;
+  flex-shrink: 0;
+}
+@keyframes dsLatestJoin {
+  from { opacity: 0; transform: translateY(-6px) scale(.95); }
+  to   { opacity: 1; transform: none; }
 }
 
 /* ── IMAGE STAGE (reusable golden-ring image container) ────────────────────── */
@@ -1303,14 +1338,16 @@ body.host-route {
   position: absolute;
   inset: 0;
   width: 100%; height: 100%;
-  object-fit: cover;
+  /* contain keeps full image visible and shares coordinate space with mask */
+  object-fit: contain;
   display: block;
 }
 .ds-img-reveal {
   position: absolute;
   inset: 0;
   width: 100%; height: 100%;
-  object-fit: cover;
+  /* must match ds-img-base so reveal overlay aligns exactly */
+  object-fit: contain;
   display: block;
   opacity: 0;
   transition: opacity 1.4s ease;
@@ -1320,7 +1357,8 @@ body.host-route {
   position: absolute;
   inset: 0;
   width: 100%; height: 100%;
-  object-fit: cover;
+  /* must match ds-img-base so mask circle lands on the correct image region */
+  object-fit: contain;
   pointer-events: none;
   transition: opacity 1.4s ease;
 }
