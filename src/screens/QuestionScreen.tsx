@@ -20,6 +20,7 @@ export function QuestionScreen() {
   const [timeExpired, setTimeExpired] = useState(false);
 
   const endsAt = gameState?.question_ends_at ?? null;
+  const displayOrder = question?.play_order ?? question?.order_index ?? gameState?.current_question_index ?? null;
 
   useEffect(() => {
     if (!endsAt) { setTimeExpired(false); return; }
@@ -49,7 +50,7 @@ export function QuestionScreen() {
     <div style={{ display: 'flex', minHeight: '100%', flexDirection: 'column', background: 'var(--navy)' }}>
       {/* Header */}
       <div className="gr-header">
-        <p className="gr-label-xs">Question {question.order_index}</p>
+        <p className="gr-label-xs">Question {displayOrder ?? '—'}</p>
         <Timer
           endsAt={gameState?.question_ends_at ?? null}
           totalSeconds={question.time_limit_seconds}

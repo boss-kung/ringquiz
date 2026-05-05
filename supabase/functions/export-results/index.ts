@@ -22,6 +22,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
   }
   const providedSecret = req.headers.get('X-Host-Secret')?.trim();
   if (!providedSecret || providedSecret !== envSecret) {
+    await sleep(300);
     const body: ErrorResponse = { error: 'unauthorized' };
     return Response.json(body, { status: 401, headers: corsHeaders });
   }
@@ -52,10 +53,26 @@ Deno.serve(async (req: Request): Promise<Response> => {
     if (answersResult.error) throw new Error(`answers query: ${answersResult.error.message}`);
     if (leaderboardResult.error) throw new Error(`leaderboard query: ${leaderboardResult.error.message}`);
 
+    const answerRows = answersResult.data ?? [];
+    const authoritativeTotals = new Map<string, number>();
+    for (const row of answerRows) {
+      authoritativeTotals.set(
+        row.player_id,
+        (authoritativeTotals.get(row.player_id) ?? 0) + row.score,
+      );
+    }
+
+    const players = ((playersResult.data ?? []) as ExportResultsResponse['players'])
+      .map((player) => ({
+        ...player,
+        total_score: authoritativeTotals.get(player.id) ?? 0,
+      }))
+      .sort((a, b) => b.total_score - a.total_score || a.joined_at.localeCompare(b.joined_at));
+
     const body: ExportResultsResponse = {
       exported_at: new Date().toISOString(),
-      players: (playersResult.data ?? []) as unknown as ExportResultsResponse['players'],
-      answers: (answersResult.data ?? []) as unknown as ExportResultsResponse['answers'],
+      players,
+      answers: answerRows as unknown as ExportResultsResponse['answers'],
       leaderboard: (leaderboardResult.data ?? []) as unknown as ExportResultsResponse['leaderboard'],
     };
 
@@ -67,3 +84,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     return Response.json(body, { status: 500, headers: corsHeaders });
   }
 });
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}

@@ -21,6 +21,7 @@ function RingMark({ size = 96 }: { size?: number }) {
 export function JoinScreen() {
   const { join, loading, error, savedName } = usePlayerSession();
   const [name, setName] = useState(savedName);
+  const inputId = 'join-display-name';
 
   useEffect(() => { setName(savedName); }, [savedName]);
 
@@ -93,7 +94,11 @@ export function JoinScreen() {
         </div>
 
         <form onSubmit={handleSubmit} className="gr-join-form" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <label htmlFor={inputId} className="gr-label-xs" style={{ color: 'var(--text-2)' }}>
+            ชื่อของคุณ
+          </label>
           <input
+            id={inputId}
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}

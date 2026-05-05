@@ -3,6 +3,9 @@ import { supabase } from '../lib/supabase';
 import { useGameStore } from '../store/gameStore';
 import type { Question } from '../lib/types';
 
+type RuntimeQuestionRow = Omit<Question, 'play_order'>;
+const PLAYER_ID_KEY = 'quiz_player_id';
+
 /**
  * Fetches the current question whenever current_question_id changes.
  * If current_game_set_question_id is set, overlays the game-set snapshot
@@ -13,6 +16,8 @@ import type { Question } from '../lib/types';
 export function useQuestion() {
   const questionId      = useGameStore((s) => s.gameState?.current_question_id ?? null);
   const gsqId           = useGameStore((s) => s.gameState?.current_game_set_question_id ?? null);
+  const currentIndex    = useGameStore((s) => s.gameState?.current_question_index ?? null);
+  const playerId        = useGameStore((s) => s.playerId);
   const setQuestion     = useGameStore((s) => s.setQuestion);
 
   useEffect(() => {
@@ -24,6 +29,24 @@ export function useQuestion() {
     let cancelled = false;
 
     const fetchAll = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        const hasSavedPlayerSession = Boolean(localStorage.getItem(PLAYER_ID_KEY));
+        if (hasSavedPlayerSession) {
+          if (!cancelled) setQuestion(null);
+          return;
+        }
+
+        const { error: signInErr } = await supabase.auth.signInAnonymously();
+        if (signInErr) {
+          if (!cancelled) {
+            console.error('[useQuestion] auth:', signInErr.message);
+            setQuestion(null);
+          }
+          return;
+        }
+      }
+
       // Fetch bank question content
       const { data: questionData, error: qErr } = await supabase
         .from('questions')
@@ -33,7 +56,7 @@ export function useQuestion() {
           'is_published, created_at',
         )
         .eq('id', questionId)
-        .single();
+        .single<RuntimeQuestionRow>();
 
       if (cancelled) return;
 
@@ -43,7 +66,10 @@ export function useQuestion() {
         return;
       }
 
-      let merged = questionData as unknown as Question;
+      let merged = {
+        ...(questionData as unknown as Question),
+        play_order: currentIndex ?? questionData.order_index,
+      };
 
       // Overlay game-set snapshot values when a game-set question is active.
       // This ensures circle_radius_ratio and timing shown to the player match
@@ -51,13 +77,14 @@ export function useQuestion() {
       if (gsqId) {
         const { data: gsqData } = await supabase
           .from('game_set_questions')
-          .select('time_limit_seconds, max_score, min_correct_score, circle_radius_ratio')
+          .select('play_order, time_limit_seconds, max_score, min_correct_score, circle_radius_ratio')
           .eq('id', gsqId)
-          .single();
+          .single<Pick<Question, 'play_order' | 'time_limit_seconds' | 'max_score' | 'min_correct_score' | 'circle_radius_ratio'>>();
 
         if (!cancelled && gsqData) {
           merged = {
             ...merged,
+            play_order: gsqData.play_order,
             time_limit_seconds: gsqData.time_limit_seconds,
             max_score: gsqData.max_score,
             min_correct_score: gsqData.min_correct_score,
@@ -72,5 +99,5 @@ export function useQuestion() {
     void fetchAll();
 
     return () => { cancelled = true; };
-  }, [questionId, gsqId, setQuestion]);
+  }, [questionId, gsqId, currentIndex, playerId, setQuestion]);
 }

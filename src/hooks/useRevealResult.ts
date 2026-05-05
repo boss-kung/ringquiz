@@ -15,6 +15,7 @@ export function useRevealResult() {
   const questionId = useGameStore((s) => s.gameState?.current_question_id);
   const playerId = useGameStore((s) => s.playerId);
   const submitResult = useGameStore((s) => s.submitResult);
+  const circlePosition = useGameStore((s) => s.circlePosition);
   const setRevealResult = useGameStore((s) => s.setRevealResult);
   const setRevealNoAnswer = useGameStore((s) => s.setRevealNoAnswer);
 
@@ -30,16 +31,22 @@ export function useRevealResult() {
       .then(({ data, error }) => {
         if (error) {
           console.error('[useRevealResult] fetch:', error.message);
-          // Fall back to in-memory submit response if DB fetch fails
+          const fallbackX = circlePosition?.xRatio ?? submitResult?.selected_x_ratio ?? null;
+          const fallbackY = circlePosition?.yRatio ?? submitResult?.selected_y_ratio ?? null;
+
+          // Fall back to in-memory result, but only show a circle when we
+          // actually have real coordinates from local state or submitResult.
           if (submitResult) {
             setRevealResult({
               is_correct: submitResult.is_correct,
               score: submitResult.score,
-              selected_x_ratio: 0,
-              selected_y_ratio: 0,
+              selected_x_ratio: fallbackX,
+              selected_y_ratio: fallbackY,
             });
-          } else {
+          } else if (!circlePosition) {
             setRevealNoAnswer(true);
+          } else {
+            setRevealNoAnswer(false);
           }
           return;
         }
@@ -50,5 +57,5 @@ export function useRevealResult() {
           setRevealNoAnswer(true);
         }
       });
-  }, [status, questionId, playerId, submitResult, setRevealResult, setRevealNoAnswer]);
+  }, [status, questionId, playerId, submitResult, circlePosition, setRevealResult, setRevealNoAnswer]);
 }

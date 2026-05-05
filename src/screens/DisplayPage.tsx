@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase, GAME_STATE_ID, FUNCTIONS_URL, SUPABASE_ANON_KEY } from '../lib/supabase';
 import { resolveQuestionImageUrl, resolveRevealImageUrl } from '../lib/questionAssets';
-import { COUNTDOWN_DISPLAY_SECONDS } from '../lib/constants';
+import { COUNTDOWN_DISPLAY_SECONDS, SERVER_TIME_RESYNC_INTERVAL_MS } from '../lib/constants';
 import type { GameState, Player, LeaderboardEntry, DisplayStatsResponse } from '../lib/types';
 
 // ── Local types ───────────────────────────────────────────────────────────────
@@ -47,12 +47,26 @@ function sortNewest(players: Player[]): Player[] {
 
 function useDisplayServerTime() {
   const offset = useRef(0);
-  useEffect(() => {
+  const sync = useCallback(() => {
+    const t0 = Date.now();
     fetch(`${FUNCTIONS_URL}/server-time`, { headers: { 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` } })
       .then((r) => r.json())
-      .then((d) => { if (d.server_time_ms) offset.current = d.server_time_ms - Date.now(); })
+      .then((d) => {
+        if (d.server_time_ms) {
+          const t1 = Date.now();
+          const rtt = t1 - t0;
+          offset.current = d.server_time_ms + rtt / 2 - t1;
+        }
+      })
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    sync();
+    const id = setInterval(sync, SERVER_TIME_RESYNC_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, [sync]);
+
   return useCallback(() => Date.now() + offset.current, []);
 }
 
@@ -176,8 +190,15 @@ export function DisplayPage() {
     if (!authReady) return;
     const qId = gameState?.current_question_id ?? null;
     const gsqId = gameState?.current_game_set_question_id ?? null;
+
+    if (!qId) {
+      prevQuestionKeyRef.current = null;
+      setQuestion(null);
+      return;
+    }
+
     const key = `${qId}::${gsqId}`;
-    if (!qId || key === prevQuestionKeyRef.current) return;
+    if (key === prevQuestionKeyRef.current) return;
     prevQuestionKeyRef.current = key;
 
     const fetch_ = async () => {
@@ -243,7 +264,7 @@ export function DisplayPage() {
         .eq('question_id', qId)
         .order('rank', { ascending: true })
         .limit(10);
-      if (data && data.length > 0) setLeaderboard(data as LeaderboardEntry[]);
+      setLeaderboard((data ?? []) as LeaderboardEntry[]);
     };
 
     // Fetch immediately, then again after 400 ms in case snapshot was written

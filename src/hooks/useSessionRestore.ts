@@ -12,6 +12,7 @@ function clearSession() {
   localStorage.removeItem(PLAYER_ID_KEY);
   localStorage.removeItem(DISPLAY_NAME_KEY);
   localStorage.removeItem(SESSION_VERSION_KEY);
+  useGameStore.setState({ playerId: null, displayName: null, isJoined: false });
 }
 
 /**
@@ -24,7 +25,8 @@ function clearSession() {
  * Restore succeeds only when:
  *   1. localStorage has valid playerId + displayName
  *   2. Supabase auth session exists with the same user id
- *   3. Player row upsert succeeds (recreates row if reset_game deleted it)
+ *   3. saved session_version still matches the authoritative game_state version
+ *   4. Player row can be safely reused or recreated for the current session
  *
  * On any failure, localStorage is cleared and the player sees JoinScreen.
  */
@@ -35,6 +37,7 @@ export function useSessionRestore() {
   useEffect(() => {
     const savedId = localStorage.getItem(PLAYER_ID_KEY);
     const savedName = localStorage.getItem(DISPLAY_NAME_KEY);
+    const savedVersion = localStorage.getItem(SESSION_VERSION_KEY);
 
     // Validate stored values
     if (!savedId || !savedName || !UUID_RE.test(savedId) || savedName.trim().length === 0) {
@@ -45,6 +48,29 @@ export function useSessionRestore() {
 
     const restore = async () => {
       try {
+        const { data: gs, error: gsErr } = await supabase
+          .from('game_state')
+          .select('session_version')
+          .eq('id', '00000000-0000-0000-0000-000000000001')
+          .single<{ session_version: number }>();
+
+        if (gsErr || !gs) {
+          console.error('[useSessionRestore] session_version fetch failed:', gsErr?.message);
+          clearSession();
+          setRestoring(false);
+          return;
+        }
+
+        const hasStoredVersion = typeof savedVersion === 'string' && savedVersion.trim().length > 0;
+        const storedVersionNum = hasStoredVersion ? parseInt(savedVersion, 10) : NaN;
+        const versionMatches = Number.isFinite(storedVersionNum) && storedVersionNum === gs.session_version;
+
+        if (hasStoredVersion && !versionMatches) {
+          clearSession();
+          setRestoring(false);
+          return;
+        }
+
         // Supabase persists the JWT in localStorage. getSession() reads it directly.
         const { data: { session } } = await supabase.auth.getSession();
 
@@ -73,18 +99,34 @@ export function useSessionRestore() {
           return;
         }
 
-        // Recreate player row if it was removed (e.g. after a hard DB wipe).
-        // display_name is the only column we set — total_score stays unchanged.
-        const { error: upsertErr } = await supabase
-          .from('players')
-          .upsert(
-            { id: savedId, display_name: savedName.trim() },
-            { onConflict: 'id' },
-          );
+        if (!hasStoredVersion) {
+          // If the version is missing locally but the player row still exists,
+          // allow restore without recreating anything. This covers a quick
+          // refresh immediately after join before useSaveSessionVersion runs.
+          const { data: existingPlayer, error: playerErr } = await supabase
+            .from('players')
+            .select('id')
+            .eq('id', savedId)
+            .maybeSingle<{ id: string }>();
 
-        if (upsertErr) {
-          // Non-fatal: player row likely exists; proceed anyway.
-          console.warn('[useSessionRestore] upsert warn:', upsertErr.message);
+          if (playerErr || !existingPlayer) {
+            clearSession();
+            setRestoring(false);
+            return;
+          }
+        } else {
+          // Session version matches, so restoring the player row is safe.
+          const { error: upsertErr } = await supabase
+            .from('players')
+            .upsert(
+              { id: savedId, display_name: savedName.trim() },
+              { onConflict: 'id' },
+            );
+
+          if (upsertErr) {
+            // Non-fatal: player row likely exists; proceed anyway.
+            console.warn('[useSessionRestore] upsert warn:', upsertErr.message);
+          }
         }
 
         setSession(savedId, savedName.trim());

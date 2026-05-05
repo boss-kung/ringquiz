@@ -34,6 +34,7 @@ export interface GameState {
 export interface Question {
   id: string;
   order_index: number;
+  play_order: number;
   text: string;
   image_url: string;                   // public CDN URL
   circle_radius_ratio: number;         // [0, 0.5] fraction of image width
@@ -201,6 +202,6 @@ export interface CirclePosition {
 export interface RevealResult {
   is_correct: boolean;
   score: number;
-  selected_x_ratio: number;
-  selected_y_ratio: number;
+  selected_x_ratio: number | null;
+  selected_y_ratio: number | null;
 }

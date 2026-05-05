@@ -36,7 +36,7 @@ const VALID_FROM: Record<HostActionName, GameStatus[] | '*'> = {
   show_reveal:           ['question_closed', 'reveal'],
   show_leaderboard:      ['reveal', 'leaderboard'],
   next_question:         ['leaderboard'],
-  end_game:              ['leaderboard', 'ended'],
+  end_game:              ['countdown', 'question_open', 'question_closed', 'reveal', 'leaderboard', 'ended'],
   soft_reset_game:       '*',
   hard_reset_game:       '*',
   force_close_question:  ['question_open', 'question_closed'],
@@ -68,6 +68,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
   if (!envSecret) return error(500, 'server_missing_host_secret');
   const providedSecret = req.headers.get('X-Host-Secret')?.trim();
   if (!providedSecret || providedSecret !== envSecret) {
+    await sleep(300);
     return error(401, 'unauthorized');
   }
 
@@ -311,8 +312,25 @@ async function executeAction(
 
     // ── end_game ─────────────────────────────────────────────────────────────
     case 'end_game': {
-      if (!alreadyInState) await updateGameState(db, { status: 'ended' });
-      return ok(action, 'ended', alreadyInState, await refetchGs(db));
+      if (!alreadyInState) {
+        await updateGameState(db, { status: 'ended' });
+      }
+
+      let entriesWritten: number | undefined;
+      if (gs.current_question_id) {
+        const { data: count, error: lbErr } = await db
+          .rpc('compute_leaderboard', {
+            p_question_id: gs.current_question_id,
+            p_game_set_question_id: gs.current_game_set_question_id ?? undefined,
+          });
+
+        if (lbErr) throw new Error(`end_game leaderboard compute failed: ${lbErr.message}`);
+        entriesWritten = count as number;
+      }
+
+      return ok(action, 'ended', alreadyInState, await refetchGs(db), {
+        entries_written: entriesWritten,
+      });
     }
 
     // ── soft_reset_game ──────────────────────────────────────────────────────
@@ -448,4 +466,8 @@ function error(
 ): Response {
   const body: ErrorResponse = { error: code, ...(detail ? { detail } : {}) };
   return Response.json(body, { status, headers: corsHeaders });
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }

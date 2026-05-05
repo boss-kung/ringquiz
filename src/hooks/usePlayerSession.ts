@@ -4,6 +4,7 @@ import { useGameStore } from '../store/gameStore';
 
 const PLAYER_ID_KEY = 'quiz_player_id';
 const DISPLAY_NAME_KEY = 'quiz_display_name';
+const SESSION_VERSION_KEY = 'quiz_session_version';
 
 /**
  * Handles anonymous sign-in and player row upsert.
@@ -44,6 +45,10 @@ export function usePlayerSession() {
         // Persist for next visit
         localStorage.setItem(PLAYER_ID_KEY, userId);
         localStorage.setItem(DISPLAY_NAME_KEY, displayName);
+        const currentVersion = useGameStore.getState().gameState?.session_version;
+        if (currentVersion != null) {
+          localStorage.setItem(SESSION_VERSION_KEY, String(currentVersion));
+        }
 
         setSession(userId, displayName);
       } catch (e) {

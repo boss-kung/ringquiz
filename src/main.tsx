@@ -2,29 +2,8 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import './index.css';
 import App from './App';
+import { isDisplayPath, isHostPath } from './lib/routing';
 import { useGameStore } from './store/gameStore';
-
-function getAppPath() {
-  const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
-  const pathname = window.location.pathname;
-
-  if (basePath && basePath !== '/' && pathname.startsWith(basePath)) {
-    const stripped = pathname.slice(basePath.length);
-    return stripped.startsWith('/') ? stripped : `/${stripped || ''}`;
-  }
-
-  return pathname;
-}
-
-function isHostRoute() {
-  const appPath = getAppPath();
-  return appPath === '/host' || appPath.startsWith('/host/');
-}
-
-function isDisplayRoute() {
-  const appPath = getAppPath();
-  return appPath === '/display' || appPath.startsWith('/display/');
-}
 
 function preventZoom() {
   const block = (event: Event) => event.preventDefault();
@@ -55,8 +34,8 @@ function preventZoom() {
   }, { passive: false });
 }
 
-const hostRoute = isHostRoute();
-const displayRoute = isDisplayRoute();
+const hostRoute = isHostPath();
+const displayRoute = isDisplayPath();
 const viewportMeta = document.querySelector('meta[name="viewport"]');
 if (viewportMeta) {
   viewportMeta.setAttribute(

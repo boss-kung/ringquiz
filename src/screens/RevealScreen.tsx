@@ -16,6 +16,19 @@ export function RevealScreen() {
   const gameState = useGameStore((s) => s.gameState);
   const getServerTime = useGetServerTime();
   const [showRevealImage, setShowRevealImage] = useState(false);
+  const revealStartedAt = gameState?.updated_at ?? null;
+
+  useEffect(() => {
+    if (!question || !revealStartedAt) {
+      setShowRevealImage(false);
+      return;
+    }
+    const revealImageAtMs = new Date(revealStartedAt).getTime() + 5000;
+    const syncRevealPhase = () => setShowRevealImage(getServerTime() >= revealImageAtMs);
+    syncRevealPhase();
+    const id = setInterval(syncRevealPhase, 200);
+    return () => clearInterval(id);
+  }, [revealStartedAt, getServerTime, question?.id]);
 
   if (!question) {
     return (
@@ -30,17 +43,10 @@ export function RevealScreen() {
   const revealBaseImage =
     resolveRevealImageUrl(question.reveal_image_url) ??
     resolveQuestionImageUrl(question.image_url);
-  const revealStartedAt = gameState?.updated_at ?? null;
-
-  // eslint-disable-next-line react-hooks/rules-of-hooks
-  useEffect(() => {
-    if (!revealStartedAt) { setShowRevealImage(false); return; }
-    const revealImageAtMs = new Date(revealStartedAt).getTime() + 5000;
-    const syncRevealPhase = () => setShowRevealImage(getServerTime() >= revealImageAtMs);
-    syncRevealPhase();
-    const id = setInterval(syncRevealPhase, 200);
-    return () => clearInterval(id);
-  }, [revealStartedAt, getServerTime, question.id]);
+  const revealCircle =
+    revealResult?.selected_x_ratio != null && revealResult?.selected_y_ratio != null
+      ? { xRatio: revealResult.selected_x_ratio, yRatio: revealResult.selected_y_ratio }
+      : null;
 
   /* Banner variant */
   let bannerClass = 'gr-reveal-banner gr-reveal-banner-neutral';
@@ -111,11 +117,7 @@ export function RevealScreen() {
           <QuestionImage
             imageUrl={showRevealImage ? revealBaseImage : originalQuestionImage}
             circleRadiusRatio={question.circle_radius_ratio}
-            circle={
-              revealResult
-                ? { xRatio: revealResult.selected_x_ratio, yRatio: revealResult.selected_y_ratio }
-                : circlePosition
-            }
+            circle={revealCircle ?? circlePosition}
             onCircleChange={() => {}}
             locked
             maskOverlayClassName="reveal-mask-pulse"

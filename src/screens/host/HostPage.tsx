@@ -54,6 +54,7 @@ function HostLogin({ onLogin, error }: { onLogin: (s: string) => void; error: st
   const [value, setValue] = useState('');
   const [checking, setChecking] = useState(false);
   const [localError, setLocalError] = useState('');
+  const inputId = 'host-secret-input';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -103,7 +104,11 @@ function HostLogin({ onLogin, error }: { onLogin: (s: string) => void; error: st
           <p style={{ marginTop: 6, fontSize: 13, color: 'var(--text-2)' }}>Enter your HOST_SECRET to continue</p>
         </div>
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <label htmlFor={inputId} className="gr-label-xs" style={{ color: 'var(--text-2)' }}>
+            HOST_SECRET
+          </label>
           <input
+            id={inputId}
             type="password"
             value={value}
             onChange={(e) => setValue(e.target.value)}
@@ -139,16 +144,32 @@ function HostDashboard({ secret, onLogout }: { secret: string; onLogout: () => v
   const [actionLoading, setActionLoading] = useState<HostActionName | null>(null);
   const [actionError, setActionError] = useState('');
   const [actionSuccess, setActionSuccess] = useState('');
+  const [statsError, setStatsError] = useState('');
   const [resetConfirm, setResetConfirm] = useState<'soft_reset_game' | 'hard_reset_game' | null>(null);
   const resetInput = useRef('');
+  const resetInputRef = useRef<HTMLInputElement | null>(null);
+  const cancelButtonRef = useRef<HTMLButtonElement | null>(null);
+  const confirmButtonRef = useRef<HTMLButtonElement | null>(null);
+  const lastFocusedRef = useRef<HTMLElement | null>(null);
 
   const fetchStats = useCallback(async () => {
     try {
       const res = await fetch(`${FUNCTIONS_URL}/get-question-stats`, {
         headers: { 'Authorization': `Bearer ${SUPABASE_ANON_KEY}`, 'X-Host-Secret': secret },
       });
-      if (res.ok) setStats(await res.json());
-    } catch { /* silent */ }
+      if (!res.ok) {
+        let errCode = '';
+        try { errCode = (await res.json()).error ?? ''; } catch { /* ignore */ }
+        setStatsError(errCode || `stats_http_${res.status}`);
+        setStats((current) => current ? { ...current, question_ends_at: null } : current);
+        return;
+      }
+      setStats(await res.json());
+      setStatsError('');
+    } catch {
+      setStatsError('network_error');
+      setStats((current) => current ? { ...current, question_ends_at: null } : current);
+    }
   }, [secret]);
 
   useEffect(() => {
@@ -156,6 +177,65 @@ function HostDashboard({ secret, onLogout }: { secret: string; onLogout: () => v
     const id = setInterval(fetchStats, STATS_POLL_INTERVAL_MS);
     return () => clearInterval(id);
   }, [fetchStats]);
+
+  useEffect(() => {
+    if (activeTab === 'game') {
+      void fetchStats();
+    }
+  }, [activeTab, fetchStats]);
+
+  useEffect(() => {
+    if (!resetConfirm) return;
+
+    lastFocusedRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const focusTarget = resetInputRef.current ?? cancelButtonRef.current ?? confirmButtonRef.current;
+    focusTarget?.focus();
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!resetConfirm) return;
+
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setResetConfirm(null);
+        resetInput.current = '';
+        return;
+      }
+
+      if (event.key !== 'Tab') return;
+
+      const focusable = [
+        resetInputRef.current as HTMLElement | null,
+        cancelButtonRef.current as HTMLElement | null,
+        confirmButtonRef.current as HTMLElement | null,
+      ].filter((node): node is HTMLElement => node !== null);
+
+      if (focusable.length === 0) return;
+
+      const currentIndex = focusable.indexOf(document.activeElement as HTMLElement);
+      const lastIndex = focusable.length - 1;
+
+      if (event.shiftKey) {
+        if (currentIndex <= 0) {
+          event.preventDefault();
+          const target = focusable[lastIndex];
+          if (target) target.focus();
+        }
+        return;
+      }
+
+      if (currentIndex === -1 || currentIndex === lastIndex) {
+        event.preventDefault();
+        const target = focusable[0];
+        if (target) target.focus();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      lastFocusedRef.current?.focus();
+    };
+  }, [resetConfirm]);
 
   useEffect(() => {
     const endsAt = stats?.question_ends_at;
@@ -216,6 +296,7 @@ function HostDashboard({ secret, onLogout }: { secret: string; onLogout: () => v
   const submittedRatio = stats?.player_count
     ? Math.min(1, (stats?.submitted_count ?? 0) / stats.player_count)
     : 0;
+  const statsStale = Boolean(statsError);
 
   const isActionEnabled = useCallback((action: HostActionName) => {
     switch (action) {
@@ -341,8 +422,8 @@ function HostDashboard({ secret, onLogout }: { secret: string; onLogout: () => v
                 {[
                   { l: 'Question', v: questionProgress ?? '—', c: 'var(--indigo)' },
                   { l: 'Players',  v: stats?.player_count ?? '—', c: 'var(--text)' },
-                  { l: 'Answers',  v: stats ? `${stats.submitted_count}/${stats.player_count || 0}` : '—', c: 'var(--emerald)' },
-                  { l: 'Time Left', v: timeLeft !== null ? `${timeLeft}s` : '—', c: timeLeft !== null && timeLeft <= 5 ? 'var(--rose)' : 'var(--text)' },
+                  { l: 'Answers',  v: statsStale ? 'stale' : stats ? `${stats.submitted_count}/${stats.player_count || 0}` : '—', c: statsStale ? 'var(--text-3)' : 'var(--emerald)' },
+                  { l: 'Time Left', v: statsStale ? 'stale' : timeLeft !== null ? `${timeLeft}s` : '—', c: statsStale ? 'var(--text-3)' : timeLeft !== null && timeLeft <= 5 ? 'var(--rose)' : 'var(--text)' },
                 ].map((m) => (
                   <div key={m.l} className="gr-metric">
                     <div className="gr-label-xs" style={{ marginBottom: 5 }}>{m.l}</div>
@@ -356,11 +437,11 @@ function HostDashboard({ secret, onLogout }: { secret: string; onLogout: () => v
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 7 }}>
                   <span className="gr-label-xs">Answer Progress</span>
                   <span className="gr-mono" style={{ fontSize: 10, fontWeight: 700, color: 'var(--emerald)' }}>
-                    {stats?.player_count ? `${Math.round(submittedRatio * 100)}%` : '—'}
+                    {statsStale ? 'stale' : stats?.player_count ? `${Math.round(submittedRatio * 100)}%` : '—'}
                   </span>
                 </div>
                 <div className="gr-progress">
-                  <div className="gr-progress-fill" style={{ width: `${submittedRatio * 100}%` }} />
+                  <div className="gr-progress-fill" style={{ width: `${statsStale ? 0 : submittedRatio * 100}%` }} />
                 </div>
               </div>
 
@@ -377,6 +458,11 @@ function HostDashboard({ secret, onLogout }: { secret: string; onLogout: () => v
             {actionError && (
               <div style={{ background: 'rgba(251,113,133,.1)', border: '1px solid rgba(251,113,133,.3)', borderRadius: 10, padding: '10px 14px', color: 'var(--rose)', fontSize: 13 }}>
                 {actionError}
+              </div>
+            )}
+            {statsError && (
+              <div style={{ background: 'rgba(251,113,133,.1)', border: '1px solid rgba(251,113,133,.3)', borderRadius: 10, padding: '10px 14px', color: 'var(--rose)', fontSize: 13 }}>
+                Stats may be stale: {statsError}
               </div>
             )}
             {actionSuccess && (
@@ -427,13 +513,16 @@ function HostDashboard({ secret, onLogout }: { secret: string; onLogout: () => v
         ) : activeTab === 'questions' ? (
           <AdminQuestionManager secret={secret} />
         ) : (
-          <GameSetManager secret={secret} />
+          <GameSetManager secret={secret} onStatsChanged={fetchStats} />
         )}
       </div>
 
       {/* Reset confirmation modal */}
       {resetConfirm && (
         <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="reset-confirm-title"
           style={{
             position: 'fixed', inset: 0,
             background: 'rgba(5,8,16,.88)',
@@ -443,7 +532,7 @@ function HostDashboard({ secret, onLogout }: { secret: string; onLogout: () => v
           }}
         >
           <div className="gr-card" style={{ width: '100%', maxWidth: 300, padding: 22 }}>
-            <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--rose)', marginBottom: 10 }}>
+            <div id="reset-confirm-title" style={{ fontSize: 18, fontWeight: 800, color: 'var(--rose)', marginBottom: 10 }}>
               ⚠️ {resetConfirm === 'soft_reset_game' ? 'Soft Reset Round' : 'Hard Reset Game'}
             </div>
             <p style={{ fontSize: 12, color: 'var(--text-2)', marginBottom: 14, lineHeight: 1.6 }}>
@@ -451,7 +540,12 @@ function HostDashboard({ secret, onLogout }: { secret: string; onLogout: () => v
                 ? 'This deletes answers, scores, and leaderboard data. Type RESET to confirm.'
                 : 'This clears ALL players, answers, scores, and leaderboard data. Type RESET to confirm.'}
             </p>
+            <label htmlFor="reset-confirm-input" className="gr-label-xs" style={{ color: 'var(--text-2)', marginBottom: 8, display: 'block' }}>
+              Type RESET to confirm
+            </label>
             <input
+              id="reset-confirm-input"
+              ref={resetInputRef}
               type="text"
               placeholder="Type RESET"
               autoFocus
@@ -461,6 +555,7 @@ function HostDashboard({ secret, onLogout }: { secret: string; onLogout: () => v
             />
             <div style={{ display: 'flex', gap: 9 }}>
               <button
+                ref={cancelButtonRef}
                 onClick={() => { setResetConfirm(null); resetInput.current = ''; }}
                 className="gr-btn gr-btn-ghost"
                 style={{ padding: '10px', fontSize: 13 }}
@@ -468,6 +563,7 @@ function HostDashboard({ secret, onLogout }: { secret: string; onLogout: () => v
                 Cancel
               </button>
               <button
+                ref={confirmButtonRef}
                 onClick={handleResetConfirm}
                 style={{
                   flex: 1, padding: '10px 14px', borderRadius: 12, border: 'none',

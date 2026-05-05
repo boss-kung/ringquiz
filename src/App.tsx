@@ -7,6 +7,7 @@ import { useExistingAnswer } from './hooks/useExistingAnswer';
 import { useSessionRestore } from './hooks/useSessionRestore';
 import { useSessionVersionCheck } from './hooks/useSessionVersionCheck';
 import { useSaveSessionVersion } from './hooks/useSaveSessionVersion';
+import { getAppPath, isDisplayPath, isHostPath } from './lib/routing';
 import { JoinScreen } from './screens/JoinScreen';
 import { WaitingScreen } from './screens/WaitingScreen';
 import { CountdownScreen } from './screens/CountdownScreen';
@@ -18,32 +19,11 @@ import { EndScreen } from './screens/EndScreen';
 import { HostPage } from './screens/host/HostPage';
 import { DisplayPage } from './screens/DisplayPage';
 
-function getAppPath() {
-  // GitHub Pages SPA fallback (public/404.html) rewrites:
-  //   /ringquiz/display  →  /ringquiz/?/display
-  // Check the search string first so direct-link/refresh works on GH Pages.
-  const search = window.location.search;
-  if (search.startsWith('?/')) {
-    const path = search.slice(1).split('&')[0]; // e.g. "/display"
-    return path.startsWith('/') ? path : `/${path}`;
-  }
-
-  const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
-  const pathname = window.location.pathname;
-
-  if (basePath && basePath !== '/' && pathname.startsWith(basePath)) {
-    const stripped = pathname.slice(basePath.length);
-    return stripped.startsWith('/') ? stripped : `/${stripped || ''}`;
-  }
-
-  return pathname;
-}
-
 // Simple URL-based routing: /host → Host UI, /display → Display UI, else → Player UI.
 // On GitHub Pages the app lives under /ringquiz/, so we strip BASE_URL first.
 const appPath = getAppPath();
-const isHost = appPath === '/host' || appPath.startsWith('/host/');
-const isDisplay = appPath === '/display' || appPath.startsWith('/display/');
+const isHost = isHostPath(appPath);
+const isDisplay = isDisplayPath(appPath);
 
 export default function App() {
   // Display page is fully standalone — no shared hooks, no player state

@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useGameStore } from '../store/gameStore';
 import { COUNTDOWN_DISPLAY_SECONDS } from '../lib/constants';
+import { useGetServerTime } from '../hooks/useServerTime';
 import { resolveQuestionImageUrl } from '../lib/questionAssets';
 
 export function CountdownScreen() {
   const question = useGameStore((s) => s.question);
   const gameState = useGameStore((s) => s.gameState);
+  const getServerTime = useGetServerTime();
 
   const totalCountdownMs = COUNTDOWN_DISPLAY_SECONDS * 1000;
   const [remainingMs, setRemainingMs] = useState(totalCountdownMs);
@@ -17,15 +19,24 @@ export function CountdownScreen() {
   const ringOffset = progress >= 1 ? 0 : ringCircumference * (1 - progress);
   const countdownStartedAt = gameState?.updated_at ?? null;
   const cluePhase = showClue;
+  const displayOrder = question?.play_order ?? question?.order_index ?? gameState?.current_question_index ?? null;
 
   useEffect(() => {
     setShowClue(false);
-    setRemainingMs(totalCountdownMs);
-    setCount(COUNTDOWN_DISPLAY_SECONDS);
-
     if (!countdownStartedAt) return;
 
-    const visualStartedAt = performance.now();
+    const startMs = new Date(countdownStartedAt).getTime();
+    const elapsedMs = Math.max(0, getServerTime() - startMs);
+    const initialRemainingMs = Math.max(0, totalCountdownMs - elapsedMs);
+    setRemainingMs(initialRemainingMs);
+    setCount(initialRemainingMs > 0 ? Math.ceil(initialRemainingMs / 1000) : 0);
+
+    if (initialRemainingMs <= 0) {
+      const clueTimerId = setTimeout(() => setShowClue(true), 350);
+      return () => clearTimeout(clueTimerId);
+    }
+
+    const visualStartedAt = performance.now() - elapsedMs;
     let animationFrameId = 0;
     let clueTimerId: ReturnType<typeof setTimeout> | null = null;
 
@@ -53,7 +64,7 @@ export function CountdownScreen() {
       cancelAnimationFrame(animationFrameId);
       if (clueTimerId) clearTimeout(clueTimerId);
     };
-  }, [countdownStartedAt, question?.id, totalCountdownMs]);
+  }, [countdownStartedAt, question?.id, totalCountdownMs, getServerTime]);
 
   const clueImageUrl = useMemo(() => {
     return question ? resolveQuestionImageUrl(question.image_url) : null;
@@ -81,7 +92,7 @@ export function CountdownScreen() {
       <div style={{ position: 'relative', zIndex: 1, width: '100%', maxWidth: cluePhase ? 480 : 320 }}>
         {question && (
           <div className="gr-label-sm gr-gold" style={{ marginBottom: 10, letterSpacing: '.18em' }}>
-            Question {question.order_index}
+            Question {displayOrder ?? '—'}
           </div>
         )}
 

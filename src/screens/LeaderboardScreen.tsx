@@ -9,6 +9,8 @@ export function LeaderboardScreen() {
   const playerEntry = useGameStore((s) => s.playerLeaderboardEntry);
   const playerId = useGameStore((s) => s.playerId);
   const question = useGameStore((s) => s.question);
+  const gameState = useGameStore((s) => s.gameState);
+  const displayOrder = question?.play_order ?? question?.order_index ?? gameState?.current_question_index ?? null;
 
   return (
     <div style={{ display: 'flex', minHeight: '100%', flexDirection: 'column', background: 'var(--navy)' }}>
@@ -16,7 +18,7 @@ export function LeaderboardScreen() {
       <div className="gr-header" style={{ borderBottom: '1px solid var(--border)', padding: '14px 20px 12px' }}>
         <div>
           <div className="gr-label-xs" style={{ marginBottom: 4 }}>
-            {question ? `หลังจบ Question ${question.order_index}` : 'ผู้นำในเกมนี้'}
+            {displayOrder != null ? `หลังจบ Question ${displayOrder}` : 'ผู้นำในเกมนี้'}
           </div>
           <h2 style={{ fontSize: 18, fontWeight: 900, color: 'var(--text)' }}>Leaderboard</h2>
         </div>

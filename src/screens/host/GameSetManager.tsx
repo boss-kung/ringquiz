@@ -54,7 +54,7 @@ interface EditingRow {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export function GameSetManager({ secret }: { secret: string }) {
+export function GameSetManager({ secret, onStatsChanged }: { secret: string; onStatsChanged?: () => Promise<void> | void }) {
   const [view, setView] = useState<View>('sets_list');
   const [gameSets, setGameSets] = useState<GameSetRecord[]>([]);
   const [selectedGameSet, setSelectedGameSet] = useState<GameSetRecord | null>(null);
@@ -128,6 +128,7 @@ export function GameSetManager({ secret }: { secret: string }) {
       await callAdmin(secret, { action: 'create_game_set', name: newSetName.trim() });
       setNewSetName('');
       await loadGameSets();
+      await onStatsChanged?.();
       flash('Game Set created.');
     } catch (e) {
       flash(e instanceof Error ? e.message : 'Failed to create', true);
@@ -155,6 +156,7 @@ export function GameSetManager({ secret }: { secret: string }) {
       if (selectedGameSet?.id === gameSetId && res.game_set) {
         setSelectedGameSet(res.game_set);
       }
+      await onStatsChanged?.();
       flash('Game Set set as active.');
     } catch (e) {
       flash(e instanceof Error ? e.message : 'Failed to set active', true);
@@ -176,6 +178,7 @@ export function GameSetManager({ secret }: { secret: string }) {
         setGsQuestions([]);
       }
       await loadGameSets();
+      await onStatsChanged?.();
       flash('Game Set deleted.');
     } catch (e) {
       flash(e instanceof Error ? e.message : 'Failed to delete', true);
@@ -193,6 +196,7 @@ export function GameSetManager({ secret }: { secret: string }) {
       await callAdmin(secret, { action: 'remove_game_set_question', game_set_question_id: gsqId });
       await loadGSQ(selectedGameSet.id);
       await loadGameSets();
+      await onStatsChanged?.();
       flash('Question removed from Game Set.');
     } catch (e) {
       flash(e instanceof Error ? e.message : 'Failed to remove', true);
@@ -213,6 +217,8 @@ export function GameSetManager({ secret }: { secret: string }) {
         is_enabled: !gsq.is_enabled,
       });
       await loadGSQ(selectedGameSet.id);
+      await loadGameSets();
+      await onStatsChanged?.();
     } catch (e) {
       flash(e instanceof Error ? e.message : 'Failed to toggle', true);
     } finally {
@@ -240,6 +246,7 @@ export function GameSetManager({ secret }: { secret: string }) {
         ordered_ids: newOrder.map((q) => q.id),
       });
       await loadGSQ(selectedGameSet.id);
+      await onStatsChanged?.();
     } catch (e) {
       flash(e instanceof Error ? e.message : 'Reorder failed', true);
       await loadGSQ(selectedGameSet.id); // revert
@@ -274,6 +281,7 @@ export function GameSetManager({ secret }: { secret: string }) {
       });
       setEditingRow(null);
       await loadGSQ(selectedGameSet.id);
+      await onStatsChanged?.();
       flash('Values saved.');
     } catch (e) {
       flash(e instanceof Error ? e.message : 'Save failed', true);
@@ -294,16 +302,19 @@ export function GameSetManager({ secret }: { secret: string }) {
     if (!selectedGameSet || selectedBankIds.size === 0) return;
     setBusy('add-questions');
     try {
-      for (const qid of selectedBankIds) {
-        await callAdmin(secret, {
-          action: 'add_question_to_game_set',
-          game_set_id: selectedGameSet.id,
-          question_id: qid,
-        });
-      }
+      const orderedSelectedIds = bankQuestions
+        .filter((question) => selectedBankIds.has(question.id))
+        .map((question) => question.id);
+
+      await callAdmin(secret, {
+        action: 'bulk_add_questions_to_game_set',
+        game_set_id: selectedGameSet.id,
+        question_ids: orderedSelectedIds,
+      });
       setView('set_detail');
       await loadGSQ(selectedGameSet.id);
       await loadGameSets();
+      await onStatsChanged?.();
       flash(`Added ${selectedBankIds.size} question(s) to Game Set.`);
       setSelectedBankIds(new Set());
     } catch (e) {

@@ -27,6 +27,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
   }
   const providedSecret = req.headers.get('X-Host-Secret')?.trim();
   if (!providedSecret || providedSecret !== envSecret) {
+    await sleep(300);
     const body: ErrorResponse = { error: 'unauthorized' };
     return Response.json(body, { status: 401, headers: corsHeaders });
   }
@@ -139,3 +140,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     return Response.json(body, { status: 500, headers: corsHeaders });
   }
 });
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}

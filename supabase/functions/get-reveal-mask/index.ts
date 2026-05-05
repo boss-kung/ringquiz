@@ -1,16 +1,20 @@
 // get-reveal-mask — proxies the mask PNG from private storage during reveal state.
-// Only works when game state is 'reveal'. Returns the raw PNG bytes.
-// Safe to expose during reveal — showing the correct zone is intentional.
+// Only works when game state is reveal/leaderboard/ended for the current question.
+// Safe to expose during those phases — showing the correct zone is intentional.
 // mask_storage_path is never included in any response.
 import { corsHeaders, handleCors } from '../_shared/cors.ts';
 import { getSupabaseAdmin } from '../_shared/supabase-admin.ts';
 import type { GameState, QuestionMask, ErrorResponse } from '../_shared/types.ts';
+
+const ALLOWED_STATUSES = new Set(['reveal', 'leaderboard', 'ended']);
 
 Deno.serve(async (req: Request): Promise<Response> => {
   const preflight = handleCors(req);
   if (preflight) return preflight;
 
   const db = getSupabaseAdmin();
+  const url = new URL(req.url);
+  const requestedQuestionId = url.searchParams.get('questionId');
 
   try {
     const { data: gs, error: gsErr } = await db
@@ -21,8 +25,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
     if (gsErr || !gs) throw new Error('Failed to read game_state');
 
-    if (gs.status !== 'reveal') {
-      const body: ErrorResponse = { error: 'not_in_reveal_state' };
+    if (!ALLOWED_STATUSES.has(gs.status)) {
+      const body: ErrorResponse = { error: 'mask_not_available_yet' };
       return Response.json(body, { status: 409, headers: corsHeaders });
     }
 
@@ -31,10 +35,15 @@ Deno.serve(async (req: Request): Promise<Response> => {
       return Response.json(body, { status: 400, headers: corsHeaders });
     }
 
+    if (!requestedQuestionId || requestedQuestionId !== gs.current_question_id) {
+      const body: ErrorResponse = { error: 'wrong_question' };
+      return Response.json(body, { status: 409, headers: corsHeaders });
+    }
+
     const { data: maskRow, error: maskErr } = await db
       .from('question_masks')
       .select('mask_storage_path')
-      .eq('question_id', gs.current_question_id)
+      .eq('question_id', requestedQuestionId)
       .single<Pick<QuestionMask, 'mask_storage_path'>>();
 
     if (maskErr || !maskRow) {

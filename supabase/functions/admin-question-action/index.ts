@@ -1,6 +1,11 @@
 import { corsHeaders, handleCors } from '../_shared/cors.ts';
 import { getSupabaseAdmin } from '../_shared/supabase-admin.ts';
 
+const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+const ALLOWED_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
+const ALLOWED_MASK_TYPES = new Set(['image/png']);
+const MAX_DIMENSION = 10_000;
+
 // ── Action type union ────────────────────────────────────────────────────────
 
 type AdminActionName =
@@ -21,6 +26,7 @@ type AdminActionName =
   | 'set_active_game_set'
   | 'list_game_set_questions'
   | 'add_question_to_game_set'
+  | 'bulk_add_questions_to_game_set'
   | 'remove_game_set_question'
   | 'update_game_set_question'
   | 'reorder_game_set_questions'
@@ -103,6 +109,7 @@ interface AdminRequest {
   // Game Sets
   game_set_id?: string;
   game_set_question_id?: string;
+  question_ids?: string[];
   name?: string;
   play_order?: number;
   time_limit_seconds?: number;
@@ -130,6 +137,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
   if (!envSecret) return error(500, 'server_missing_host_secret');
   const providedSecret = req.headers.get('X-Host-Secret')?.trim();
   if (!providedSecret || providedSecret !== envSecret) {
+    await sleep(300);
     return error(401, 'unauthorized');
   }
 
@@ -175,6 +183,16 @@ async function handleAssetUpload(
   if (revealFile != null && !(revealFile instanceof File))
     return error(400, 'invalid_field', 'reveal_file');
 
+  if (!ALLOWED_IMAGE_TYPES.has(imageFile.type)) return error(400, 'invalid_field', 'image_file_type');
+  if (!ALLOWED_MASK_TYPES.has(maskFile.type)) return error(400, 'invalid_field', 'mask_file_type');
+  if (revealFile instanceof File && !ALLOWED_IMAGE_TYPES.has(revealFile.type))
+    return error(400, 'invalid_field', 'reveal_file_type');
+
+  if (imageFile.size > MAX_UPLOAD_BYTES) return error(400, 'file_too_large', 'image_file');
+  if (maskFile.size > MAX_UPLOAD_BYTES) return error(400, 'file_too_large', 'mask_file');
+  if (revealFile instanceof File && revealFile.size > MAX_UPLOAD_BYTES)
+    return error(400, 'file_too_large', 'reveal_file');
+
   const imageWidth  = readFormNumber(form, 'image_width');
   const imageHeight = readFormNumber(form, 'image_height');
   const maskWidth   = readFormNumber(form, 'mask_width');
@@ -183,8 +201,30 @@ async function handleAssetUpload(
   if ([imageWidth, imageHeight, maskWidth, maskHeight].some((v) => v == null))
     return error(400, 'missing_dimensions', 'image_width, image_height, mask_width, mask_height required');
 
+  if ([imageWidth, imageHeight, maskWidth, maskHeight].some((v) => (v ?? 0) < 1 || (v ?? 0) > MAX_DIMENSION))
+    return error(400, 'invalid_dimensions', 'Uploaded image dimensions are out of range.');
+
   if (imageWidth !== maskWidth || imageHeight !== maskHeight)
     return error(400, 'dimension_mismatch', 'Image and mask dimensions must match.');
+
+  const [actualMaskWidth, actualMaskHeight] = await getPngDimensions(maskFile);
+  if (actualMaskWidth !== maskWidth || actualMaskHeight !== maskHeight) {
+    return error(400, 'dimension_mismatch', 'Mask file dimensions do not match the submitted dimensions.');
+  }
+
+  if (imageFile.type === 'image/png') {
+    const [actualImageWidth, actualImageHeight] = await getPngDimensions(imageFile);
+    if (actualImageWidth !== imageWidth || actualImageHeight !== imageHeight) {
+      return error(400, 'dimension_mismatch', 'Image file dimensions do not match the submitted dimensions.');
+    }
+  }
+
+  if (revealFile instanceof File && revealFile.type === 'image/png') {
+    const [actualRevealWidth, actualRevealHeight] = await getPngDimensions(revealFile);
+    if (actualRevealWidth !== imageWidth || actualRevealHeight !== imageHeight) {
+      return error(400, 'dimension_mismatch', 'Reveal file dimensions must match the question image.');
+    }
+  }
 
   const assetId   = crypto.randomUUID();
   const imagePath = `${assetId}${getFileExtension(imageFile.name, '.png')}`;
@@ -252,6 +292,8 @@ async function executeAction(
     case 'list_game_set_questions': return listGameSetQuestions(body.game_set_id, db);
     case 'add_question_to_game_set':
       return addQuestionToGameSet(body.game_set_id, body.question_id, db);
+    case 'bulk_add_questions_to_game_set':
+      return bulkAddQuestionsToGameSet(body.game_set_id, body.question_ids, db);
     case 'remove_game_set_question':
       return removeGameSetQuestion(body.game_set_question_id, db);
     case 'update_game_set_question':
@@ -684,6 +726,8 @@ async function setActiveGameSet(
       current_question_id: null,
       current_question_index: null,
       current_game_set_question_id: null,
+      question_started_at: null,
+      question_ends_at: null,
     })
     .eq('id', GAME_STATE_ID);
 
@@ -734,6 +778,35 @@ async function listGameSetQuestions(
   return ok({ ok: true, action: 'list_game_set_questions', game_set_questions: gameSetQuestions });
 }
 
+async function getMutableGameStateLock(
+  gameSetId: string,
+  db: ReturnType<typeof getSupabaseAdmin>,
+): Promise<Response | null> {
+  const { data: gameState, error: gameStateError } = await db
+    .from('game_state')
+    .select('active_game_set_id, status')
+    .eq('id', GAME_STATE_ID)
+    .single<{ active_game_set_id: string | null; status: string }>();
+
+  if (gameStateError) {
+    throw new Error(`Failed to inspect game state: ${gameStateError.message}`);
+  }
+
+  if (
+    gameState.active_game_set_id === gameSetId &&
+    gameState.status !== 'waiting' &&
+    gameState.status !== 'ended'
+  ) {
+    return error(
+      409,
+      'game_set_in_use',
+      'Cannot modify the active game set while a game is running. Reset the game first.',
+    );
+  }
+
+  return null;
+}
+
 async function addQuestionToGameSet(
   gameSetId: string | undefined,
   questionId: string | undefined,
@@ -746,16 +819,82 @@ async function addQuestionToGameSet(
   const { data: gs, error: gsErr } = await db.from('game_sets').select('id').eq('id', gameSetId).single();
   if (gsErr || !gs) return error(404, 'not_found', 'Game set not found');
 
-  // Fetch bank question defaults to snapshot
-  const { data: bankQ, error: bankQErr } = await db
+  const gameSetLock = await getMutableGameStateLock(gameSetId, db);
+  if (gameSetLock) return gameSetLock;
+
+  const { data: bankQuestion, error: bankQuestionError } = await db
     .from('questions')
-    .select('time_limit_seconds, max_score, min_correct_score, circle_radius_ratio')
+    .select('id')
     .eq('id', questionId)
-    .single<{ time_limit_seconds: number; max_score: number; min_correct_score: number; circle_radius_ratio: number }>();
+    .maybeSingle<{ id: string }>();
 
-  if (bankQErr || !bankQ) return error(404, 'not_found', 'Question not found in bank');
+  if (bankQuestionError) throw new Error(`Failed to verify bank question: ${bankQuestionError.message}`);
+  if (!bankQuestion) return error(404, 'not_found', 'Question not found in bank');
 
-  // Determine next play_order
+  const insertedIds = await insertQuestionsIntoGameSet(gameSetId, [questionId], db);
+  return await fetchGameSetQuestion('add_question_to_game_set', insertedIds[0], db);
+}
+
+async function bulkAddQuestionsToGameSet(
+  gameSetId: string | undefined,
+  questionIds: string[] | undefined,
+  db: ReturnType<typeof getSupabaseAdmin>,
+): Promise<Response> {
+  if (!gameSetId) return error(400, 'missing_field', 'game_set_id');
+  if (!Array.isArray(questionIds) || questionIds.length === 0) {
+    return error(400, 'missing_field', 'question_ids');
+  }
+
+  const { data: gs, error: gsErr } = await db.from('game_sets').select('id').eq('id', gameSetId).single();
+  if (gsErr || !gs) return error(404, 'not_found', 'Game set not found');
+
+  const gameSetLock = await getMutableGameStateLock(gameSetId, db);
+  if (gameSetLock) return gameSetLock;
+
+  const sanitizedIds = questionIds.map((id) => id?.trim()).filter((id): id is string => Boolean(id));
+  const uniqueIds = [...new Set(sanitizedIds)];
+  const { data: bankQuestions, error: bankQuestionError } = await db
+    .from('questions')
+    .select('id')
+    .in('id', uniqueIds);
+
+  if (bankQuestionError) throw new Error(`Failed to verify bank questions: ${bankQuestionError.message}`);
+  if ((bankQuestions ?? []).length !== uniqueIds.length) {
+    return error(404, 'not_found', 'One or more questions were not found in the bank');
+  }
+
+  const insertedIds = await insertQuestionsIntoGameSet(gameSetId, questionIds, db);
+  return ok({
+    ok: true,
+    action: 'bulk_add_questions_to_game_set',
+    created_count: insertedIds.length,
+  });
+}
+
+async function insertQuestionsIntoGameSet(
+  gameSetId: string,
+  questionIds: string[],
+  db: ReturnType<typeof getSupabaseAdmin>,
+): Promise<string[]> {
+  const sanitizedIds = questionIds.map((id) => id?.trim()).filter((id): id is string => Boolean(id));
+  if (sanitizedIds.length === 0) throw new Error('No question ids to add');
+
+  const uniqueIds = [...new Set(sanitizedIds)];
+  const { data: bankQuestions, error: bankQErr } = await db
+    .from('questions')
+    .select('id, time_limit_seconds, max_score, min_correct_score, circle_radius_ratio')
+    .in('id', uniqueIds);
+
+  if (bankQErr) throw new Error(`Failed to load bank questions: ${bankQErr.message}`);
+  if (!bankQuestions) throw new Error('Question not found in bank');
+
+  const bankById = new Map(bankQuestions.map((row) => [row.id, row]));
+  for (const questionId of sanitizedIds) {
+    if (!bankById.has(questionId)) {
+      throw new Error(`Question not found in bank: ${questionId}`);
+    }
+  }
+
   const { data: maxOrderRow } = await db
     .from('game_set_questions')
     .select('play_order')
@@ -764,27 +903,28 @@ async function addQuestionToGameSet(
     .limit(1)
     .maybeSingle<{ play_order: number }>();
 
-  const nextPlayOrder = (maxOrderRow?.play_order ?? 0) + 1;
-
-  const { data: inserted, error: insertError } = await db
-    .from('game_set_questions')
-    .insert({
+  const startOrder = (maxOrderRow?.play_order ?? 0) + 1;
+  const rows = sanitizedIds.map((questionId, index) => {
+    const bankQ = bankById.get(questionId)!;
+    return {
       game_set_id: gameSetId,
       question_id: questionId,
-      play_order: nextPlayOrder,
-      // Snapshot values copied from bank defaults at add time
+      play_order: startOrder + index,
       time_limit_seconds: bankQ.time_limit_seconds,
       max_score: bankQ.max_score,
       min_correct_score: bankQ.min_correct_score,
       circle_radius_ratio: bankQ.circle_radius_ratio,
       is_enabled: true,
-    })
-    .select('id')
-    .single<{ id: string }>();
+    };
+  });
+
+  const { data: inserted, error: insertError } = await db
+    .from('game_set_questions')
+    .insert(rows)
+    .select('id');
 
   if (insertError) throw new Error(`Failed to add question to game set: ${insertError.message}`);
-
-  return await fetchGameSetQuestion('add_question_to_game_set', inserted!.id, db);
+  return (inserted ?? []).map((row) => row.id as string);
 }
 
 async function removeGameSetQuestion(
@@ -802,16 +942,8 @@ async function removeGameSetQuestion(
 
   if (fetchErr || !gsq) return error(404, 'not_found', 'Game set question not found');
 
-  // Check it's not the current active game set question
-  const { data: gameState } = await db
-    .from('game_state')
-    .select('current_game_set_question_id, status')
-    .eq('id', GAME_STATE_ID)
-    .single<{ current_game_set_question_id: string | null; status: string }>();
-
-  if (gameState?.current_game_set_question_id === gameSetQuestionId && gameState?.status !== 'waiting') {
-    return error(409, 'question_in_use', 'Cannot remove the currently active question. Reset the game first.');
-  }
+  const gameSetLock = await getMutableGameStateLock(gsq.game_set_id, db);
+  if (gameSetLock) return gameSetLock;
 
   const { error: deleteError } = await db
     .from('game_set_questions')
@@ -832,6 +964,17 @@ async function updateGameSetQuestion(
   db: ReturnType<typeof getSupabaseAdmin>,
 ): Promise<Response> {
   if (!gameSetQuestionId) return error(400, 'missing_field', 'game_set_question_id');
+
+  const { data: gsq, error: fetchErr } = await db
+    .from('game_set_questions')
+    .select('game_set_id')
+    .eq('id', gameSetQuestionId)
+    .single<{ game_set_id: string }>();
+
+  if (fetchErr || !gsq) return error(404, 'not_found', 'Game set question not found');
+
+  const gameSetLock = await getMutableGameStateLock(gsq.game_set_id, db);
+  if (gameSetLock) return gameSetLock;
 
   const issues: ValidationIssue[] = [];
   const patch: Record<string, unknown> = {};
@@ -888,6 +1031,9 @@ async function reorderGameSetQuestions(
   if (!Array.isArray(orderedIds) || orderedIds.length === 0)
     return error(400, 'missing_field', 'ordered_ids');
 
+  const gameSetLock = await getMutableGameStateLock(gameSetId, db);
+  if (gameSetLock) return gameSetLock;
+
   // Assign play_order sequentially according to client-provided order.
   // Use negative temporaries first to avoid UNIQUE constraint violations.
   for (let i = 0; i < orderedIds.length; i++) {
@@ -913,6 +1059,17 @@ async function toggleGameSetQuestionEnabled(
 ): Promise<Response> {
   if (!gameSetQuestionId) return error(400, 'missing_field', 'game_set_question_id');
   if (typeof isEnabled !== 'boolean') return error(400, 'missing_field', 'is_enabled');
+
+  const { data: gsq, error: fetchErr } = await db
+    .from('game_set_questions')
+    .select('game_set_id')
+    .eq('id', gameSetQuestionId)
+    .single<{ game_set_id: string }>();
+
+  if (fetchErr || !gsq) return error(404, 'not_found', 'Game set question not found');
+
+  const gameSetLock = await getMutableGameStateLock(gsq.game_set_id, db);
+  if (gameSetLock) return gameSetLock;
 
   const { error: updateError } = await db
     .from('game_set_questions')
@@ -1266,6 +1423,26 @@ function readFormNumber(form: FormData, key: string): number | null {
 function getFileExtension(fileName: string, fallback: string): string {
   const match = /\.([a-zA-Z0-9]+)$/.exec(fileName);
   return match ? `.${match[1].toLowerCase()}` : fallback;
+}
+
+async function getPngDimensions(file: File): Promise<[number, number]> {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const signature = [137, 80, 78, 71, 13, 10, 26, 10];
+  const hasPngSignature = signature.every((value, index) => bytes[index] === value);
+  if (!hasPngSignature) throw new Error('Invalid PNG signature.');
+
+  const pngHeaderLength = 24;
+  if (bytes.length < pngHeaderLength) throw new Error('PNG header is truncated.');
+
+  const headerChunkType = String.fromCharCode(bytes[12], bytes[13], bytes[14], bytes[15]);
+  if (headerChunkType !== 'IHDR') throw new Error('PNG IHDR chunk missing.');
+
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  return [view.getUint32(16), view.getUint32(20)];
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function ok(body: Record<string, unknown>): Response {

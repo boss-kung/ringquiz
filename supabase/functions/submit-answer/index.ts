@@ -79,6 +79,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       .maybeSingle();
 
     if (existing) {
+      await syncPlayerTotalScore(db, user.id);
       const body: SubmitAnswerResponse = {
         is_correct: existing.is_correct,
         score: existing.score,
@@ -195,6 +196,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
     // Race condition: simultaneous request won the UNIQUE constraint
     if (insertErr?.code === '23505') {
+      await syncPlayerTotalScore(db, user.id);
       const { data: raceResult } = await db
         .from('answers')
         .select('is_correct, score, selected_x_ratio, selected_y_ratio')
@@ -214,10 +216,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
     if (insertErr) throw new Error(`Answer insert failed: ${insertErr.message}`);
 
-    // 13. Increment player's running total score
-    if (score > 0) {
-      await db.rpc('increment_player_score', { p_player_id: user.id, p_amount: score });
-    }
+    // 13. Sync player's running total score from authoritative answers data.
+    await syncPlayerTotalScore(db, user.id);
 
     // 14. Return result — never includes mask path or mask data
     const responseBody: SubmitAnswerResponse = {
@@ -236,4 +236,24 @@ Deno.serve(async (req: Request): Promise<Response> => {
 function err(status: number, code: string, field?: string): Response {
   const body: ErrorResponse = { error: code, ...(field ? { field } : {}) };
   return Response.json(body, { status, headers: corsHeaders });
+}
+
+async function syncPlayerTotalScore(
+  db: ReturnType<typeof getSupabaseAdmin>,
+  playerId: string,
+): Promise<void> {
+  const { data: answers, error: answersErr } = await db
+    .from('answers')
+    .select('score')
+    .eq('player_id', playerId);
+
+  if (answersErr) throw new Error(`Failed to read player answers: ${answersErr.message}`);
+
+  const totalScore = (answers ?? []).reduce((sum, row) => sum + (row.score ?? 0), 0);
+  const { error: updateErr } = await db
+    .from('players')
+    .update({ total_score: totalScore })
+    .eq('id', playerId);
+
+  if (updateErr) throw new Error(`Failed to sync player total score: ${updateErr.message}`);
 }

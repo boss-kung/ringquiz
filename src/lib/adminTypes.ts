@@ -17,6 +17,7 @@ export type AdminQuestionActionName =
   | 'set_active_game_set'
   | 'list_game_set_questions'
   | 'add_question_to_game_set'
+  | 'bulk_add_questions_to_game_set'
   | 'remove_game_set_question'
   | 'update_game_set_question'
   | 'reorder_game_set_questions'
@@ -67,6 +68,7 @@ export interface AdminQuestionRequest {
   // Game set fields
   game_set_id?: string;
   game_set_question_id?: string;
+  question_ids?: string[];
   name?: string;
   play_order?: number;
   time_limit_seconds?: number;

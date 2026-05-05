@@ -6,7 +6,8 @@ import { LEADERBOARD_VISIBLE_ROWS } from '../lib/constants';
 
 /**
  * Fetches the leaderboard snapshot when status is 'leaderboard' or 'ended'.
- * Only fetches if we don't already have entries for the current question.
+ * Always refreshes for the current question so late snapshot writes and
+ * recomputes do not leave stale leaderboard rows on screen.
  */
 export function useLeaderboard() {
   const status = useGameStore((s) => s.gameState?.status);
