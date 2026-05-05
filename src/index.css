@@ -1231,6 +1231,162 @@ body.host-route {
   flex-shrink: 0;
 }
 
+/* ── NEW PLAYER HIGHLIGHT ──────────────────────────────────────────────────── */
+.ds-player-chip {
+  transition: border-color .5s ease, background .5s ease, box-shadow .5s ease;
+}
+.ds-player-chip.ds-player-new {
+  border-color: rgba(245,199,74,.65);
+  background: rgba(245,199,74,.1);
+  box-shadow: 0 0 12px rgba(245,199,74,.25);
+}
+.ds-overflow-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 14px;
+  border-radius: 999px;
+  border: 1px dashed rgba(245,199,74,.3);
+  background: rgba(245,199,74,.05);
+  font-size: clamp(11px,1.2vw,14px);
+  font-weight: 700;
+  color: var(--gold);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* ── CONNECTION BADGE ──────────────────────────────────────────────────────── */
+.ds-conn-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  font: 700 clamp(9px,1vw,12px)/1 var(--font-sans);
+  letter-spacing: .08em;
+}
+.ds-conn-badge.ds-conn-ok {
+  background: rgba(52,211,153,.1);
+  border: 1px solid rgba(52,211,153,.3);
+  color: var(--emerald);
+}
+.ds-conn-badge.ds-conn-warn {
+  background: rgba(245,158,11,.1);
+  border: 1px solid rgba(245,158,11,.3);
+  color: #F5A623;
+  animation: grBlink 1.4s ease-in-out infinite;
+}
+.ds-conn-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+/* ── IMAGE STAGE (reusable golden-ring image container) ────────────────────── */
+.ds-img-stage {
+  width: 100%;
+  max-width: clamp(260px,55vh,680px);
+  border-radius: 20px;
+  overflow: hidden;
+  border: 2px solid rgba(245,199,74,.3);
+  box-shadow: 0 0 0 4px rgba(245,199,74,.06), 0 8px 40px rgba(0,0,0,.5);
+  background: #050810;
+  flex-shrink: 0;
+}
+.ds-img-stage-full {
+  max-width: clamp(320px,65vh,820px);
+}
+.ds-img-stage-inner {
+  position: relative;
+  width: 100%;
+}
+.ds-img-base {
+  position: absolute;
+  inset: 0;
+  width: 100%; height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.ds-img-reveal {
+  position: absolute;
+  inset: 0;
+  width: 100%; height: 100%;
+  object-fit: cover;
+  display: block;
+  opacity: 0;
+  transition: opacity 1.4s ease;
+}
+.ds-img-reveal.ds-img-reveal-visible { opacity: 1; }
+.ds-img-mask {
+  position: absolute;
+  inset: 0;
+  width: 100%; height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+  transition: opacity 1.4s ease;
+}
+.ds-img-mask.ds-img-mask-hidden { opacity: 0 !important; animation: none !important; }
+
+/* ── LOBBY ENHANCEMENTS ────────────────────────────────────────────────────── */
+.ds-lobby-badges {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.ds-lobby-player-count-hero {
+  font: 900 clamp(52px,8vw,100px)/1 var(--font-mono);
+  color: var(--gold);
+  text-align: center;
+  text-shadow: 0 0 40px rgba(245,199,74,.35);
+}
+.ds-lobby-player-count-label {
+  font: 700 clamp(10px,1.1vw,13px)/1 var(--font-sans);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  text-align: center;
+}
+.ds-qr-img-lg {
+  width: clamp(160px,22vw,280px);
+  height: clamp(160px,22vw,280px);
+  border-radius: 10px;
+}
+
+/* ── PODIUM ENTRANCE ANIMATION ──────────────────────────────────────────────── */
+@keyframes dsPodIn {
+  from { opacity: 0; transform: translateY(28px) scale(.95); }
+  to   { opacity: 1; transform: none; }
+}
+.ds-podium-slot { animation: dsPodIn .55s ease-out both; }
+
+/* ── LEADERBOARD ROW — rank 1 gold highlight ─────────────────────────────── */
+.ds-lb-row.ds-lb-row-gold {
+  background: rgba(245,199,74,.08);
+  border-color: rgba(245,199,74,.2);
+}
+.ds-lb-row.ds-lb-row-gold .ds-lb-rank { color: var(--gold); }
+
+/* ── REVEAL PHASE LAYOUT ───────────────────────────────────────────────────── */
+.ds-reveal-layout {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 3vw;
+  min-height: 0;
+  align-items: center;
+}
+.ds-reveal-left {
+  display: flex;
+  flex-direction: column;
+  gap: 2vh;
+  min-width: 0;
+}
+.ds-reveal-right {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════════
    PLAYER WAITING — Practice zone  (pw- prefix)
    ═══════════════════════════════════════════════════════════════════════════════ */
