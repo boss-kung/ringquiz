@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { useGameStore } from '../store/gameStore';
+import { triggerFeedbackFx } from '../lib/feedbackFx';
 
 const PLAYER_ID_KEY = 'quiz_player_id';
 const DISPLAY_NAME_KEY = 'quiz_display_name';
@@ -51,6 +52,7 @@ export function usePlayerSession() {
         }
 
         setSession(userId, displayName);
+        window.setTimeout(() => triggerFeedbackFx('joinSuccess'), 0);
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Failed to join. Try again.');
       } finally {

@@ -2033,6 +2033,122 @@ body.host-route {
   line-height: 1.5;
 }
 
+/* Player feedback FX layer */
+@keyframes fxScreenFlash {
+  0% { opacity: 0; }
+  18% { opacity: 1; }
+  100% { opacity: 0; }
+}
+@keyframes fxAnswerRipple {
+  0% { opacity: .9; transform: translate(-50%, -50%) scale(.2); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1); }
+}
+@keyframes fxLockPulse {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(.7); }
+  35% { opacity: .9; transform: translate(-50%, -50%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1.25); }
+}
+@keyframes fxShakeSoft {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  20% { transform: translate3d(-6px, 0, 0); }
+  40% { transform: translate3d(6px, 0, 0); }
+  60% { transform: translate3d(-4px, 0, 0); }
+  80% { transform: translate3d(4px, 0, 0); }
+}
+@keyframes fxBurstParticle {
+  0% { opacity: 0; transform: rotate(var(--fx-angle)) translateY(0) scale(.3); }
+  10% { opacity: 1; }
+  100% { opacity: 0; transform: rotate(var(--fx-angle)) translateY(-84px) scale(1); }
+}
+
+.fx-layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 80;
+  overflow: hidden;
+}
+.fx-shake-countdown,
+.fx-shake-timeout {
+  animation: fxShakeSoft .42s ease-out both;
+}
+.fx-screen-flash {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  animation: fxScreenFlash .48s ease-out both;
+}
+.fx-screen-flash-gold { background: radial-gradient(circle at center, rgba(245,199,74,.16), rgba(245,199,74,0) 62%); }
+.fx-screen-flash-correct { background: radial-gradient(circle at center, rgba(52,211,153,.22), rgba(52,211,153,0) 62%); }
+.fx-screen-flash-wrong { background: radial-gradient(circle at center, rgba(248,113,113,.18), rgba(248,113,113,0) 62%); }
+.fx-screen-flash-timeout { background: radial-gradient(circle at center, rgba(251,191,36,.18), rgba(244,63,94,0) 66%); }
+.fx-screen-flash-reveal { background: radial-gradient(circle at center, rgba(129,140,248,.18), rgba(245,199,74,0) 68%); }
+.fx-answer-ripple {
+  position: absolute;
+  width: 96px;
+  height: 96px;
+  border-radius: 999px;
+  border: 2px solid rgba(245,199,74,.8);
+  box-shadow: 0 0 0 8px rgba(245,199,74,.08);
+  animation: fxAnswerRipple .56s ease-out both;
+}
+.fx-lock-pulse {
+  position: absolute;
+  left: 50%;
+  bottom: 12%;
+  width: 140px;
+  height: 140px;
+  border-radius: 999px;
+  border: 2px solid rgba(245,199,74,.7);
+  background: radial-gradient(circle, rgba(245,199,74,.18), rgba(245,199,74,0) 65%);
+  animation: fxLockPulse .52s ease-out both;
+}
+.fx-correct-burst,
+.fx-wrong-pulse,
+.fx-timeout-pulse {
+  position: absolute;
+  left: 50%;
+  top: 28%;
+  width: 0;
+  height: 0;
+}
+.fx-burst-particle {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 12px;
+  height: 28px;
+  border-radius: 999px;
+  transform-origin: center bottom;
+  animation: fxBurstParticle .95s ease-out both;
+  background: linear-gradient(180deg, rgba(255,248,196,.96), rgba(245,199,74,.18));
+  box-shadow: 0 0 12px rgba(245,199,74,.36);
+}
+.fx-wrong-pulse .fx-burst-particle {
+  background: linear-gradient(180deg, rgba(254,202,202,.95), rgba(248,113,113,.16));
+  box-shadow: 0 0 10px rgba(248,113,113,.28);
+}
+.fx-timeout-pulse .fx-burst-particle {
+  background: linear-gradient(180deg, rgba(254,240,138,.95), rgba(251,191,36,.16));
+  box-shadow: 0 0 10px rgba(251,191,36,.28);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fx-layer,
+  .fx-layer * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  .fx-answer-ripple,
+  .fx-lock-pulse,
+  .fx-correct-burst,
+  .fx-wrong-pulse,
+  .fx-timeout-pulse {
+    display: none;
+  }
+}
+
 @media (max-width: 520px) {
   .pw-practice-head {
     flex-direction: column;

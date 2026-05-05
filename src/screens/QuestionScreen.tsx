@@ -6,6 +6,7 @@ import { QuestionImage } from '../components/QuestionImage';
 import { Timer } from '../components/Timer';
 import { resolveQuestionImageUrl } from '../lib/questionAssets';
 import type { CirclePosition } from '../lib/types';
+import { triggerFeedbackFx, unlockFeedbackAudio } from '../lib/feedbackFx';
 
 export function QuestionScreen() {
   const question = useGameStore((s) => s.question);
@@ -31,6 +32,12 @@ export function QuestionScreen() {
     return () => clearInterval(id);
   }, [endsAt, getServerTime]);
 
+  useEffect(() => {
+    if (timeExpired && !submitted) {
+      triggerFeedbackFx('timeout');
+    }
+  }, [timeExpired, submitted]);
+
   if (!question) {
     return (
       <div style={{ display: 'flex', minHeight: '100%', alignItems: 'center', justifyContent: 'center', background: 'var(--navy)' }}>
@@ -45,6 +52,11 @@ export function QuestionScreen() {
 
   const handleCircleChange = (pos: CirclePosition) => {
     if (!isLocked) setCirclePosition(pos);
+  };
+
+  const handleInteractionStart = (clientX: number, clientY: number) => {
+    void unlockFeedbackAudio();
+    triggerFeedbackFx('answerTap', { clientX, clientY });
   };
 
   return (
@@ -75,6 +87,7 @@ export function QuestionScreen() {
             circleRadiusRatio={question.circle_radius_ratio}
             circle={circlePosition}
             onCircleChange={handleCircleChange}
+            onInteractionStart={handleInteractionStart}
             locked={isLocked}
             shellClassName="quiz-image-shell--question"
           />

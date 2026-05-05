@@ -7,7 +7,9 @@ import { useExistingAnswer } from './hooks/useExistingAnswer';
 import { useSessionRestore } from './hooks/useSessionRestore';
 import { useSessionVersionCheck } from './hooks/useSessionVersionCheck';
 import { useSaveSessionVersion } from './hooks/useSaveSessionVersion';
+import { usePlayerFeedbackFx } from './hooks/usePlayerFeedbackFx';
 import { getAppPath, isDisplayPath, isHostPath } from './lib/routing';
+import { FeedbackFxLayer } from './components/FeedbackFxLayer';
 import { JoinScreen } from './screens/JoinScreen';
 import { WaitingScreen } from './screens/WaitingScreen';
 import { CountdownScreen } from './screens/CountdownScreen';
@@ -43,6 +45,7 @@ function PlayerApp() {
   useExistingAnswer();
   useSessionVersionCheck();
   useSaveSessionVersion();
+  usePlayerFeedbackFx();
 
   const isJoined = useGameStore((s) => s.isJoined);
   const gameState = useGameStore((s) => s.gameState);
@@ -56,24 +59,51 @@ function PlayerApp() {
     );
   }
 
-  if (!isJoined) return <JoinScreen />;
+  if (!isJoined) return <>
+    <FeedbackFxLayer />
+    <JoinScreen />
+  </>;
 
   // Game state drives which screen to show
   const status = gameState?.status;
 
-  if (!status || status === 'waiting') return <WaitingScreen />;
-  if (status === 'countdown') return <CountdownScreen />;
+  if (!status || status === 'waiting') return <>
+    <FeedbackFxLayer />
+    <WaitingScreen />
+  </>;
+  if (status === 'countdown') return <>
+    <FeedbackFxLayer />
+    <CountdownScreen />
+  </>;
 
   if (status === 'question_open') {
     // Show locked screen if player already submitted this question
-    return submitted ? <LockedScreen /> : <QuestionScreen />;
+    return <>
+      <FeedbackFxLayer />
+      {submitted ? <LockedScreen /> : <QuestionScreen />}
+    </>;
   }
 
-  if (status === 'question_closed') return <LockedScreen />;
-  if (status === 'reveal') return <RevealScreen />;
-  if (status === 'leaderboard') return <LeaderboardScreen />;
-  if (status === 'ended') return <EndScreen />;
+  if (status === 'question_closed') return <>
+    <FeedbackFxLayer />
+    <LockedScreen />
+  </>;
+  if (status === 'reveal') return <>
+    <FeedbackFxLayer />
+    <RevealScreen />
+  </>;
+  if (status === 'leaderboard') return <>
+    <FeedbackFxLayer />
+    <LeaderboardScreen />
+  </>;
+  if (status === 'ended') return <>
+    <FeedbackFxLayer />
+    <EndScreen />
+  </>;
 
   // Fallback — unknown status
-  return <WaitingScreen />;
+  return <>
+    <FeedbackFxLayer />
+    <WaitingScreen />
+  </>;
 }

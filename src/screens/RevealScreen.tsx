@@ -5,6 +5,7 @@ import { useGetServerTime } from '../hooks/useServerTime';
 import { QuestionImage } from '../components/QuestionImage';
 import { FUNCTIONS_URL } from '../lib/supabase';
 import { resolveQuestionImageUrl, resolveRevealImageUrl } from '../lib/questionAssets';
+import { triggerFeedbackFx } from '../lib/feedbackFx';
 
 export function RevealScreen() {
   useRevealResult();
@@ -29,6 +30,11 @@ export function RevealScreen() {
     const id = setInterval(syncRevealPhase, 200);
     return () => clearInterval(id);
   }, [revealStartedAt, getServerTime, question?.id]);
+
+  useEffect(() => {
+    if (!revealResult) return;
+    triggerFeedbackFx(revealResult.is_correct ? 'answerCorrect' : 'answerWrong');
+  }, [revealResult?.is_correct, revealResult?.score]);
 
   if (!question) {
     return (

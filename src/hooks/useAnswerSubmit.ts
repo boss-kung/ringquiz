@@ -2,6 +2,7 @@ import { useState, useCallback, useRef } from 'react';
 import { supabase, FUNCTIONS_URL } from '../lib/supabase';
 import { useGameStore } from '../store/gameStore';
 import type { SubmitAnswerRequest, SubmitAnswerResponse, EdgeFunctionError } from '../lib/types';
+import { triggerFeedbackFx, unlockFeedbackAudio } from '../lib/feedbackFx';
 
 
 /**
@@ -26,6 +27,7 @@ export function useAnswerSubmit() {
     setSubmitError(null);
 
     try {
+      await unlockFeedbackAudio();
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         setSubmitError('Not authenticated. Please refresh and rejoin.');
@@ -78,6 +80,7 @@ export function useAnswerSubmit() {
         });
       }
       setSubmitResult(result);
+      triggerFeedbackFx('answerLocked');
     } catch {
       setSubmitError('Network error. Please check your connection and try again.');
     } finally {

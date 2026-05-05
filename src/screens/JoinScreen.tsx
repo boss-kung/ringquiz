@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { usePlayerSession } from '../hooks/usePlayerSession';
 import { DISPLAY_NAME_MAX_LENGTH, DISPLAY_NAME_MIN_LENGTH } from '../lib/constants';
+import { unlockFeedbackAudio } from '../lib/feedbackFx';
 
 function RingMark({ size = 96 }: { size?: number }) {
   const r1 = size * 0.45, r2 = size * 0.38, r3 = size * 0.31;
@@ -27,9 +28,11 @@ export function JoinScreen() {
 
   const canSubmit = name.trim().length >= DISPLAY_NAME_MIN_LENGTH && !loading;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (canSubmit) join(name.trim());
+    if (!canSubmit) return;
+    await unlockFeedbackAudio();
+    join(name.trim());
   };
 
   return (

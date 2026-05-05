@@ -7,6 +7,7 @@ interface Props {
   circleRadiusRatio: number;
   circle: CirclePosition | null;
   onCircleChange: (pos: CirclePosition) => void;
+  onInteractionStart?: (clientX: number, clientY: number) => void;
   locked: boolean;
   revealCircle?: CirclePosition | null;
   maskOverlayUrl?: string;
@@ -65,6 +66,7 @@ export function QuestionImage({
   circleRadiusRatio,
   circle,
   onCircleChange,
+  onInteractionStart,
   locked,
   revealCircle,
   maskOverlayUrl,
@@ -122,12 +124,13 @@ export function QuestionImage({
 
     e.currentTarget.setPointerCapture(e.pointerId);
     isDragging.current = true;
+    onInteractionStart?.(e.clientX, e.clientY);
 
     const pos = coordsFromEvent(e.clientX, e.clientY);
     if (pos) {
       onCircleChange(pos);
     }
-  }, [locked, coordsFromEvent, onCircleChange]);
+  }, [locked, coordsFromEvent, onCircleChange, onInteractionStart]);
 
   const handlePointerMove = useCallback((e: ReactPointerEvent<HTMLImageElement>) => {
     if (!isDragging.current || locked) {
