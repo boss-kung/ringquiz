@@ -41,6 +41,7 @@ export function QuestionScreen() {
 
   const isLocked = submitted || submitting;
   const canSubmit = Boolean(circlePosition) && !isLocked && !timeExpired;
+  const questionImageUrl = resolveQuestionImageUrl(question.image_url);
 
   const handleCircleChange = (pos: CirclePosition) => {
     if (!isLocked) setCirclePosition(pos);
@@ -70,7 +71,7 @@ export function QuestionScreen() {
       <div style={{ flex: 1, minHeight: 0, padding: '6px 16px' }}>
         <div className="quiz-image-stage">
           <QuestionImage
-            imageUrl={resolveQuestionImageUrl(question.image_url)}
+            imageUrl={questionImageUrl}
             circleRadiusRatio={question.circle_radius_ratio}
             circle={circlePosition}
             onCircleChange={handleCircleChange}

@@ -42,7 +42,7 @@ export function RevealScreen() {
   const originalQuestionImage = resolveQuestionImageUrl(question.image_url);
   const revealBaseImage =
     resolveRevealImageUrl(question.reveal_image_url) ??
-    resolveQuestionImageUrl(question.image_url);
+    originalQuestionImage;
   const revealCircle =
     revealResult?.selected_x_ratio != null && revealResult?.selected_y_ratio != null
       ? { xRatio: revealResult.selected_x_ratio, yRatio: revealResult.selected_y_ratio }

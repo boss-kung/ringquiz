@@ -390,7 +390,7 @@ export function GameSetManager({ secret, onStatsChanged }: { secret: string; onS
             next.has(id) ? next.delete(id) : next.add(id);
             return next;
           })}
-          onSelectAll={() => setSelectedBankIds(new Set(bankQuestions.map((q) => q.id)))}
+          onSelectAll={() => setSelectedBankIds(new Set(bankQuestions.filter((q) => q.is_published).map((q) => q.id)))}
           onClearAll={() => setSelectedBankIds(new Set())}
           onAdd={handleAddSelected}
           onBack={() => setView('set_detail')}
@@ -422,12 +422,26 @@ function GameSetsListView({
   onDeleteSet: (id: string) => void;
   onRefresh: () => void;
 }) {
+  const activeSet = gameSets.find((gameSet) => gameSet.status === 'active') ?? null;
   return (
     <>
       {/* Create new */}
       <div className="gr-card-strong" style={{ padding: 16 }}>
-        <div className="gr-label-xs" style={{ marginBottom: 10 }}>Create New Game Set</div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ marginBottom: 12 }}>
+          <div className="gr-label-xs" style={{ marginBottom: 6 }}>Game Setup</div>
+          <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--text)', marginBottom: 4 }}>Create and prepare playable question sets</div>
+          <div style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.6 }}>
+            Build sets from published bank questions, activate one set, then use Host Game Flow to run the live session.
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', marginBottom: 14 }}>
+          <SetupStat label="Total sets" value={String(gameSets.length)} />
+          <SetupStat label="Active set" value={activeSet?.name ?? 'None'} />
+          <SetupStat label="Ready sets" value={String(gameSets.filter((set) => set.enabled_question_count > 0).length)} />
+        </div>
+
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <input
             ref={nameInputRef}
             value={newSetName}
@@ -435,16 +449,20 @@ function GameSetsListView({
             onKeyDown={(e) => e.key === 'Enter' && onCreateSet()}
             placeholder="Game Set name…"
             className="gr-input"
-            style={{ flex: 1, fontSize: 13 }}
+            aria-label="Game set name"
+            style={{ flex: '1 1 260px', fontSize: 13 }}
           />
           <button
             onClick={onCreateSet}
-            disabled={busy === 'create'}
+            disabled={busy === 'create' || !newSetName.trim()}
             className="gr-btn gr-btn-gold"
-            style={{ fontSize: 13, padding: '10px 16px', flexShrink: 0 }}
+            style={{ fontSize: 13, padding: '10px 16px', flex: '0 0 auto', width: 'auto', minWidth: 140 }}
           >
             {busy === 'create' ? '…' : '+ Create'}
           </button>
+        </div>
+        <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 8 }}>
+          Give each set a clear event-facing name so the active setup is easy to verify before starting the game.
         </div>
       </div>
 
@@ -462,8 +480,9 @@ function GameSetsListView({
         </div>
 
         {gameSets.length === 0 && !loading ? (
-          <div style={{ padding: '20px 14px', textAlign: 'center', fontSize: 13, color: 'var(--text-3)', border: '1px dashed rgba(255,255,255,.1)', borderRadius: 12 }}>
-            No Game Sets yet. Create one above.
+          <div style={{ padding: '24px 14px', textAlign: 'center', fontSize: 13, color: 'var(--text-3)', border: '1px dashed rgba(255,255,255,.1)', borderRadius: 12 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', marginBottom: 6 }}>No Game Sets yet.</div>
+            <div>Create a set above, then add questions from Question Bank.</div>
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -471,7 +490,7 @@ function GameSetsListView({
               <div
                 key={gs.id}
                 className="gr-card"
-                style={{ padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 10 }}
+                style={{ padding: '14px 14px', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}
               >
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap', marginBottom: 3 }}>
@@ -481,22 +500,25 @@ function GameSetsListView({
                   <div style={{ fontSize: 11, color: 'var(--text-3)' }}>
                     {gs.enabled_question_count}/{gs.question_count} questions enabled
                   </div>
+                  <div style={{ fontSize: 11, color: gs.enabled_question_count > 0 ? 'var(--emerald)' : 'var(--rose)', marginTop: 4 }}>
+                    {gs.enabled_question_count > 0 ? 'Ready to activate' : 'Add at least one enabled question before activation'}
+                  </div>
                 </div>
 
-                <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                <div style={{ display: 'flex', gap: 6, flexShrink: 0, flexWrap: 'wrap', width: '100%', justifyContent: 'flex-end' }}>
                   <button
                     onClick={() => onOpenSet(gs)}
                     className="gr-hbtn"
-                    style={{ fontSize: 11, padding: '6px 10px' }}
+                    style={{ fontSize: 11, padding: '6px 10px', width: 'auto' }}
                   >
                     Edit
                   </button>
                   {gs.status !== 'active' && (
                     <button
                       onClick={() => onSetActive(gs.id)}
-                      disabled={busy !== null}
+                      disabled={busy !== null || gs.enabled_question_count === 0}
                       className="gr-hbtn"
-                      style={{ fontSize: 11, padding: '6px 10px', borderColor: 'rgba(245,199,74,.3)', color: 'var(--gold)' }}
+                      style={{ fontSize: 11, padding: '6px 10px', borderColor: 'rgba(245,199,74,.3)', color: 'var(--gold)', width: 'auto' }}
                     >
                       {busy === `active-${gs.id}` ? '…' : 'Set Active'}
                     </button>
@@ -505,7 +527,7 @@ function GameSetsListView({
                     onClick={() => onConfirmDelete(gs.id)}
                     disabled={busy !== null}
                     className="gr-hbtn gr-hbtn-danger"
-                    style={{ fontSize: 11, padding: '6px 10px' }}
+                    style={{ fontSize: 11, padding: '6px 10px', width: 'auto' }}
                   >
                     ×
                   </button>
@@ -568,10 +590,12 @@ function GameSetDetailView({
   onSaveEdit: () => void;
   onCancelEdit: () => void;
 }) {
+  const readyCount = questions.filter((question) => question.is_enabled).length;
+  const canActivate = readyCount > 0;
   return (
     <>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
         <button
           onClick={onBack}
           style={{ fontSize: 13, color: 'var(--text-3)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--font-sans)', padding: 0 }}
@@ -590,9 +614,9 @@ function GameSetDetailView({
         {gameSet.status !== 'active' && (
           <button
             onClick={onSetActive}
-            disabled={busy !== null}
+            disabled={busy !== null || !canActivate}
             className="gr-btn gr-btn-gold"
-            style={{ fontSize: 12, padding: '8px 14px', flexShrink: 0 }}
+            style={{ fontSize: 12, padding: '8px 14px', flexShrink: 0, width: 'auto' }}
           >
             {busy?.startsWith('active') ? '…' : 'Set Active'}
           </button>
@@ -606,13 +630,25 @@ function GameSetDetailView({
         </div>
       )}
 
+      <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}>
+        <SetupStat label="Enabled questions" value={`${readyCount}/${questions.length || 0}`} />
+        <SetupStat label="Ready to activate" value={canActivate ? 'Yes' : 'No'} tone={canActivate ? 'good' : 'warning'} />
+        <SetupStat label="Live status" value={gameSet.status} tone={gameSet.status === 'active' ? 'good' : 'neutral'} />
+      </div>
+
+      {!canActivate && (
+        <div style={{ padding: '10px 14px', borderRadius: 10, fontSize: 12, background: 'rgba(251,113,133,.08)', border: '1px solid rgba(251,113,133,.22)', color: 'var(--rose)' }}>
+          This Game Set cannot be activated yet. Add at least one question and keep it enabled.
+        </div>
+      )}
+
       {/* Toolbar */}
-      <div style={{ display: 'flex', gap: 8 }}>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <button
           onClick={onOpenPicker}
           disabled={busy !== null}
           className="gr-btn gr-btn-gold"
-          style={{ fontSize: 12, padding: '9px 14px' }}
+          style={{ fontSize: 12, padding: '9px 14px', width: 'auto' }}
         >
           + Add Questions from Bank
         </button>
@@ -621,15 +657,16 @@ function GameSetDetailView({
       {/* Questions table */}
       {questions.length === 0 ? (
         <div style={{ padding: '24px 14px', textAlign: 'center', fontSize: 13, color: 'var(--text-3)', border: '1px dashed rgba(255,255,255,.1)', borderRadius: 12 }}>
-          No questions selected yet. Add questions from Question Bank.
+          <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', marginBottom: 6 }}>No questions selected yet.</div>
+          <div>Add questions from Question Bank to make this set playable.</div>
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, overflowX: 'auto', paddingBottom: 2 }}>
           {/* Column header */}
           <div style={{
             display: 'grid',
             gridTemplateColumns: '28px 60px 1fr 60px 70px 70px 60px 50px 80px',
-            gap: 6, padding: '6px 10px',
+            gap: 6, padding: '6px 10px', minWidth: 720,
             fontSize: 10, fontWeight: 700, letterSpacing: '.08em',
             color: 'var(--text-3)', textTransform: 'uppercase',
           }}>
@@ -657,7 +694,8 @@ function GameSetDetailView({
                   padding: '10px 10px',
                   opacity: gsq.is_enabled ? 1 : 0.5,
                   display: 'grid',
-                  gridTemplateColumns: '28px 60px 1fr 60px 70px 70px 60px 50px 80px',
+                  gridTemplateColumns: '28px 60px minmax(140px, 1fr) 60px 70px 70px 60px 50px minmax(96px, auto)',
+                  minWidth: 720,
                   gap: 6,
                   alignItems: 'center',
                 }}
@@ -668,8 +706,8 @@ function GameSetDetailView({
                 {/* Preview */}
                 <div style={{ width: 52, height: 36, borderRadius: 7, overflow: 'hidden', background: 'rgba(0,0,0,.4)', flexShrink: 0 }}>
                   <img
-                    src={resolveQuestionImageUrl(gsq.question_image_url)}
-                    alt=""
+                    src={resolveQuestionImageUrl(gsq.question_image_url) ?? undefined}
+                    alt={gsq.question_text}
                     style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                   />
                 </div>
@@ -763,6 +801,7 @@ function QuestionPickerView({
   onAdd: () => void;
   onBack: () => void;
 }) {
+  const availableQuestions = questions.filter((question) => question.is_published);
   return (
     <>
       {/* Header */}
@@ -781,14 +820,18 @@ function QuestionPickerView({
         </span>
       </div>
 
+      <div style={{ padding: '10px 14px', borderRadius: 10, fontSize: 12, background: 'rgba(99,102,241,.08)', border: '1px solid rgba(99,102,241,.18)', color: 'var(--text-2)' }}>
+        Only published questions are shown here so the host cannot accidentally build a live set from incomplete bank entries.
+      </div>
+
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        <button onClick={onSelectAll} className="gr-hbtn" style={{ fontSize: 11, padding: '6px 10px' }}>Select All</button>
-        <button onClick={onClearAll} className="gr-hbtn" style={{ fontSize: 11, padding: '6px 10px' }}>Clear</button>
+        <button onClick={onSelectAll} disabled={availableQuestions.length === 0} className="gr-hbtn" style={{ fontSize: 11, padding: '6px 10px', width: 'auto' }}>Select All</button>
+        <button onClick={onClearAll} disabled={selectedIds.size === 0} className="gr-hbtn" style={{ fontSize: 11, padding: '6px 10px', width: 'auto' }}>Clear</button>
         <button
           onClick={onAdd}
           disabled={selectedIds.size === 0 || busy === 'add-questions'}
           className="gr-btn gr-btn-gold"
-          style={{ fontSize: 12, padding: '8px 14px', marginLeft: 'auto' }}
+          style={{ fontSize: 12, padding: '8px 14px', marginLeft: 'auto', width: 'auto' }}
         >
           {busy === 'add-questions' ? 'Adding…' : `Add ${selectedIds.size > 0 ? selectedIds.size : ''} to Game Set`}
         </button>
@@ -799,8 +842,13 @@ function QuestionPickerView({
       </div>
 
       {/* Question list */}
+      {availableQuestions.length === 0 ? (
+        <div style={{ padding: '24px 14px', textAlign: 'center', fontSize: 13, color: 'var(--text-3)', border: '1px dashed rgba(255,255,255,.1)', borderRadius: 12 }}>
+          No published questions are available yet. Publish questions in Question Bank first.
+        </div>
+      ) : (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {questions.map((q) => {
+        {availableQuestions.map((q) => {
           const selected = selectedIds.has(q.id);
           return (
             <button
@@ -820,13 +868,13 @@ function QuestionPickerView({
                 {selected ? '☑' : '☐'}
               </span>
               <div style={{ width: 52, height: 36, borderRadius: 7, overflow: 'hidden', background: 'rgba(0,0,0,.4)' }}>
-                <img src={resolveQuestionImageUrl(q.image_url)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                <img src={resolveQuestionImageUrl(q.image_url) ?? undefined} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               </div>
               <div>
                 <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', lineHeight: 1.4, marginBottom: 2 }}>{q.text}</div>
                 <div style={{ fontSize: 10, color: 'var(--text-3)' }}>
                   {q.time_limit_seconds}s · {q.max_score} pts · circle {q.circle_radius_ratio}
-                  {!q.is_published && ' · draft'}
+                  {q.reveal_image_url ? ' · reveal ready' : ' · no reveal'}
                 </div>
               </div>
               <span style={{ fontSize: 10, color: 'var(--text-3)', fontFamily: 'var(--font-mono)' }}>
@@ -836,6 +884,7 @@ function QuestionPickerView({
           );
         })}
       </div>
+      )}
     </>
   );
 }
@@ -857,6 +906,30 @@ function StatusBadge({ status }: { status: string }) {
     }}>
       {status}
     </span>
+  );
+}
+
+function SetupStat({
+  label,
+  value,
+  tone = 'neutral',
+}: {
+  label: string;
+  value: string;
+  tone?: 'neutral' | 'good' | 'warning';
+}) {
+  const color =
+    tone === 'good'
+      ? 'var(--emerald)'
+      : tone === 'warning'
+        ? 'var(--rose)'
+        : 'var(--text)';
+
+  return (
+    <div style={{ padding: '11px 12px', borderRadius: 12, border: '1px solid rgba(255,255,255,.07)', background: 'rgba(255,255,255,.03)' }}>
+      <div className="gr-label-xs" style={{ marginBottom: 6 }}>{label}</div>
+      <div style={{ fontSize: 13, fontWeight: 700, color, wordBreak: 'break-word' }}>{value}</div>
+    </div>
   );
 }
 

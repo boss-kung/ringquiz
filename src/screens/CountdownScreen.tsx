@@ -159,7 +159,7 @@ export function CountdownScreen() {
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center' }}>
               <div className="gr-label-sm gr-gold" style={{ letterSpacing: '.14em' }}>ภาพปริศนา</div>
-              {clueImageUrl && (
+              {clueImageUrl ? (
                 <div className="quiz-image-shell quiz-image-shell--clue">
                   <div className="quiz-image-circle">
                     <img
@@ -169,6 +169,10 @@ export function CountdownScreen() {
                       draggable={false}
                     />
                   </div>
+                </div>
+              ) : (
+                <div className="gr-card" style={{ padding: '16px 18px', color: 'var(--text-2)', fontSize: 13 }}>
+                  ไม่มีภาพปริศนาสำหรับคำถามนี้
                 </div>
               )}
               <p style={{ fontSize: 12, color: 'var(--text-2)' }}>ดูภาพให้ดีก่อนตอบ</p>

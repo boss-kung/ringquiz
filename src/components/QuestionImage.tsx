@@ -3,7 +3,7 @@ import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react';
 import type { CirclePosition } from '../lib/types';
 
 interface Props {
-  imageUrl: string;
+  imageUrl: string | null;
   circleRadiusRatio: number;
   circle: CirclePosition | null;
   onCircleChange: (pos: CirclePosition) => void;
@@ -27,11 +27,17 @@ export function QuestionImage({
 }: Props) {
   const imgRef = useRef<HTMLImageElement>(null);
   const [renderedWidth, setRenderedWidth] = useState(0);
+  const [loadFailed, setLoadFailed] = useState(false);
   const isDragging = useRef(false);
 
   useEffect(() => {
+    setLoadFailed(false);
+  }, [imageUrl]);
+
+  useEffect(() => {
     const img = imgRef.current;
-    if (!img) {
+    if (!img || !imageUrl || loadFailed) {
+      setRenderedWidth(0);
       return;
     }
 
@@ -94,6 +100,7 @@ export function QuestionImage({
   }, []);
 
   const circlePx = renderedWidth * circleRadiusRatio;
+  const canRenderImage = Boolean(imageUrl) && !loadFailed;
 
   const renderCircle = (pos: CirclePosition, style?: CSSProperties) => (
     <div
@@ -121,28 +128,51 @@ export function QuestionImage({
   return (
     <div className={wrapperClassName} style={{ touchAction: 'none' }}>
       <div className="quiz-image-circle">
-        <img
-          ref={imgRef}
-          src={imageUrl}
-          alt="Question"
-          className="quiz-image-media"
-          draggable={false}
-          onLoad={() => {
-            if (imgRef.current) {
-              setRenderedWidth(imgRef.current.getBoundingClientRect().width);
-            }
-          }}
-          onPointerDown={handlePointerDown}
-          onPointerMove={handlePointerMove}
-          onPointerUp={handlePointerUp}
-          onPointerCancel={handlePointerUp}
-          style={{
-            cursor: locked ? 'default' : 'crosshair',
-            touchAction: 'none',
-          }}
-        />
+        {canRenderImage ? (
+          <img
+            ref={imgRef}
+            src={imageUrl ?? undefined}
+            alt="Question"
+            className="quiz-image-media"
+            draggable={false}
+            onLoad={() => {
+              if (imgRef.current) {
+                setRenderedWidth(imgRef.current.getBoundingClientRect().width);
+              }
+            }}
+            onError={() => {
+              setLoadFailed(true);
+              setRenderedWidth(0);
+            }}
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerCancel={handlePointerUp}
+            style={{
+              cursor: locked ? 'default' : 'crosshair',
+              touchAction: 'none',
+            }}
+          />
+        ) : (
+          <div
+            style={{
+              width: '100%',
+              height: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '24px',
+              textAlign: 'center',
+              color: 'var(--text-2)',
+              fontSize: 14,
+              lineHeight: 1.5,
+            }}
+          >
+            ไม่มีภาพสำหรับคำถามนี้
+          </div>
+        )}
 
-        {maskOverlayUrl && (
+        {canRenderImage && maskOverlayUrl && (
           <img
             src={maskOverlayUrl}
             alt=""

@@ -41,6 +41,14 @@ function initials(name: string) {
   return name.trim().split(/\s+/).slice(0, 2).map((p) => p[0]?.toUpperCase() ?? '').join('');
 }
 
+function DsImageFallback({ message }: { message: string }) {
+  return (
+    <div className="ds-clue-img-wrap" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+      <div className="ds-muted" style={{ textAlign: 'center', maxWidth: 260 }}>{message}</div>
+    </div>
+  );
+}
+
 function sortNewest(players: Player[]): Player[] {
   return [...players].sort((a, b) => new Date(b.joined_at).getTime() - new Date(a.joined_at).getTime());
 }
@@ -501,10 +509,12 @@ function DsCountdown({
       ) : (
         <div className="ds-clue-wrap">
           <div className="ds-label ds-gold" style={{ marginBottom: 16, letterSpacing: '.2em' }}>ภาพปริศนา</div>
-          {clueUrl && (
+          {clueUrl ? (
             <div className="ds-clue-img-wrap">
               <img src={clueUrl} alt="Clue" className="ds-clue-img" />
             </div>
+          ) : (
+            <DsImageFallback message="ไม่มีภาพปริศนาสำหรับคำถามนี้" />
           )}
           <div className="ds-muted" style={{ marginTop: 16 }}>ดูภาพให้ดีก่อนตอบ</div>
         </div>
@@ -578,11 +588,15 @@ function DsQuestion({
           <div className="ds-muted" style={{ marginTop: 16 }}>กำลังรับคำตอบ...</div>
         </div>
 
-        {imgUrl && (
+        {imgUrl ? (
           <div className="ds-q-right">
             <div className="ds-q-img-wrap">
               <img src={imgUrl} alt="Question" className="ds-q-img" />
             </div>
+          </div>
+        ) : (
+          <div className="ds-q-right">
+            <DsImageFallback message="ไม่มีภาพคำถามสำหรับข้อนี้" />
           </div>
         )}
       </div>
@@ -649,6 +663,7 @@ function DsReveal({
 
   const baseImg = resolveQuestionImageUrl(question.image_url);
   const revealImg = resolveRevealImageUrl(question.reveal_image_url) ?? baseImg;
+  const activeRevealImage = showReveal ? revealImg : baseImg;
   const maskUrl = `${FUNCTIONS_URL}/get-reveal-mask?questionId=${encodeURIComponent(question.id)}&updatedAt=${encodeURIComponent(gameState.updated_at ?? '')}`;
 
   const submittedCount = stats?.submitted_count ?? 0;
@@ -664,14 +679,18 @@ function DsReveal({
 
       <div className="ds-reveal-body">
         <div className="ds-reveal-text">{question.text}</div>
-        <div className="ds-reveal-img-wrap">
-          <img
-            src={showReveal ? revealImg : baseImg}
-            alt="Reveal"
-            className="ds-reveal-img"
-          />
-          <img src={maskUrl} alt="" aria-hidden className="ds-reveal-mask reveal-mask-pulse" />
-        </div>
+        {activeRevealImage ? (
+          <div className="ds-reveal-img-wrap">
+            <img
+              src={activeRevealImage}
+              alt="Reveal"
+              className="ds-reveal-img"
+            />
+            <img src={maskUrl} alt="" aria-hidden className="ds-reveal-mask reveal-mask-pulse" />
+          </div>
+        ) : (
+          <DsImageFallback message="ไม่มีภาพสำหรับเฉลยของคำถามนี้" />
+        )}
 
         {/* Answer stats — shown once reveal is up */}
         {showReveal && submittedCount > 0 && (

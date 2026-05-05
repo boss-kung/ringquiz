@@ -566,12 +566,22 @@ export function AdminQuestionManager({ secret }: { secret: string }) {
 
   const validCount = useMemo(() => bulkPreview.filter((item) => item.valid).length, [bulkPreview]);
   const invalidCount = bulkPreview.length - validCount;
+  const publishedCount = useMemo(() => questions.filter((question) => question.is_published).length, [questions]);
+  const questionsWithReveal = useMemo(() => questions.filter((question) => Boolean(question.reveal_image_url)).length, [questions]);
+  const hasUploadedAssetPaths = !!editorForm.image_url.trim() && !!editorForm.mask_storage_path.trim();
+  const canSaveQuestion = busyAction === null && (
+    hasUploadedAssetPaths ||
+    (!!assetFiles.imageFile && !!assetFiles.maskFile)
+  );
 
   return (
     <div className="bg-slate-800 rounded-2xl border border-white/10 p-4 space-y-4">
-      <div className="space-y-1">
+      <div className="space-y-3">
         <div className="flex items-center justify-between gap-3 flex-wrap">
-          <h2 className="text-xl font-bold text-white">Question Upload</h2>
+          <div>
+            <h2 className="text-xl font-bold text-white">Question Bank</h2>
+            <p className="text-sm text-slate-400">Create, preview, validate, and publish questions before they are used in Game Setup.</p>
+          </div>
           <button
             type="button"
             onClick={() => { void loadQuestions(); }}
@@ -581,10 +591,11 @@ export function AdminQuestionManager({ secret }: { secret: string }) {
             {bankLoading ? 'Refreshing…' : 'Refresh Bank'}
           </button>
         </div>
-        <p className="text-sm text-slate-400">
-          Manual mode now supports file upload from this computer. The system reads image and mask dimensions for you,
-          and the dimension fields are kept read-only as a validation checkpoint.
-        </p>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <StatCard label="Questions" value={String(questions.length)} />
+          <StatCard label="Published" value={String(publishedCount)} tone="success" />
+          <StatCard label="With reveal" value={String(questionsWithReveal)} />
+        </div>
       </div>
 
       <div className="grid grid-cols-3 gap-2 rounded-xl bg-slate-900/50 p-1">
@@ -605,7 +616,7 @@ export function AdminQuestionManager({ secret }: { secret: string }) {
               </p>
               <p className="text-sm text-slate-400">
                 {editorMode === 'create'
-                  ? 'Upload assets, then save the question metadata.'
+                  ? 'Upload required assets first, then review gameplay settings before saving.'
                   : 'Update text/timing/score, or upload replacement assets before saving.'}
               </p>
             </div>
@@ -620,10 +631,17 @@ export function AdminQuestionManager({ secret }: { secret: string }) {
             )}
           </div>
 
+          <div className="grid gap-3 md:grid-cols-3">
+            <StatCard label="Text" value={editorForm.text.trim() ? 'Ready' : 'Missing'} tone={editorForm.text.trim() ? 'success' : 'error'} />
+            <StatCard label="Image + Mask" value={hasUploadedAssetPaths || (!!assetFiles.imageFile && !!assetFiles.maskFile) ? 'Ready' : 'Missing'} tone={hasUploadedAssetPaths || (!!assetFiles.imageFile && !!assetFiles.maskFile) ? 'success' : 'error'} />
+            <StatCard label="Save status" value={canSaveQuestion ? 'Ready' : 'Blocked'} tone={canSaveQuestion ? 'success' : 'error'} />
+          </div>
+
           <div className="grid gap-4 md:grid-cols-2">
             <FieldBlock
               label="Question Text"
               error={editorErrors.text}
+              helperText="Short, clear instruction shown during gameplay."
               fullWidth
               input={(
                 <textarea
@@ -637,22 +655,26 @@ export function AdminQuestionManager({ secret }: { secret: string }) {
             />
             <FilePicker
               label="Question image"
+              helperText="Required. This is the image players see."
               file={assetFiles.imageFile}
               onChange={(event) => handleFileInputChange('imageFile', event)}
             />
             <FilePicker
               label="Mask image"
+              helperText="Required. Must match the question image dimensions."
               file={assetFiles.maskFile}
               onChange={(event) => handleFileInputChange('maskFile', event)}
             />
             <FilePicker
               label="Reveal image (optional)"
+              helperText="Optional polished reveal/clue image."
               file={assetFiles.revealFile}
               onChange={(event) => handleFileInputChange('revealFile', event)}
             />
             <FieldBlock
               label="Uploaded image path"
               error={editorErrors.image_url}
+              helperText="Filled automatically after a successful upload."
               fullWidth
               input={(
                 <input
@@ -666,6 +688,7 @@ export function AdminQuestionManager({ secret }: { secret: string }) {
             <FieldBlock
               label="Mask storage path"
               error={editorErrors.mask_storage_path}
+              helperText="Filled automatically after a successful upload."
               fullWidth
               input={(
                 <input
@@ -679,6 +702,7 @@ export function AdminQuestionManager({ secret }: { secret: string }) {
             <FieldBlock
               label="Reveal image path"
               error={editorErrors.reveal_image_url}
+              helperText="Optional."
               fullWidth
               input={(
                 <input
@@ -692,6 +716,7 @@ export function AdminQuestionManager({ secret }: { secret: string }) {
             <FieldBlock
               label="Circle radius ratio"
               error={editorErrors.circle_radius_ratio}
+              helperText="Larger values make the correct area easier to hit."
               input={(
                 <input
                   value={editorForm.circle_radius_ratio}
@@ -704,6 +729,7 @@ export function AdminQuestionManager({ secret }: { secret: string }) {
             <FieldBlock
               label="Time limit (seconds)"
               error={editorErrors.time_limit_seconds}
+              helperText="How long players can answer before lock."
               input={(
                 <input
                   value={editorForm.time_limit_seconds}
@@ -716,6 +742,7 @@ export function AdminQuestionManager({ secret }: { secret: string }) {
             <FieldBlock
               label="Max score"
               error={editorErrors.max_score}
+              helperText="Highest score for a fast correct answer."
               input={(
                 <input
                   value={editorForm.max_score}
@@ -728,6 +755,7 @@ export function AdminQuestionManager({ secret }: { secret: string }) {
             <FieldBlock
               label="Minimum correct score"
               error={editorErrors.min_correct_score}
+              helperText="Lowest score still awarded for a correct answer."
               input={(
                 <input
                   value={editorForm.min_correct_score}
@@ -788,6 +816,7 @@ export function AdminQuestionManager({ secret }: { secret: string }) {
             <FieldBlock
               label="Order index (optional)"
               error={editorErrors.order_index}
+              helperText={editorMode === 'create' ? 'Leave blank to append this question to the end of the bank.' : 'Only change this if you need a specific bank order.'}
               input={(
                 <input
                   value={editorForm.order_index}
@@ -820,7 +849,7 @@ export function AdminQuestionManager({ secret }: { secret: string }) {
             <button
               type="button"
               onClick={() => { void handleSaveQuestion(); }}
-              disabled={busyAction !== null}
+              disabled={!canSaveQuestion}
               className="rounded-xl bg-indigo-600 px-4 py-3 font-bold text-white disabled:opacity-50"
             >
               {busyAction === 'question-save'
@@ -937,13 +966,23 @@ export function AdminQuestionManager({ secret }: { secret: string }) {
           {bankError && <FeedbackBox tone="error" message={bankError} />}
           {bankMessage && <FeedbackBox tone="success" message={bankMessage} />}
 
+          <div className="rounded-xl border border-white/10 bg-slate-900/40 px-4 py-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-slate-200">{questions.length} total</span>
+              <span className="rounded-full bg-emerald-500/20 px-3 py-1 text-xs font-semibold text-emerald-200">{publishedCount} published</span>
+              <span className="rounded-full bg-amber-500/20 px-3 py-1 text-xs font-semibold text-amber-200">{questions.length - publishedCount} draft</span>
+            </div>
+            <p className="mt-2 text-sm text-slate-400">Published questions can be added to a Game Set. Draft questions stay hidden from live setup until they are ready.</p>
+          </div>
+
           {bankLoading ? (
             <div className="rounded-xl border border-white/10 bg-slate-900/40 px-4 py-6 text-center text-slate-300">
               Loading questions…
             </div>
           ) : questions.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-white/10 bg-slate-900/40 px-4 py-6 text-center text-slate-400">
-              No saved questions yet.
+            <div className="rounded-xl border border-dashed border-white/10 bg-slate-900/40 px-4 py-8 text-center text-slate-400">
+              <p className="font-semibold text-slate-200">No saved questions yet.</p>
+              <p className="mt-2 text-sm">Switch to Manual Add to upload your first question, or use Bulk Import if your storage assets are already prepared.</p>
             </div>
           ) : (
             <div className="space-y-3">
@@ -954,16 +993,16 @@ export function AdminQuestionManager({ secret }: { secret: string }) {
                 >
                   <div className="grid gap-4 md:grid-cols-[160px_minmax(0,1fr)]">
                     <div className="space-y-2">
-                      <img
-                        src={resolveQuestionImageUrl(question.image_url)}
+                        <QuestionAssetPreview
+                        src={resolveQuestionImageUrl(question.image_url) ?? undefined}
                         alt={question.text}
-                        className="h-28 w-full rounded-lg object-cover bg-slate-950"
+                        heightClassName="h-28"
                       />
                       {question.reveal_image_url && (
-                        <img
+                        <QuestionAssetPreview
                           src={resolveRevealImageUrl(question.reveal_image_url) ?? undefined}
-                          alt=""
-                          className="h-20 w-full rounded-lg object-cover bg-slate-950"
+                          alt="Reveal preview"
+                          heightClassName="h-20"
                         />
                       )}
                     </div>
@@ -1002,17 +1041,25 @@ export function AdminQuestionManager({ secret }: { secret: string }) {
                             }`}>
                               {question.is_published ? 'Published' : 'Draft'}
                             </span>
+                            <span className="rounded-full bg-white/10 px-2 py-1 text-xs font-semibold text-slate-300">
+                              {question.mask_storage_path ? 'Mask ready' : 'Mask missing'}
+                            </span>
+                            <span className={`rounded-full px-2 py-1 text-xs font-semibold ${
+                              question.reveal_image_url ? 'bg-indigo-500/20 text-indigo-200' : 'bg-white/5 text-slate-400'
+                            }`}>
+                              {question.reveal_image_url ? 'Reveal ready' : 'No reveal'}
+                            </span>
                           </div>
                           <p className="font-semibold text-white">{question.text}</p>
+                          <p className="text-xs text-slate-500">Created {formatCreatedAt(question.created_at)} • id {question.id.slice(0, 8)}…</p>
                         </div>
-                        <span className="text-xs text-slate-500 font-mono">{question.id.slice(0, 8)}…</span>
                       </div>
 
-                      <div className="grid gap-2 text-sm text-slate-300 md:grid-cols-2">
+                      <div className="grid gap-2 text-sm text-slate-300 md:grid-cols-2 xl:grid-cols-4">
                         <p>Time: {question.time_limit_seconds}s</p>
                         <p>Score: {question.min_correct_score}-{question.max_score}</p>
                         <p>Size: {question.image_width ?? '—'}×{question.image_height ?? '—'}</p>
-                        <p>{question.reveal_image_url ? 'Reveal image attached' : 'No reveal image'}</p>
+                        <p>Circle: {question.circle_radius_ratio}</p>
                       </div>
 
                       <div className="flex gap-3 flex-wrap">
@@ -1098,16 +1145,19 @@ function FieldBlock({
   input,
   error,
   fullWidth,
+  helperText,
 }: {
   label: string;
   input: ReactNode;
   error?: string;
   fullWidth?: boolean;
+  helperText?: string;
 }) {
   return (
     <div className={fullWidth ? 'md:col-span-2 space-y-2' : 'space-y-2'}>
       <label className="text-sm font-medium text-slate-200">{label}</label>
       {input}
+      {helperText && !error && <p className="text-xs text-slate-500">{helperText}</p>}
       {error && <p className="text-sm text-red-300">{error}</p>}
     </div>
   );
@@ -1117,10 +1167,12 @@ function FilePicker({
   label,
   file,
   onChange,
+  helperText,
 }: {
   label: string;
   file: File | null;
   onChange: (event: ChangeEvent<HTMLInputElement>) => void;
+  helperText?: string;
 }) {
   return (
     <div className="space-y-2">
@@ -1131,6 +1183,7 @@ function FilePicker({
         onChange={onChange}
         className="block w-full rounded-xl border border-white/10 bg-slate-900/50 px-3 py-3 text-sm text-slate-200 file:mr-3 file:rounded-lg file:border-0 file:bg-indigo-600 file:px-3 file:py-2 file:text-white"
       />
+      {helperText && <p className="text-xs text-slate-500">{helperText}</p>}
       <p className="text-xs text-slate-500">{file ? file.name : 'No file selected'}</p>
     </div>
   );
@@ -1167,4 +1220,40 @@ function inputClassName(hasError: boolean, readOnly = false): string {
         ? 'border-red-500/50 focus:ring-red-500'
         : 'border-white/10 focus:ring-indigo-500'
     } ${readOnly ? 'cursor-default text-slate-300' : ''}`;
+}
+
+function QuestionAssetPreview({
+  src,
+  alt,
+  heightClassName,
+}: {
+  src?: string;
+  alt: string;
+  heightClassName: string;
+}) {
+  if (!src) {
+    return (
+      <div className={`${heightClassName} w-full rounded-lg border border-white/5 bg-slate-950 flex items-center justify-center text-xs text-slate-500`}>
+        No image
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={src}
+      alt={alt}
+      className={`${heightClassName} w-full rounded-lg object-cover bg-slate-950`}
+    />
+  );
+}
+
+function formatCreatedAt(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'unknown date';
+  return date.toLocaleDateString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
 }

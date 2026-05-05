@@ -5,12 +5,42 @@ export interface LocalImageDimensions {
   height: number;
 }
 
-export function resolveQuestionImageUrl(path: string): string {
-  if (/^https?:\/\//i.test(path)) return path;
-  return supabase.storage.from('question-images').getPublicUrl(path).data.publicUrl;
+const QUESTION_IMAGE_BUCKET = 'question-images';
+
+function extractQuestionImagePath(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+
+  const normalized = trimmed.replace(/^\/+/, '');
+  const bucketPattern = new RegExp(`(?:^|/)${QUESTION_IMAGE_BUCKET}/(.+)$`, 'i');
+  const bucketMatch = bucketPattern.exec(normalized);
+  if (bucketMatch?.[1]) return bucketMatch[1];
+
+  if (/^https?:\/\//i.test(trimmed)) {
+    try {
+      const url = new URL(trimmed);
+      const pathMatch = bucketPattern.exec(url.pathname);
+      if (pathMatch?.[1]) return pathMatch[1];
+      return trimmed;
+    } catch {
+      return trimmed;
+    }
+  }
+
+  return normalized;
 }
 
-export function resolveRevealImageUrl(path: string | null): string | null {
+export function resolveQuestionImageUrl(path: string | null | undefined): string | null {
+  if (!path?.trim()) return null;
+
+  const normalized = extractQuestionImagePath(path);
+  if (!normalized) return null;
+  if (/^(https?:|data:|blob:)/i.test(normalized)) return normalized;
+
+  return supabase.storage.from(QUESTION_IMAGE_BUCKET).getPublicUrl(normalized).data.publicUrl;
+}
+
+export function resolveRevealImageUrl(path: string | null | undefined): string | null {
   if (!path) return null;
   return resolveQuestionImageUrl(path);
 }
