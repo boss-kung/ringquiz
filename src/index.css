@@ -1625,6 +1625,109 @@ body.host-route {
   line-height: 1.05;
 }
 
+/* Display readability overrides for big-screen projection */
+.ds-label { font-size: clamp(11px,1.25vw,16px); }
+.ds-muted { font-size: clamp(15px,1.7vw,22px); }
+.ds-title { font-size: clamp(42px,5.8vw,82px); }
+.ds-q-pos { font-size: clamp(16px,1.8vw,24px); }
+.ds-q-pos-sm { font-size: clamp(13px,1.35vw,18px); }
+.ds-lobby-subtitle { font-size: clamp(18px,1.9vw,26px); }
+.ds-stage-caption { font-size: clamp(16px,1.7vw,22px); }
+.ds-lobby-player-count-hero { font-size: clamp(78px,11vw,140px); }
+.ds-lobby-player-count-label { font-size: clamp(13px,1.35vw,18px); }
+.ds-qr-img-lg {
+  width: clamp(240px,28vw,360px);
+  height: clamp(240px,28vw,360px);
+}
+.ds-q-text {
+  font-size: clamp(28px,3.8vw,56px);
+  line-height: 1.28;
+}
+.ds-big-timer { font-size: clamp(72px,10vw,140px); }
+.ds-sub-text { font-size: clamp(18px,2vw,28px); }
+.ds-stat-pill {
+  font-size: clamp(12px,1.3vw,16px);
+  padding: 8px 14px;
+}
+.ds-stat-line { font-size: clamp(18px,2vw,28px); }
+.ds-reveal-text { font-size: clamp(24px,3vw,40px); }
+.ds-winner-line { font-size: clamp(20px,2.2vw,30px); }
+.ds-pod-name { font-size: clamp(15px,1.6vw,22px); }
+.ds-pod-score { font-size: clamp(16px,1.8vw,24px); font-weight: 900; }
+.ds-lb-row {
+  padding: clamp(14px,1.8vh,22px) clamp(16px,1.8vw,26px);
+}
+.ds-lb-rank {
+  width: clamp(42px,4.2vw,64px);
+  font-size: clamp(18px,2vw,28px);
+  font-weight: 900;
+}
+.ds-lb-av {
+  width: clamp(42px,4.1vw,60px);
+  height: clamp(42px,4.1vw,60px);
+  font-size: clamp(14px,1.35vw,18px);
+}
+.ds-lb-name {
+  font-size: clamp(18px,2vw,28px);
+  font-weight: 700;
+}
+.ds-lb-score {
+  font-size: clamp(20px,2.25vw,32px);
+  font-weight: 900;
+}
+.ds-lb-row.ds-lb-row-gold {
+  box-shadow:
+    0 0 0 2px rgba(245,199,74,.12),
+    0 10px 28px rgba(245,199,74,.08);
+}
+.ds-lb-row.ds-lb-row-gold .ds-lb-rank {
+  color: var(--gold);
+  text-shadow: 0 0 18px rgba(245,199,74,.28);
+}
+.ds-lb-row.ds-lb-row-gold .ds-lb-name {
+  color: #fff6d7;
+  font-size: clamp(21px,2.35vw,34px);
+}
+.ds-lb-row.ds-lb-row-gold .ds-lb-score {
+  font-size: clamp(24px,2.8vw,38px);
+}
+
+/* Reuse the same circular image system players see, but scale it for the stage */
+.ds-display-image-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+}
+.ds-display-shell {
+  --quiz-image-stroke: clamp(6px, 1.1vmin, 10px);
+  --quiz-image-offset: clamp(10px, 1.7vmin, 18px);
+  --quiz-image-ring-gap: clamp(5px, 1vmin, 10px);
+}
+.ds-display-shell .quiz-image-circle {
+  box-shadow:
+    inset 0 0 0 1px rgba(255,255,255,.18),
+    inset 0 0 28px rgba(255,255,255,.06),
+    0 18px 42px rgba(2,6,23,.34);
+}
+.quiz-image-shell--display-clue {
+  --quiz-image-size: clamp(460px, 78vmin, 980px);
+  --quiz-image-max-width: calc(100vw - 1rem);
+  --quiz-image-max-height: calc(100vh - 9rem);
+}
+.quiz-image-shell--display-question {
+  --quiz-image-size: clamp(420px, 74vmin, 900px);
+  --quiz-image-max-width: calc(100vw - 1.5rem);
+  --quiz-image-max-height: calc(100vh - 13rem);
+}
+.quiz-image-shell--display-reveal {
+  --quiz-image-size: clamp(500px, 82vmin, 1020px);
+  --quiz-image-max-width: calc(100vw - 1rem);
+  --quiz-image-max-height: calc(100vh - 10rem);
+}
+.ds-display-shell-full { --quiz-image-size: clamp(520px, 84vmin, 1060px); }
+.ds-display-mask { opacity: .96 !important; }
+
 @media (max-width: 980px) {
   .ds-lobby-body,
   .ds-q-body,

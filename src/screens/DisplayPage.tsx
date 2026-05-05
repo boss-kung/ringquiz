@@ -19,6 +19,7 @@ import { supabase, GAME_STATE_ID, FUNCTIONS_URL, SUPABASE_ANON_KEY } from '../li
 import { resolveQuestionImageUrl, resolveRevealImageUrl } from '../lib/questionAssets';
 import { COUNTDOWN_DISPLAY_SECONDS, SERVER_TIME_RESYNC_INTERVAL_MS } from '../lib/constants';
 import type { GameState, Player, LeaderboardEntry, DisplayStatsResponse } from '../lib/types';
+import { QuestionImage } from '../components/QuestionImage';
 
 // ── Local types ───────────────────────────────────────────────────────────────
 
@@ -179,67 +180,36 @@ function DisplayImageStage({
   maskUrl,
   revealImageUrl,
   showReveal = false,
-  aspectRatio,
   fullWidth = false,
+  variant = 'question',
 }: {
   imageUrl: string | null;
   maskUrl?: string | null;
   revealImageUrl?: string | null;
   showReveal?: boolean;
-  aspectRatio?: number | null;
   fullWidth?: boolean;
+  variant?: 'clue' | 'question' | 'reveal';
 }) {
-  // Fallback: detect AR from natural image size when metadata is absent
-  const [detectedAr, setDetectedAr] = useState<number | null>(null);
-  const effectiveAr = aspectRatio ?? detectedAr ?? (4 / 3);
+  const shellVariant =
+    variant === 'clue' ? 'quiz-image-shell--display-clue' :
+    variant === 'reveal' ? 'quiz-image-shell--display-reveal' :
+    'quiz-image-shell--display-question';
 
-  const handleBaseLoad = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
-    if (aspectRatio) return; // metadata already provided — no need to detect
-    const img = e.currentTarget;
-    if (img.naturalWidth > 0 && img.naturalHeight > 0) {
-      setDetectedAr(img.naturalWidth / img.naturalHeight);
-    }
-  }, [aspectRatio]);
-
-  const cls = `ds-img-stage${fullWidth ? ' ds-img-stage-full' : ''}`;
-
-  if (!imageUrl) {
-    return (
-      <div className={cls}>
-        <div className="ds-img-stage-inner" style={{ aspectRatio: String(effectiveAr) }}>
-          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <div className="ds-muted" style={{ textAlign: 'center', padding: 24 }}>ไม่มีภาพสำหรับคำถามนี้</div>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const displayImageUrl = showReveal ? (revealImageUrl ?? imageUrl) : imageUrl;
+  const shellClassName = `ds-display-shell ${shellVariant}${fullWidth ? ' ds-display-shell-full' : ''}`;
 
   return (
-    <div className={cls}>
-      <div className="ds-img-stage-inner" style={{ aspectRatio: String(effectiveAr) }}>
-        {/* Base image — object-fit:contain (see CSS) */}
-        <img src={imageUrl} alt="" className="ds-img-base" onLoad={handleBaseLoad} />
-
-        {/* Reveal layer — same object-fit:contain so it overlays the base exactly */}
-        {revealImageUrl && (
-          <img
-            src={revealImageUrl}
-            alt=""
-            className={`ds-img-reveal${showReveal ? ' ds-img-reveal-visible' : ''}`}
-          />
-        )}
-
-        {/* Mask — same object-fit:contain so the circle lands on the correct image region */}
-        {maskUrl && (
-          <img
-            src={maskUrl}
-            alt=""
-            aria-hidden
-            className={`ds-img-mask reveal-mask-pulse${showReveal ? ' ds-img-mask-hidden' : ''}`}
-          />
-        )}
-      </div>
+    <div className="ds-display-image-wrap">
+      <QuestionImage
+        imageUrl={displayImageUrl}
+        circleRadiusRatio={0}
+        circle={null}
+        onCircleChange={() => {}}
+        locked
+        maskOverlayUrl={!showReveal ? (maskUrl ?? undefined) : undefined}
+        maskOverlayClassName={!showReveal ? 'reveal-mask-pulse ds-display-mask' : undefined}
+        shellClassName={shellClassName}
+      />
     </div>
   );
 }
@@ -871,8 +841,6 @@ function DsCountdown({
   const circ = 2 * Math.PI * 110;
   const offset = progress >= 1 ? 0 : circ * (1 - progress);
   const clueUrl = question ? resolveQuestionImageUrl(question.image_url) : null;
-  const ar = question?.image_width && question?.image_height
-    ? question.image_width / question.image_height : null;
 
   // P0.6 — preload mask at reveal-phase ahead of time
   const maskUrl = question
@@ -913,7 +881,7 @@ function DsCountdown({
           {questionFetchError && !clueUrl ? (
             <div className="ds-muted">ไม่สามารถโหลดภาพคำถามได้</div>
           ) : (
-            <DisplayImageStage imageUrl={clueUrl} aspectRatio={ar} />
+            <DisplayImageStage imageUrl={clueUrl} variant="clue" />
           )}
           <div className="ds-muted" style={{ marginTop: 16 }}>ดูภาพให้ดีก่อนตอบ</div>
         </div>
@@ -951,8 +919,6 @@ function DsQuestion({
   const ratio = timeLeft != null ? Math.max(0, Math.min(1, timeLeft / totalSec)) : 1;
   const urgent = timeLeft != null && timeLeft <= 5;
   const imgUrl = question ? resolveQuestionImageUrl(question.image_url) : null;
-  const ar = question?.image_width && question?.image_height
-    ? question.image_width / question.image_height : null;
 
   const submittedCount = stats?.submitted_count ?? null;
   const playerCount = stats?.player_count ?? null;
@@ -997,7 +963,7 @@ function DsQuestion({
         </div>
 
         <div className="ds-stage-card ds-stage-card-visual ds-q-right">
-          <DisplayImageStage imageUrl={imgUrl} aspectRatio={ar} />
+          <DisplayImageStage imageUrl={imgUrl} variant="question" />
         </div>
       </div>
     </DsShell>
@@ -1068,9 +1034,6 @@ function DsReveal({
   const baseImg = resolveQuestionImageUrl(question.image_url);
   const revealImg = resolveRevealImageUrl(question.reveal_image_url);
   const maskUrl = `${FUNCTIONS_URL}/get-reveal-mask?questionId=${encodeURIComponent(question.id)}&updatedAt=${encodeURIComponent(gameState.updated_at ?? '')}`;
-  const ar = question.image_width && question.image_height
-    ? question.image_width / question.image_height : null;
-
   // P0.6 — preload mask early so it's cached before the reveal moment
   usePreloadImages(maskUrl);
 
@@ -1118,8 +1081,8 @@ function DsReveal({
             maskUrl={maskUrl}
             revealImageUrl={revealImg ?? baseImg}
             showReveal={showReveal}
-            aspectRatio={ar}
             fullWidth
+            variant="reveal"
           />
         </div>
       </div>
