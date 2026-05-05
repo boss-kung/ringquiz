@@ -1529,8 +1529,18 @@ body.host-route {
   font: 800 12px/1 var(--font-mono);
   flex-shrink: 0;
 }
+.ds-lobby-left {
+  width: clamp(340px, 28vw, 440px);
+}
+.ds-qr-wrap {
+  border-radius: 22px;
+  padding: 16px;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.06),
+    0 18px 40px rgba(0,0,0,.28);
+}
 .ds-join-url {
-  max-width: clamp(170px,22vw,290px);
+  max-width: clamp(260px,24vw,360px);
 }
 .ds-player-wall {
   display: grid;
@@ -1551,8 +1561,8 @@ body.host-route {
   box-shadow: inset 0 1px 0 rgba(255,255,255,.2);
 }
 .ds-chip-name {
-  font-size: clamp(12px,1.2vw,15px);
-  font-weight: 700;
+  font-size: clamp(20px, 2vw, 30px);
+  font-weight: 800;
   max-width: none;
   min-width: 0;
 }
@@ -1636,8 +1646,8 @@ body.host-route {
 .ds-lobby-player-count-hero { font-size: clamp(78px,11vw,140px); }
 .ds-lobby-player-count-label { font-size: clamp(13px,1.35vw,18px); }
 .ds-qr-img-lg {
-  width: clamp(240px,28vw,360px);
-  height: clamp(240px,28vw,360px);
+  width: clamp(300px, 26vw, 380px);
+  height: clamp(300px, 26vw, 380px);
 }
 .ds-q-text {
   font-size: clamp(28px,3.8vw,56px);
@@ -1783,6 +1793,11 @@ body.host-route {
 
   .ds-lb-list {
     padding: 14px;
+  }
+
+  .ds-qr-img-lg {
+    width: min(78vw, 340px);
+    height: min(78vw, 340px);
   }
 }
 
