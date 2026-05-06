@@ -2,9 +2,10 @@ import { useGameStore } from '../store/gameStore';
 
 export function LockedScreen() {
   const submitResult = useGameStore((s) => s.submitResult);
+  const submitPending = useGameStore((s) => s.submitPending);
   const question = useGameStore((s) => s.question);
 
-  const hasAnswered = Boolean(submitResult);
+  const hasAnswered = Boolean(submitResult || submitPending);
 
   return (
     <div
@@ -68,7 +69,9 @@ export function LockedScreen() {
 
         <p style={{ fontSize: 13, color: 'var(--text-2)', lineHeight: 1.6 }}>
           {hasAnswered
-            ? 'คำตอบถูกบันทึกแล้ว — รอดูว่าถูกหรือผิด!'
+            ? submitPending
+              ? 'รับคำตอบแล้ว — กำลังบันทึกคำตอบของคุณ...'
+              : 'คำตอบถูกบันทึกแล้ว — รอดูว่าถูกหรือผิด!'
             : question
             ? 'การตอบคำถามถูกล็อคแล้ว รอให้พิธีกรเฉลยคำตอบ'
             : 'กำลังรอพิธีกรเปิดคำถาม...'}
@@ -79,7 +82,9 @@ export function LockedScreen() {
             <div style={{ fontSize: 22 }}>🔒</div>
             <div style={{ textAlign: 'left' }}>
               <div className="gr-label-xs" style={{ marginBottom: 4 }}>สถานะคำตอบ</div>
-              <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--gold)' }}>ล็อคแล้ว · รอพิธีกรเฉลย</div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--gold)' }}>
+                {submitPending ? 'รับคำตอบแล้ว · กำลังบันทึก' : 'ล็อคแล้ว · รอพิธีกรเฉลย'}
+              </div>
             </div>
           </div>
         )}

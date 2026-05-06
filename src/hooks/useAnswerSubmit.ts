@@ -13,8 +13,10 @@ export function useAnswerSubmit() {
   const question = useGameStore((s) => s.question);
   const circlePosition = useGameStore((s) => s.circlePosition);
   const setCirclePosition = useGameStore((s) => s.setCirclePosition);
+  const setSubmitPending = useGameStore((s) => s.setSubmitPending);
   const setSubmitResult = useGameStore((s) => s.setSubmitResult);
   const setSubmitError = useGameStore((s) => s.setSubmitError);
+  const clearPendingSubmission = useGameStore((s) => s.clearPendingSubmission);
   const submitted = useGameStore((s) => s.submitted);
   const [submitting, setSubmitting] = useState(false);
   const submitLockRef = useRef(false);
@@ -25,11 +27,13 @@ export function useAnswerSubmit() {
     submitLockRef.current = true;
     setSubmitting(true);
     setSubmitError(null);
+    setSubmitPending();
 
     try {
       await unlockFeedbackAudio();
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
+        clearPendingSubmission();
         setSubmitError('Not authenticated. Please refresh and rejoin.');
         return;
       }
@@ -55,15 +59,19 @@ export function useAnswerSubmit() {
         const err = json as EdgeFunctionError;
         switch (err.error) {
           case 'question_not_open':
+            clearPendingSubmission();
             setSubmitError('Question is no longer open. Your answer was not recorded.');
             break;
           case 'time_expired':
+            clearPendingSubmission();
             setSubmitError('Time is up! Answer not recorded.');
             break;
           case 'wrong_question':
+            clearPendingSubmission();
             setSubmitError('Game moved to the next question. Answer not recorded.');
             break;
           default:
+            clearPendingSubmission();
             setSubmitError('Could not submit. Please try again.');
         }
         return;
@@ -82,12 +90,13 @@ export function useAnswerSubmit() {
       setSubmitResult(result);
       triggerFeedbackFx('answerLocked');
     } catch {
+      clearPendingSubmission();
       setSubmitError('Network error. Please check your connection and try again.');
     } finally {
       submitLockRef.current = false;
       setSubmitting(false);
     }
-  }, [question, circlePosition, submitted, submitting, setCirclePosition, setSubmitResult, setSubmitError]);
+  }, [question, circlePosition, submitted, submitting, setCirclePosition, setSubmitPending, setSubmitResult, setSubmitError, clearPendingSubmission]);
 
   return { submit, submitting };
 }

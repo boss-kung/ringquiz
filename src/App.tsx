@@ -50,6 +50,7 @@ function PlayerApp() {
   const isJoined = useGameStore((s) => s.isJoined);
   const gameState = useGameStore((s) => s.gameState);
   const submitted = useGameStore((s) => s.submitted);
+  const submitPending = useGameStore((s) => s.submitPending);
 
   if (restoring) {
     return (
@@ -71,7 +72,7 @@ function PlayerApp() {
     } else if (status === 'countdown') {
       screen = <CountdownScreen />;
     } else if (status === 'question_open') {
-      screen = submitted ? <LockedScreen /> : <QuestionScreen />;
+      screen = submitted || submitPending ? <LockedScreen /> : <QuestionScreen />;
     } else if (status === 'question_closed') {
       screen = <LockedScreen />;
     } else if (status === 'reveal') {

@@ -31,10 +31,13 @@ interface GameStore {
   circlePosition: CirclePosition | null;
   setCirclePosition: (pos: CirclePosition | null) => void;
   submitted: boolean;
+  submitPending: boolean;
   submitResult: SubmitAnswerResponse | null;
   submitError: string | null;
+  setSubmitPending: () => void;
   setSubmitResult: (r: SubmitAnswerResponse) => void;
   setSubmitError: (e: string | null) => void;
+  clearPendingSubmission: () => void;
   resetAnswerState: () => void;
 
   // Reveal (own result for current question)
@@ -68,12 +71,15 @@ export const useGameStore = create<GameStore>((set) => ({
   circlePosition: null,
   setCirclePosition: (pos) => set({ circlePosition: pos }),
   submitted: false,
+  submitPending: false,
   submitResult: null,
   submitError: null,
-  setSubmitResult: (r) => set({ submitResult: r, submitted: true, submitError: null }),
+  setSubmitPending: () => set({ submitPending: true, submitted: true, submitError: null }),
+  setSubmitResult: (r) => set({ submitResult: r, submitPending: false, submitted: true, submitError: null }),
   setSubmitError: (e) => set({ submitError: e }),
+  clearPendingSubmission: () => set({ submitPending: false, submitted: false }),
   resetAnswerState: () =>
-    set({ circlePosition: null, submitted: false, submitResult: null, submitError: null, revealNoAnswer: false }),
+    set({ circlePosition: null, submitted: false, submitPending: false, submitResult: null, submitError: null, revealNoAnswer: false }),
 
   revealResult: null,
   setRevealResult: (r) => set({ revealResult: r, revealNoAnswer: false }),
