@@ -1404,7 +1404,7 @@ function DsLeaderboard({
   }, [leaderboard, reducedMotion]);
 
   const visualRankFor = useCallback((entry: LeaderboardEntry) => {
-    if (animationStage !== 'counting') return entry.rank;
+    if (animationStage === 'steady') return entry.rank;
     return leaderboardFx[entry.player_id]?.previousRank ?? entry.rank;
   }, [animationStage, leaderboardFx]);
 
