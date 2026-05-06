@@ -22,6 +22,18 @@ export function useRevealResult() {
   useEffect(() => {
     if (status !== 'reveal' || !questionId || !playerId) return;
 
+    // Local-first reveal: if this client already has the authoritative
+    // submit result from the answer step, show it immediately and let the DB
+    // fetch below act as background verification / refresh recovery.
+    if (submitResult) {
+      setRevealResult({
+        is_correct: submitResult.is_correct,
+        score: submitResult.score,
+        selected_x_ratio: submitResult.selected_x_ratio ?? circlePosition?.xRatio ?? null,
+        selected_y_ratio: submitResult.selected_y_ratio ?? circlePosition?.yRatio ?? null,
+      });
+    }
+
     supabase
       .from('answers')
       .select('is_correct, score, selected_x_ratio, selected_y_ratio')

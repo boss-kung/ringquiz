@@ -14,6 +14,7 @@ export function RevealScreen() {
   const revealResult = useGameStore((s) => s.revealResult);
   const revealNoAnswer = useGameStore((s) => s.revealNoAnswer);
   const circlePosition = useGameStore((s) => s.circlePosition);
+  const submitResult = useGameStore((s) => s.submitResult);
   const gameState = useGameStore((s) => s.gameState);
   const getServerTime = useGetServerTime();
   const [showRevealImage, setShowRevealImage] = useState(false);
@@ -32,15 +33,26 @@ export function RevealScreen() {
     return () => clearInterval(id);
   }, [revealStartedAt, getServerTime, question?.id]);
 
+  const effectiveRevealResult = revealResult ?? (
+    submitResult
+      ? {
+          is_correct: submitResult.is_correct,
+          score: submitResult.score,
+          selected_x_ratio: submitResult.selected_x_ratio ?? circlePosition?.xRatio ?? null,
+          selected_y_ratio: submitResult.selected_y_ratio ?? circlePosition?.yRatio ?? null,
+        }
+      : null
+  );
+
   useEffect(() => {
-    if (!revealResult) {
+    if (!effectiveRevealResult) {
       feedbackFiredRef.current = false;
       return;
     }
     if (feedbackFiredRef.current) return;
     feedbackFiredRef.current = true;
-    triggerFeedbackFx(revealResult.is_correct ? 'answerCorrect' : 'answerWrong');
-  }, [revealResult?.is_correct, revealResult?.score]);
+    triggerFeedbackFx(effectiveRevealResult.is_correct ? 'answerCorrect' : 'answerWrong');
+  }, [effectiveRevealResult?.is_correct, effectiveRevealResult?.score]);
 
   if (!question) {
     return (
@@ -50,15 +62,16 @@ export function RevealScreen() {
     );
   }
 
-  const isCorrect = revealResult?.is_correct ?? false;
+  const isCorrect = effectiveRevealResult?.is_correct ?? false;
   const originalQuestionImage = resolveQuestionImageUrl(question.image_url);
   const revealBaseImage =
     resolveRevealImageUrl(question.reveal_image_url) ??
     originalQuestionImage;
   const revealCircle =
-    revealResult?.selected_x_ratio != null && revealResult?.selected_y_ratio != null
-      ? { xRatio: revealResult.selected_x_ratio, yRatio: revealResult.selected_y_ratio }
+    effectiveRevealResult?.selected_x_ratio != null && effectiveRevealResult?.selected_y_ratio != null
+      ? { xRatio: effectiveRevealResult.selected_x_ratio, yRatio: effectiveRevealResult.selected_y_ratio }
       : null;
+  const isResolvingResult = !effectiveRevealResult && !revealNoAnswer;
 
   /* Banner variant */
   let bannerClass = 'gr-reveal-banner gr-reveal-banner-neutral';
@@ -71,12 +84,12 @@ export function RevealScreen() {
     resultIcon = '—';
     resultLabel = 'ไม่ได้ตอบ';
     resultSub = 'คุณไม่ได้ส่งคำตอบสำหรับคำถามนี้';
-  } else if (revealResult) {
+  } else if (effectiveRevealResult) {
     if (isCorrect) {
       bannerClass = 'gr-reveal-banner gr-reveal-banner-ok';
       resultIcon = '🎯';
       resultLabel = 'ถูกต้อง!';
-      resultSub = `+${revealResult.score.toLocaleString()} คะแนน`;
+      resultSub = `+${effectiveRevealResult.score.toLocaleString()} คะแนน`;
     } else {
       bannerClass = 'gr-reveal-banner gr-reveal-banner-bad';
       resultIcon = '✗';
@@ -93,7 +106,7 @@ export function RevealScreen() {
 
       {/* Result banner */}
       <div className={bannerClass} style={{ position: 'relative', zIndex: 1 }}>
-        {!revealResult && !revealNoAnswer ? (
+        {isResolvingResult ? (
           <p style={{ fontSize: 13, color: 'var(--text-2)' }}>กำลังดึงผลลัพธ์...</p>
         ) : (
           <>
@@ -110,9 +123,9 @@ export function RevealScreen() {
               <div
                 className="gr-mono"
                 style={{
-                  fontSize: revealResult && isCorrect ? 18 : 11,
+                  fontSize: effectiveRevealResult && isCorrect ? 18 : 11,
                   fontWeight: 900,
-                  color: revealResult && isCorrect ? 'var(--gold)' : 'var(--text-2)',
+                  color: effectiveRevealResult && isCorrect ? 'var(--gold)' : 'var(--text-2)',
                   marginTop: 4,
                 }}
               >
