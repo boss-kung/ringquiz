@@ -15,21 +15,45 @@ export function useGameState() {
   const setRevealResult = useGameStore((s) => s.setRevealResult);
   const setLeaderboard = useGameStore((s) => s.setLeaderboard);
   const prevQuestionId = useRef<string | null>(null);
+  const lastFetchAtRef = useRef(0);
 
   useEffect(() => {
-    // Initial fetch
-    supabase
-      .from('game_state')
-      .select('*')
-      .eq('id', GAME_STATE_ID)
-      .single()
-      .then(({ data, error }) => {
-        if (error) console.error('[useGameState] initial fetch:', error.message);
-        if (data) {
-          setGameState(data as GameState);
-          prevQuestionId.current = data.current_question_id;
-        }
-      });
+    let cancelled = false;
+
+    const applyGameState = (gs: GameState) => {
+      if (cancelled) return;
+      setGameState(gs);
+
+      if (gs.current_question_id !== prevQuestionId.current) {
+        resetAnswerState();
+        setRevealResult(null);
+        setLeaderboard([], null);
+        prevQuestionId.current = gs.current_question_id;
+      }
+    };
+
+    const refetchGameState = async (reason: 'initial' | 'poll' | 'reconnect') => {
+      const now = Date.now();
+      if (reason !== 'initial' && now - lastFetchAtRef.current < 750) return;
+      lastFetchAtRef.current = now;
+
+      const { data, error } = await supabase
+        .from('game_state')
+        .select('*')
+        .eq('id', GAME_STATE_ID)
+        .single();
+
+      if (error) {
+        console.error(`[useGameState] ${reason} fetch:`, error.message);
+        return;
+      }
+
+      if (data) {
+        applyGameState(data as GameState);
+      }
+    };
+
+    void refetchGameState('initial');
 
     // Realtime subscription
     const channel = supabase
@@ -43,25 +67,38 @@ export function useGameState() {
           filter: `id=eq.${GAME_STATE_ID}`,
         },
         (payload) => {
-          const gs = payload.new as GameState;
-          setGameState(gs);
-
-          // When question changes, wipe per-question state
-          if (gs.current_question_id !== prevQuestionId.current) {
-            resetAnswerState();
-            setRevealResult(null);
-            setLeaderboard([], null);
-            prevQuestionId.current = gs.current_question_id;
-          }
+          applyGameState(payload.new as GameState);
         },
       )
       .subscribe((status) => {
-        if (status === 'CHANNEL_ERROR') {
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
           console.error('[useGameState] Realtime channel error — will auto-reconnect');
+          void refetchGameState('reconnect');
         }
       });
 
+    const pollId = window.setInterval(() => {
+      void refetchGameState('poll');
+    }, 2500);
+
+    const handleResume = () => {
+      if (document.visibilityState === 'visible' && navigator.onLine) {
+        void refetchGameState('reconnect');
+      }
+    };
+
+    const handleOnline = () => {
+      void refetchGameState('reconnect');
+    };
+
+    window.addEventListener('online', handleOnline);
+    document.addEventListener('visibilitychange', handleResume);
+
     return () => {
+      cancelled = true;
+      window.clearInterval(pollId);
+      window.removeEventListener('online', handleOnline);
+      document.removeEventListener('visibilitychange', handleResume);
       supabase.removeChannel(channel);
     };
   }, [setGameState, resetAnswerState, setRevealResult, setLeaderboard]);

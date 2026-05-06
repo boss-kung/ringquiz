@@ -41,10 +41,13 @@
     "packageJson": {
       "dependencies": [
         "npm:@supabase/supabase-js@^2.45.0",
+        "npm:@types/papaparse@^5.5.2",
         "npm:@types/react-dom@^18.3.0",
         "npm:@types/react@^18.3.5",
         "npm:@vitejs/plugin-react@^4.3.1",
         "npm:autoprefixer@^10.4.20",
+        "npm:jszip@^3.10.1",
+        "npm:papaparse@^5.5.3",
         "npm:postcss@^8.4.47",
         "npm:react-dom@^18.3.1",
         "npm:react@^18.3.1",

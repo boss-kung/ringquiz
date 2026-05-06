@@ -20,71 +20,87 @@ interface Props {
 // Coordinate convention: xRatio and yRatio are normalised to the FULL image
 // pixel dimensions [0, 1] — NOT to the CSS container box.
 //
-// The .quiz-image-shell container is always a 1:1 square, and the <img> uses
-// object-fit: cover, which center-crops non-square images. Without correction,
-// a raw getBoundingClientRect() ratio would be in container-box space and
-// would disagree with the scoring backend (mask-check.ts), which maps
-// xRatio * mask.width → pixel coordinate in the original image.
-//
-// For a 16:9 image in a square: scale = containerSize / imgH (height fills),
-// renderedW > containerSize, so offsetX > 0 (left/right cropped).
-// For a portrait image: scale = containerSize / imgW (width fills),
-// renderedH > containerSize, so offsetY > 0 (top/bottom cropped).
-// For a 1:1 image: offsets are both 0 — no change in behaviour.
+// The .quiz-image-shell container is always a 1:1 square, but the image now
+// uses object-fit: contain so the full source image stays visible. We compute
+// the actual rendered image rect inside the square and map pointer coords into
+// that contained rect. This keeps taps, circles, and reveal overlays aligned
+// with the same full-image coordinate space the backend scores against.
 
-// Inverse of containerToImageRatio: converts image-space (xRatio, yRatio) back
-// to CSS percentage positions within the square container, so the visual circle
-// appears at the actual tap location regardless of image aspect ratio.
-function imageRatioToContainerPercent(
-  xRatio: number,
-  yRatio: number,
-  containerSize: number,
+interface ContainedImageRect {
+  renderedWidth: number;
+  renderedHeight: number;
+  offsetX: number;
+  offsetY: number;
+}
+
+function getContainedImageRect(
+  containerWidth: number,
+  containerHeight: number,
   naturalWidth: number,
   naturalHeight: number,
-): { leftPct: number; topPct: number } {
-  if (containerSize === 0 || naturalWidth === 0 || naturalHeight === 0) {
-    return { leftPct: xRatio * 100, topPct: yRatio * 100 };
+): ContainedImageRect {
+  if (containerWidth === 0 || containerHeight === 0 || naturalWidth === 0 || naturalHeight === 0) {
+    return { renderedWidth: 0, renderedHeight: 0, offsetX: 0, offsetY: 0 };
   }
-  const scale = Math.max(containerSize / naturalWidth, containerSize / naturalHeight);
-  const renderedW = naturalWidth * scale;
-  const renderedH = naturalHeight * scale;
-  const offsetX = (renderedW - containerSize) / 2;
-  const offsetY = (renderedH - containerSize) / 2;
-  // Inverse: clickX = xRatio * renderedW - offsetX
-  const clickX = xRatio * renderedW - offsetX;
-  const clickY = yRatio * renderedH - offsetY;
+
+  const scale = Math.min(containerWidth / naturalWidth, containerHeight / naturalHeight);
+  const renderedWidth = naturalWidth * scale;
+  const renderedHeight = naturalHeight * scale;
+
   return {
-    leftPct: Math.max(0, Math.min(100, (clickX / containerSize) * 100)),
-    topPct:  Math.max(0, Math.min(100, (clickY / containerSize) * 100)),
+    renderedWidth,
+    renderedHeight,
+    offsetX: (containerWidth - renderedWidth) / 2,
+    offsetY: (containerHeight - renderedHeight) / 2,
   };
 }
 
 function containerToImageRatio(
   clickX: number,     // pixels from container left edge
   clickY: number,     // pixels from container top edge
-  containerSize: number,
+  containerWidth: number,
+  containerHeight: number,
   naturalWidth: number,
   naturalHeight: number,
+  clampToImage: boolean,
 ): CirclePosition {
-  if (containerSize === 0 || naturalWidth === 0 || naturalHeight === 0) {
+  if (containerWidth === 0 || containerHeight === 0 || naturalWidth === 0 || naturalHeight === 0) {
     return {
-      xRatio: Math.max(0, Math.min(1, clickX / (containerSize || 1))),
-      yRatio: Math.max(0, Math.min(1, clickY / (containerSize || 1))),
+      xRatio: Math.max(0, Math.min(1, clickX / (containerWidth || 1))),
+      yRatio: Math.max(0, Math.min(1, clickY / (containerHeight || 1))),
     };
   }
 
-  // object-fit: cover in a square container
-  const scale = Math.max(containerSize / naturalWidth, containerSize / naturalHeight);
-  const renderedW = naturalWidth * scale;
-  const renderedH = naturalHeight * scale;
+  const containedRect = getContainedImageRect(
+    containerWidth,
+    containerHeight,
+    naturalWidth,
+    naturalHeight,
+  );
 
-  // How much of the rendered image extends beyond each container edge (per side)
-  const offsetX = (renderedW - containerSize) / 2;
-  const offsetY = (renderedH - containerSize) / 2;
+  const localX = clampToImage
+    ? Math.max(containedRect.offsetX, Math.min(containedRect.offsetX + containedRect.renderedWidth, clickX))
+    : clickX;
+  const localY = clampToImage
+    ? Math.max(containedRect.offsetY, Math.min(containedRect.offsetY + containedRect.renderedHeight, clickY))
+    : clickY;
+
+  if (
+    !clampToImage &&
+    (localX < containedRect.offsetX ||
+      localX > containedRect.offsetX + containedRect.renderedWidth ||
+      localY < containedRect.offsetY ||
+      localY > containedRect.offsetY + containedRect.renderedHeight)
+  ) {
+    return {
+      xRatio: Number.NaN,
+      yRatio: Number.NaN,
+    };
+  }
 
   return {
-    xRatio: Math.max(0, Math.min(1, (clickX + offsetX) / renderedW)),
-    yRatio: Math.max(0, Math.min(1, (clickY + offsetY) / renderedH)),
+    xRatio: Math.max(0, Math.min(1, (localX - containedRect.offsetX) / (containedRect.renderedWidth || 1))),
+    yRatio: Math.max(0, Math.min(1, (localY - containedRect.offsetY) / (containedRect.renderedHeight || 1))),
   };
 }
 
@@ -101,7 +117,7 @@ export function QuestionImage({
   shellClassName = '',
 }: Props) {
   const imgRef = useRef<HTMLImageElement>(null);
-  const [renderedWidth, setRenderedWidth] = useState(0);
+  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const [loadFailed, setLoadFailed] = useState(false);
   const isDragging = useRef(false);
 
@@ -112,36 +128,45 @@ export function QuestionImage({
   useEffect(() => {
     const img = imgRef.current;
     if (!img || !imageUrl || loadFailed) {
-      setRenderedWidth(0);
+      setContainerSize({ width: 0, height: 0 });
       return;
     }
 
     const ro = new ResizeObserver(() => {
-      setRenderedWidth(img.getBoundingClientRect().width);
+      const rect = img.getBoundingClientRect();
+      setContainerSize({ width: rect.width, height: rect.height });
     });
 
     ro.observe(img);
 
     if (img.complete) {
-      setRenderedWidth(img.getBoundingClientRect().width);
+      const rect = img.getBoundingClientRect();
+      setContainerSize({ width: rect.width, height: rect.height });
     }
 
     return () => ro.disconnect();
-  }, []);
+  }, [imageUrl, loadFailed]);
 
-  const coordsFromEvent = useCallback((clientX: number, clientY: number): CirclePosition | null => {
+  const coordsFromEvent = useCallback((
+    clientX: number,
+    clientY: number,
+    clampToImage: boolean,
+  ): CirclePosition | null => {
     const img = imgRef.current;
     if (!img) return null;
 
     const rect = img.getBoundingClientRect();
-    // Container is square; rect.width === rect.height (or close enough)
-    return containerToImageRatio(
+    const pos = containerToImageRatio(
       clientX - rect.left,
       clientY - rect.top,
       rect.width,
+      rect.height,
       img.naturalWidth,
       img.naturalHeight,
+      clampToImage,
     );
+    if (Number.isNaN(pos.xRatio) || Number.isNaN(pos.yRatio)) return null;
+    return pos;
   }, []);
 
   const handlePointerDown = useCallback((e: ReactPointerEvent<HTMLImageElement>) => {
@@ -153,7 +178,7 @@ export function QuestionImage({
     isDragging.current = true;
     onInteractionStart?.(e.clientX, e.clientY);
 
-    const pos = coordsFromEvent(e.clientX, e.clientY);
+    const pos = coordsFromEvent(e.clientX, e.clientY, false);
     if (pos) {
       onCircleChange(pos);
     }
@@ -164,7 +189,7 @@ export function QuestionImage({
       return;
     }
 
-    const pos = coordsFromEvent(e.clientX, e.clientY);
+    const pos = coordsFromEvent(e.clientX, e.clientY, true);
     if (pos) {
       onCircleChange(pos);
     }
@@ -174,38 +199,33 @@ export function QuestionImage({
     isDragging.current = false;
   }, []);
 
-  const circlePx = renderedWidth * circleRadiusRatio;
+  const containedRect = getContainedImageRect(
+    containerSize.width,
+    containerSize.height,
+    imgRef.current?.naturalWidth ?? 0,
+    imgRef.current?.naturalHeight ?? 0,
+  );
+  const circlePx = containedRect.renderedWidth * circleRadiusRatio;
   const canRenderImage = Boolean(imageUrl) && !loadFailed;
 
-  const renderCircle = (pos: CirclePosition, style?: CSSProperties) => {
-    const img = imgRef.current;
-    const { leftPct, topPct } =
-      img && renderedWidth > 0 && img.naturalWidth > 0 && img.naturalHeight > 0
-        ? imageRatioToContainerPercent(
-            pos.xRatio, pos.yRatio,
-            renderedWidth, img.naturalWidth, img.naturalHeight,
-          )
-        : { leftPct: pos.xRatio * 100, topPct: pos.yRatio * 100 };
-
-    return (
-      <div
-        style={{
-          position: 'absolute',
-          left: `${leftPct}%`,
-          top: `${topPct}%`,
-          width: `${circlePx * 2}px`,
-          height: `${circlePx * 2}px`,
-          transform: 'translate(-50%, -50%)',
-          borderRadius: '50%',
-          border: '3px solid rgba(255, 255, 255, 0.95)',
-          backgroundColor: 'rgba(255, 255, 255, 0.18)',
-          boxShadow: '0 0 0 2px rgba(0, 0, 0, 0.55)',
-          pointerEvents: 'none',
-          ...style,
-        }}
-      />
-    );
-  };
+  const renderCircle = (pos: CirclePosition, style?: CSSProperties) => (
+    <div
+      style={{
+        position: 'absolute',
+        left: `${containedRect.offsetX + pos.xRatio * containedRect.renderedWidth}px`,
+        top: `${containedRect.offsetY + pos.yRatio * containedRect.renderedHeight}px`,
+        width: `${circlePx * 2}px`,
+        height: `${circlePx * 2}px`,
+        transform: 'translate(-50%, -50%)',
+        borderRadius: '50%',
+        border: '3px solid rgba(255, 255, 255, 0.95)',
+        backgroundColor: 'rgba(255, 255, 255, 0.18)',
+        boxShadow: '0 0 0 2px rgba(0, 0, 0, 0.55)',
+        pointerEvents: 'none',
+        ...style,
+      }}
+    />
+  );
 
   const wrapperClassName = ['quiz-image-shell', 'no-select', shellClassName]
     .filter(Boolean)
@@ -223,12 +243,13 @@ export function QuestionImage({
             draggable={false}
             onLoad={() => {
               if (imgRef.current) {
-                setRenderedWidth(imgRef.current.getBoundingClientRect().width);
+                const rect = imgRef.current.getBoundingClientRect();
+                setContainerSize({ width: rect.width, height: rect.height });
               }
             }}
             onError={() => {
               setLoadFailed(true);
-              setRenderedWidth(0);
+              setContainerSize({ width: 0, height: 0 });
             }}
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
@@ -269,7 +290,7 @@ export function QuestionImage({
               inset: 0,
               width: '100%',
               height: '100%',
-              objectFit: 'cover',
+              objectFit: 'contain',
               pointerEvents: 'none',
               opacity: 1,
             }}

@@ -648,6 +648,8 @@ export function DisplayPage() {
     const key = `${qId}::${gsqId}`;
     if (key === prevQuestionKeyRef.current) return;
     prevQuestionKeyRef.current = key;
+    let cancelled = false;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
 
     const fetch_ = async () => {
       try {
@@ -688,15 +690,27 @@ export function DisplayPage() {
           }
         }
 
-        setQuestion(dq);
-        setQuestionFetchError(false);
+        if (!cancelled) {
+          setQuestion(dq);
+          setQuestionFetchError(false);
+        }
       } catch (err) {
         console.error('[DisplayPage] question fetch failed:', err);
-        setQuestionFetchError(true);
+        if (!cancelled) {
+          setQuestionFetchError(true);
+          prevQuestionKeyRef.current = null;
+          retryTimer = setTimeout(() => {
+            void fetch_();
+          }, 1500);
+        }
       }
     };
 
     void fetch_();
+    return () => {
+      cancelled = true;
+      if (retryTimer) clearTimeout(retryTimer);
+    };
   }, [authReady, gameState?.current_question_id, gameState?.current_game_set_question_id]);
 
   // ── P0.6 — Preload question images when question becomes known ───────────────

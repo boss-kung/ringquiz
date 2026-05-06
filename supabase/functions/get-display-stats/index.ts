@@ -76,8 +76,19 @@ Deno.serve(async (req: Request): Promise<Response> => {
           .eq('game_set_id', gs.active_game_set_id)
           .eq('is_enabled', true),
       ]);
-      if (posRes.data) questionIndex = posRes.data.play_order;
       totalQuestions = totalRes.count ?? 0;
+
+      if (posRes.data) {
+        const { count: enabledPositionCount, error: enabledPositionErr } = await db
+          .from('game_set_questions')
+          .select('id', { count: 'exact', head: true })
+          .eq('game_set_id', gs.active_game_set_id)
+          .eq('is_enabled', true)
+          .lte('play_order', posRes.data.play_order);
+
+        if (enabledPositionErr) throw new Error(`Game-set position failed: ${enabledPositionErr.message}`);
+        questionIndex = enabledPositionCount ?? null;
+      }
     }
 
     const body: DisplayStatsResponse = {
