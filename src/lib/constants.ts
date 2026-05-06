@@ -18,3 +18,8 @@ export const SERVER_TIME_RESYNC_INTERVAL_MS = 5 * 60 * 1_000; // 5 minutes
 
 // Realtime channel name (single room, single channel)
 export const REALTIME_CHANNEL = 'game-room';
+
+// localStorage keys — single source of truth used by all session hooks
+export const PLAYER_ID_KEY       = 'quiz_player_id';
+export const DISPLAY_NAME_KEY    = 'quiz_display_name';
+export const SESSION_VERSION_KEY = 'quiz_session_version';

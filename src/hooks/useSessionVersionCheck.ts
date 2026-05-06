@@ -1,9 +1,6 @@
 import { useEffect } from 'react';
 import { useGameStore } from '../store/gameStore';
-
-const SESSION_VERSION_KEY = 'quiz_session_version';
-const PLAYER_ID_KEY = 'quiz_player_id';
-const DISPLAY_NAME_KEY = 'quiz_display_name';
+import { PLAYER_ID_KEY, DISPLAY_NAME_KEY, SESSION_VERSION_KEY } from '../lib/constants';
 
 /**
  * Watches for hard reset (session_version increment in game_state).

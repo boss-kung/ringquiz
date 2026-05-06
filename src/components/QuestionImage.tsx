@@ -32,6 +32,33 @@ interface Props {
 // renderedH > containerSize, so offsetY > 0 (top/bottom cropped).
 // For a 1:1 image: offsets are both 0 — no change in behaviour.
 
+// Inverse of containerToImageRatio: converts image-space (xRatio, yRatio) back
+// to CSS percentage positions within the square container, so the visual circle
+// appears at the actual tap location regardless of image aspect ratio.
+function imageRatioToContainerPercent(
+  xRatio: number,
+  yRatio: number,
+  containerSize: number,
+  naturalWidth: number,
+  naturalHeight: number,
+): { leftPct: number; topPct: number } {
+  if (containerSize === 0 || naturalWidth === 0 || naturalHeight === 0) {
+    return { leftPct: xRatio * 100, topPct: yRatio * 100 };
+  }
+  const scale = Math.max(containerSize / naturalWidth, containerSize / naturalHeight);
+  const renderedW = naturalWidth * scale;
+  const renderedH = naturalHeight * scale;
+  const offsetX = (renderedW - containerSize) / 2;
+  const offsetY = (renderedH - containerSize) / 2;
+  // Inverse: clickX = xRatio * renderedW - offsetX
+  const clickX = xRatio * renderedW - offsetX;
+  const clickY = yRatio * renderedH - offsetY;
+  return {
+    leftPct: Math.max(0, Math.min(100, (clickX / containerSize) * 100)),
+    topPct:  Math.max(0, Math.min(100, (clickY / containerSize) * 100)),
+  };
+}
+
 function containerToImageRatio(
   clickX: number,     // pixels from container left edge
   clickY: number,     // pixels from container top edge
@@ -150,24 +177,35 @@ export function QuestionImage({
   const circlePx = renderedWidth * circleRadiusRatio;
   const canRenderImage = Boolean(imageUrl) && !loadFailed;
 
-  const renderCircle = (pos: CirclePosition, style?: CSSProperties) => (
-    <div
-      style={{
-        position: 'absolute',
-        left: `${pos.xRatio * 100}%`,
-        top: `${pos.yRatio * 100}%`,
-        width: `${circlePx * 2}px`,
-        height: `${circlePx * 2}px`,
-        transform: 'translate(-50%, -50%)',
-        borderRadius: '50%',
-        border: '3px solid rgba(255, 255, 255, 0.95)',
-        backgroundColor: 'rgba(255, 255, 255, 0.18)',
-        boxShadow: '0 0 0 2px rgba(0, 0, 0, 0.55)',
-        pointerEvents: 'none',
-        ...style,
-      }}
-    />
-  );
+  const renderCircle = (pos: CirclePosition, style?: CSSProperties) => {
+    const img = imgRef.current;
+    const { leftPct, topPct } =
+      img && renderedWidth > 0 && img.naturalWidth > 0 && img.naturalHeight > 0
+        ? imageRatioToContainerPercent(
+            pos.xRatio, pos.yRatio,
+            renderedWidth, img.naturalWidth, img.naturalHeight,
+          )
+        : { leftPct: pos.xRatio * 100, topPct: pos.yRatio * 100 };
+
+    return (
+      <div
+        style={{
+          position: 'absolute',
+          left: `${leftPct}%`,
+          top: `${topPct}%`,
+          width: `${circlePx * 2}px`,
+          height: `${circlePx * 2}px`,
+          transform: 'translate(-50%, -50%)',
+          borderRadius: '50%',
+          border: '3px solid rgba(255, 255, 255, 0.95)',
+          backgroundColor: 'rgba(255, 255, 255, 0.18)',
+          boxShadow: '0 0 0 2px rgba(0, 0, 0, 0.55)',
+          pointerEvents: 'none',
+          ...style,
+        }}
+      />
+    );
+  };
 
   const wrapperClassName = ['quiz-image-shell', 'no-select', shellClassName]
     .filter(Boolean)

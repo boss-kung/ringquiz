@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useGameStore } from '../store/gameStore';
 import { useRevealResult } from '../hooks/useRevealResult';
 import { useGetServerTime } from '../hooks/useServerTime';
@@ -18,6 +18,7 @@ export function RevealScreen() {
   const getServerTime = useGetServerTime();
   const [showRevealImage, setShowRevealImage] = useState(false);
   const revealStartedAt = gameState?.updated_at ?? null;
+  const feedbackFiredRef = useRef(false);
 
   useEffect(() => {
     if (!question || !revealStartedAt) {
@@ -32,7 +33,12 @@ export function RevealScreen() {
   }, [revealStartedAt, getServerTime, question?.id]);
 
   useEffect(() => {
-    if (!revealResult) return;
+    if (!revealResult) {
+      feedbackFiredRef.current = false;
+      return;
+    }
+    if (feedbackFiredRef.current) return;
+    feedbackFiredRef.current = true;
     triggerFeedbackFx(revealResult.is_correct ? 'answerCorrect' : 'answerWrong');
   }, [revealResult?.is_correct, revealResult?.score]);
 
@@ -141,7 +147,7 @@ export function RevealScreen() {
           flexShrink: 0,
           borderTop: '1px solid var(--border)',
           background: 'rgba(8,13,28,.75)',
-          padding: '8px 18px 16px',
+          padding: '8px 18px calc(16px + env(safe-area-inset-bottom, 0px))',
           textAlign: 'center',
           position: 'relative',
           zIndex: 1,

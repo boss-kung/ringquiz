@@ -1,7 +1,6 @@
 import { useEffect } from 'react';
 import { useGameStore } from '../store/gameStore';
-
-const SESSION_VERSION_KEY = 'quiz_session_version';
+import { SESSION_VERSION_KEY } from '../lib/constants';
 
 /**
  * Saves the current game_state.session_version to localStorage

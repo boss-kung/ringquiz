@@ -2,10 +2,7 @@ import { useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { useGameStore } from '../store/gameStore';
 import { triggerFeedbackFx } from '../lib/feedbackFx';
-
-const PLAYER_ID_KEY = 'quiz_player_id';
-const DISPLAY_NAME_KEY = 'quiz_display_name';
-const SESSION_VERSION_KEY = 'quiz_session_version';
+import { PLAYER_ID_KEY, DISPLAY_NAME_KEY, SESSION_VERSION_KEY } from '../lib/constants';
 
 /**
  * Handles anonymous sign-in and player row upsert.

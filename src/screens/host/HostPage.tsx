@@ -34,10 +34,9 @@ const UTILITY_ACTIONS: { action: HostActionName; label: string; danger?: boolean
 
 export function HostPage() {
   const [secret, setSecret] = useState(() => sessionStorage.getItem(SESSION_KEY) ?? '');
-  const [authError] = useState('');
 
   if (!secret) {
-    return <HostLogin onLogin={(s) => { setSecret(s); }} error={authError} />;
+    return <HostLogin onLogin={(s) => { setSecret(s); }} />;
   }
 
   return (
@@ -50,7 +49,7 @@ export function HostPage() {
 
 // ── Login ──────────────────────────────────────────────────────────────────────
 
-function HostLogin({ onLogin, error }: { onLogin: (s: string) => void; error: string }) {
+function HostLogin({ onLogin }: { onLogin: (s: string) => void }) {
   const [value, setValue] = useState('');
   const [checking, setChecking] = useState(false);
   const [localError, setLocalError] = useState('');
@@ -116,8 +115,8 @@ function HostLogin({ onLogin, error }: { onLogin: (s: string) => void; error: st
             autoFocus
             className="gr-input"
           />
-          {(localError || error) && (
-            <p style={{ color: 'var(--rose)', fontSize: 13, textAlign: 'center' }}>{localError || error}</p>
+          {localError && (
+            <p style={{ color: 'var(--rose)', fontSize: 13, textAlign: 'center' }}>{localError}</p>
           )}
           <button
             type="submit"
