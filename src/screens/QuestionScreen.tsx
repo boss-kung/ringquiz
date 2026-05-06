@@ -10,6 +10,19 @@ import type { CirclePosition } from '../lib/types';
 import { triggerFeedbackFx, unlockFeedbackAudio } from '../lib/feedbackFx';
 import { FUNCTIONS_URL, supabase } from '../lib/supabase';
 
+function getSpecialRoundIntro(type: string) {
+  switch (type) {
+    case 'double_score':
+      return { title: 'Double Score Round', subtitle: 'ข้อนี้ตอบถูกแล้วได้คะแนนคูณ 2', badge: '×2 Double Score' };
+    case 'speed_bonus':
+      return { title: 'Speed Bonus Round', subtitle: 'ยิ่งตอบเร็ว ยิ่งได้โบนัสเพิ่ม', badge: '⚡ Speed Bonus' };
+    case 'mystery_round':
+      return { title: 'Mystery Round', subtitle: 'ข้อนี้มีบรรยากาศพิเศษ จับตาให้ดี', badge: '🎭 Mystery Round' };
+    default:
+      return null;
+  }
+}
+
 export function QuestionScreen() {
   const question = useGameStore((s) => s.question);
   const gameState = useGameStore((s) => s.gameState);
@@ -22,7 +35,9 @@ export function QuestionScreen() {
   const getServerTime = useGetServerTime();
   const [remainingMs, setRemainingMs] = useState<number | null>(null);
   const [buttonPressed, setButtonPressed] = useState(false);
+  const [showSpecialIntro, setShowSpecialIntro] = useState(false);
   const warmedQuestionIdRef = useRef<string | null>(null);
+  const specialIntroQuestionIdRef = useRef<string | null>(null);
   // Track last whole-second bucket for timerTickUrgent haptic (one per second, not per frame)
   const lastUrgentBucketRef = useRef<number | null>(null);
 
@@ -103,6 +118,20 @@ export function QuestionScreen() {
     };
   }, [question?.id]);
 
+  useEffect(() => {
+    const intro = getSpecialRoundIntro(question?.special_round_type ?? 'normal');
+    if (!question?.id || !intro) {
+      setShowSpecialIntro(false);
+      return;
+    }
+    if (specialIntroQuestionIdRef.current === question.id) return;
+
+    specialIntroQuestionIdRef.current = question.id;
+    setShowSpecialIntro(true);
+    const timer = setTimeout(() => setShowSpecialIntro(false), 2400);
+    return () => clearTimeout(timer);
+  }, [question?.id, question?.special_round_type]);
+
   if (!question) {
     return (
       <div style={{ display: 'flex', minHeight: '100%', alignItems: 'center', justifyContent: 'center', background: 'var(--navy)' }}>
@@ -113,6 +142,7 @@ export function QuestionScreen() {
 
   const canSubmit = Boolean(circlePosition) && !isLocked && !timeExpired;
   const questionImageUrl = resolveQuestionImageUrl(question.image_url);
+  const specialRoundIntro = getSpecialRoundIntro(question.special_round_type ?? 'normal');
 
   // Urgency state for vignette overlay
   const remainingSecs = remainingMs !== null ? remainingMs / 1000 : null;
@@ -163,6 +193,16 @@ export function QuestionScreen() {
       className={rootClasses}
       style={{ display: 'flex', minHeight: '100%', flexDirection: 'column', background: 'var(--navy)', position: 'relative' }}
     >
+      {showSpecialIntro && specialRoundIntro && (
+        <div className="gr-special-round-intro" aria-live="polite">
+          <div className={`gr-special-round-intro-card gr-special-badge-${question.special_round_type}`}>
+            <div className="gr-special-round-intro-kicker">Special Round</div>
+            <div className="gr-special-round-intro-title">{specialRoundIntro.title}</div>
+            <div className="gr-special-round-intro-subtitle">{specialRoundIntro.subtitle}</div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="gr-qhud-wrap">
         <div className="gr-qhud-order">Question {displayOrder ?? '—'}</div>
@@ -179,9 +219,7 @@ export function QuestionScreen() {
         <div className="gr-card gr-qtext-card">
           {question.special_round_type && question.special_round_type !== 'normal' && (
             <div className={`gr-special-round-badge gr-special-badge-${question.special_round_type}`}>
-              {question.special_round_type === 'double_score' ? '×2 Double Score' :
-               question.special_round_type === 'speed_bonus'  ? '⚡ Speed Bonus' :
-               '🎭 Mystery Round'}
+              {specialRoundIntro?.badge ?? 'Special Round'}
             </div>
           )}
           <p className="gr-qtext">

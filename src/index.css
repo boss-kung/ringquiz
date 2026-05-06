@@ -628,6 +628,11 @@ body.host-route {
 /* ── REVEAL MASK ────────────────────────────────────────────────────────────── */
 @keyframes revealMaskPulse { 0%,100%{opacity:.1}50%{opacity:1} }
 .reveal-mask-pulse { animation: revealMaskPulse 1s ease-in-out infinite; transform-origin: center; }
+.ds-page .reveal-mask-pulse {
+  animation: revealMaskPulse 1s ease-in-out infinite !important;
+  opacity: 1;
+  will-change: opacity;
+}
 .reveal-mask-static { opacity: .92; transform-origin: center; }
 @keyframes revealImageBloom {
   0% { opacity: 0; }
@@ -3450,6 +3455,127 @@ body.host-route {
              dsSpecialBadgeMystery 2.5s ease-in-out 0.5s infinite;
 }
 
+/* ── Special Round Intro Banners ───────────────────────────────────────────── */
+@keyframes dsSpecialIntroIn {
+  0%   { opacity: 0; transform: translate(-50%, -18px) scale(0.92); }
+  18%  { opacity: 1; transform: translate(-50%, 0) scale(1.02); }
+  82%  { opacity: 1; transform: translate(-50%, 0) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -10px) scale(0.98); }
+}
+@keyframes grSpecialIntroIn {
+  0%   { opacity: 0; transform: translate(-50%, -14px) scale(0.94); }
+  18%  { opacity: 1; transform: translate(-50%, 0) scale(1.02); }
+  82%  { opacity: 1; transform: translate(-50%, 0) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -8px) scale(0.99); }
+}
+
+.ds-special-round-intro,
+.gr-special-round-intro {
+  position: fixed;
+  top: max(18px, env(safe-area-inset-top, 0px) + 12px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(92vw, 720px);
+  z-index: 8500;
+  pointer-events: none;
+}
+
+.ds-special-round-intro-card,
+.gr-special-round-intro-card {
+  border-radius: 22px;
+  border: 1px solid rgba(255,255,255,.16);
+  background: linear-gradient(180deg, rgba(9,13,28,.92), rgba(9,13,28,.82));
+  box-shadow: 0 22px 60px rgba(0,0,0,.36);
+  backdrop-filter: blur(12px);
+  text-align: center;
+}
+
+.ds-special-round-intro-card {
+  padding: 18px 28px 20px;
+  animation: dsSpecialIntroIn 2.6s cubic-bezier(.22,1,.36,1) both;
+}
+
+.gr-special-round-intro-card {
+  padding: 14px 18px 16px;
+  animation: grSpecialIntroIn 2.4s cubic-bezier(.22,1,.36,1) both;
+}
+
+.ds-special-round-intro-kicker,
+.gr-special-round-intro-kicker {
+  font-size: .84rem;
+  font-weight: 800;
+  letter-spacing: .24em;
+  text-transform: uppercase;
+  opacity: .72;
+}
+
+.ds-special-round-intro-title,
+.gr-special-round-intro-title {
+  font-weight: 900;
+  letter-spacing: .02em;
+  line-height: 1.05;
+  margin-top: 8px;
+}
+
+.ds-special-round-intro-title {
+  font-size: clamp(2rem, 4.2vw, 3.25rem);
+}
+
+.gr-special-round-intro-title {
+  font-size: clamp(1.25rem, 6vw, 1.85rem);
+}
+
+.ds-special-round-intro-subtitle,
+.gr-special-round-intro-subtitle {
+  margin-top: 8px;
+  color: rgba(255,255,255,.82);
+  line-height: 1.35;
+}
+
+.ds-special-round-intro-subtitle {
+  font-size: 1.05rem;
+}
+
+.gr-special-round-intro-subtitle {
+  font-size: .88rem;
+}
+
+.ds-special-round-intro-double_score,
+.gr-special-badge-double_score.gr-special-round-intro-card {
+  border-color: rgba(245, 158, 11, .34);
+  box-shadow: 0 20px 55px rgba(245, 158, 11, .18);
+}
+.ds-special-round-intro-double_score .ds-special-round-intro-title,
+.gr-special-badge-double_score.gr-special-round-intro-card .gr-special-round-intro-title,
+.ds-special-round-intro-double_score .ds-special-round-intro-kicker,
+.gr-special-badge-double_score.gr-special-round-intro-card .gr-special-round-intro-kicker {
+  color: #fbbf24;
+}
+
+.ds-special-round-intro-speed_bonus,
+.gr-special-badge-speed_bonus.gr-special-round-intro-card {
+  border-color: rgba(59, 130, 246, .34);
+  box-shadow: 0 20px 55px rgba(59, 130, 246, .18);
+}
+.ds-special-round-intro-speed_bonus .ds-special-round-intro-title,
+.gr-special-badge-speed_bonus.gr-special-round-intro-card .gr-special-round-intro-title,
+.ds-special-round-intro-speed_bonus .ds-special-round-intro-kicker,
+.gr-special-badge-speed_bonus.gr-special-round-intro-card .gr-special-round-intro-kicker {
+  color: #60a5fa;
+}
+
+.ds-special-round-intro-mystery_round,
+.gr-special-badge-mystery_round.gr-special-round-intro-card {
+  border-color: rgba(168, 85, 247, .34);
+  box-shadow: 0 20px 55px rgba(168, 85, 247, .2);
+}
+.ds-special-round-intro-mystery_round .ds-special-round-intro-title,
+.gr-special-badge-mystery_round.gr-special-round-intro-card .gr-special-round-intro-title,
+.ds-special-round-intro-mystery_round .ds-special-round-intro-kicker,
+.gr-special-badge-mystery_round.gr-special-round-intro-card .gr-special-round-intro-kicker {
+  color: #c084fc;
+}
+
 /* ── Player Special Round Badge ─────────────────────────────────────────────── */
 .gr-special-round-badge {
   display: inline-flex;
@@ -3528,13 +3654,12 @@ body.host-route {
   .ds-fx-drumroll-ring,
   .ds-special-badge,
   .ds-special-badge-mystery_round,
+  .ds-special-round-intro-card,
   .gr-special-round-badge,
+  .gr-special-round-intro-card,
   .gr-special-badge-mystery_round {
     animation: none !important;
     transition: none !important;
     opacity: 1 !important;
-  }
-  .ds-fx-overlay {
-    display: none;
   }
 }
