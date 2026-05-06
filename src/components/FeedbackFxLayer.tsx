@@ -64,7 +64,7 @@ export function FeedbackFxLayer() {
         ]);
         window.setTimeout(() => {
           setRipples((current) => current.filter((item) => item.id !== id));
-        }, 560);
+        }, 700);
       };
 
       const addBurst = (mode: BurstFx['mode']) => {
@@ -91,6 +91,7 @@ export function FeedbackFxLayer() {
             setLockPulse(true);
             window.setTimeout(() => setLockPulse(false), 520);
           }
+          addFlash('fx-screen-flash fx-screen-flash-gold fx-screen-flash-lock', 360);
           break;
         case 'answerCorrect':
           addFlash('fx-screen-flash fx-screen-flash-correct');
@@ -110,6 +111,9 @@ export function FeedbackFxLayer() {
           break;
         case 'leaderboardShow':
           addFlash('fx-screen-flash fx-screen-flash-gold');
+          break;
+        case 'timerTickUrgent':
+          // haptic-only; handled in feedbackFx.ts vibrate — no visual
           break;
         default:
           break;

@@ -7,6 +7,34 @@ import { FUNCTIONS_URL } from '../lib/supabase';
 import { resolveQuestionImageUrl, resolveRevealImageUrl } from '../lib/questionAssets';
 import { triggerFeedbackFx } from '../lib/feedbackFx';
 
+// ── Streak helpers (localStorage, local-only, never written to Supabase) ─────
+
+function getStreakKey(playerId: string, sessionVersion: number | string) {
+  return `playerVisualStreak:${sessionVersion}:${playerId}`;
+}
+
+function loadStreak(key: string): number {
+  try {
+    return parseInt(window.localStorage.getItem(key) ?? '0', 10) || 0;
+  } catch {
+    return 0;
+  }
+}
+
+function saveStreak(key: string, value: number) {
+  try {
+    window.localStorage.setItem(key, String(value));
+  } catch {
+    // storage may be blocked — streak is visual-only, ignore
+  }
+}
+
+function streakLabel(n: number): string {
+  if (n >= 5) return `🔥 On fire x${n}`;
+  if (n >= 3) return `🌶 Hot streak x${n}`;
+  return `⚡ Streak x${n}`;
+}
+
 export function RevealScreen() {
   useRevealResult();
 
@@ -16,11 +44,16 @@ export function RevealScreen() {
   const circlePosition = useGameStore((s) => s.circlePosition);
   const submitResult = useGameStore((s) => s.submitResult);
   const gameState = useGameStore((s) => s.gameState);
+  const playerId = useGameStore((s) => s.playerId);
   const getServerTime = useGetServerTime();
   const [showRevealImage, setShowRevealImage] = useState(false);
   const [revealImageReady, setRevealImageReady] = useState(false);
   const revealStartedAt = gameState?.updated_at ?? null;
   const feedbackFiredRef = useRef(false);
+  const streakUpdatedRef = useRef<string | null>(null); // keyed by question.id + result
+
+  // Local-only visual streak
+  const [visualStreak, setVisualStreak] = useState(0);
 
   useEffect(() => {
     if (!question || !revealStartedAt) {
@@ -45,6 +78,7 @@ export function RevealScreen() {
       : null
   );
 
+  // Feedback FX
   useEffect(() => {
     if (!effectiveRevealResult) {
       feedbackFiredRef.current = false;
@@ -54,6 +88,41 @@ export function RevealScreen() {
     feedbackFiredRef.current = true;
     triggerFeedbackFx(effectiveRevealResult.is_correct ? 'answerCorrect' : 'answerWrong');
   }, [effectiveRevealResult?.is_correct, effectiveRevealResult?.score]);
+
+  // Visual streak — update once per question result
+  useEffect(() => {
+    if (!effectiveRevealResult || !playerId || !question) return;
+    const resultKey = `${question.id}:${effectiveRevealResult.is_correct}`;
+    if (streakUpdatedRef.current === resultKey) return;
+    streakUpdatedRef.current = resultKey;
+
+    const sessionVersion = gameState?.session_version ?? 0;
+    const key = getStreakKey(playerId, sessionVersion);
+    const current = loadStreak(key);
+
+    if (effectiveRevealResult.is_correct) {
+      const next = current + 1;
+      saveStreak(key, next);
+      setVisualStreak(next);
+    } else {
+      saveStreak(key, 0);
+      setVisualStreak(0);
+    }
+  }, [effectiveRevealResult, playerId, question?.id, gameState?.session_version]);
+
+  // Also reset streak on no-answer
+  useEffect(() => {
+    if (!revealNoAnswer || !playerId) return;
+    if (!question) return;
+    const resultKey = `${question.id}:no-answer`;
+    if (streakUpdatedRef.current === resultKey) return;
+    streakUpdatedRef.current = resultKey;
+
+    const sessionVersion = gameState?.session_version ?? 0;
+    const key = getStreakKey(playerId, sessionVersion);
+    saveStreak(key, 0);
+    setVisualStreak(0);
+  }, [revealNoAnswer, playerId, question?.id, gameState?.session_version]);
 
   const originalQuestionImage = question
     ? resolveQuestionImageUrl(question.image_url)
@@ -125,8 +194,19 @@ export function RevealScreen() {
     }
   }
 
+  // Root screen state class
+  let screenStateClass = 'is-resolving';
+  if (revealNoAnswer) screenStateClass = 'is-no-answer';
+  else if (effectiveRevealResult) screenStateClass = isCorrect ? 'is-correct' : 'is-wrong';
+
+  const showScoreFloat = isCorrect && effectiveRevealResult && effectiveRevealResult.score > 0;
+  const showStreak = visualStreak >= 2 && isCorrect;
+
   return (
-    <div style={{ display: 'flex', minHeight: '100%', flexDirection: 'column', background: 'var(--navy)', position: 'relative' }}>
+    <div
+      className={`gr-reveal-screen ${screenStateClass}`}
+      style={{ display: 'flex', minHeight: '100%', flexDirection: 'column', background: 'var(--navy)', position: 'relative' }}
+    >
       {/* Background glows */}
       <div className="gr-glow gr-glow-a" style={{ opacity: .6 }} />
       <div className="gr-glow gr-glow-b" style={{ opacity: .6 }} />
@@ -157,6 +237,23 @@ export function RevealScreen() {
                 }}
               >
                 {resultSub}
+              </div>
+            )}
+
+            {/* Floating score */}
+            {showScoreFloat && (
+              <div className="gr-score-float" aria-hidden>
+                +{effectiveRevealResult!.score.toLocaleString()}
+              </div>
+            )}
+
+            {/* Streak pill */}
+            {showStreak && (
+              <div
+                className={`gr-streak-pill${visualStreak >= 5 ? ' gr-streak-pill-fire' : visualStreak >= 3 ? ' gr-streak-pill-hot' : ''}`}
+                aria-label={`Streak ${visualStreak}`}
+              >
+                {streakLabel(visualStreak)}
               </div>
             )}
           </>

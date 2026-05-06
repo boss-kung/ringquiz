@@ -4,6 +4,7 @@ import { useAnswerSubmit } from '../hooks/useAnswerSubmit';
 import { useGetServerTime } from '../hooks/useServerTime';
 import { QuestionImage } from '../components/QuestionImage';
 import { Timer } from '../components/Timer';
+import { SoundFxToggle } from '../components/SoundFxToggle';
 import { resolveQuestionImageUrl } from '../lib/questionAssets';
 import type { CirclePosition } from '../lib/types';
 import { triggerFeedbackFx, unlockFeedbackAudio } from '../lib/feedbackFx';
@@ -22,6 +23,8 @@ export function QuestionScreen() {
   const [remainingMs, setRemainingMs] = useState<number | null>(null);
   const [buttonPressed, setButtonPressed] = useState(false);
   const warmedQuestionIdRef = useRef<string | null>(null);
+  // Track last whole-second bucket for timerTickUrgent haptic (one per second, not per frame)
+  const lastUrgentBucketRef = useRef<number | null>(null);
 
   const endsAt = gameState?.question_ends_at ?? null;
   const displayOrder = question?.play_order ?? question?.order_index ?? gameState?.current_question_index ?? null;
@@ -49,6 +52,22 @@ export function QuestionScreen() {
   }, [endsAt, getServerTime]);
 
   const timeExpired = remainingMs !== null && remainingMs <= 0;
+  const isLocked = submitted || submitting;
+
+  // timerTickUrgent haptic — fires once per second bucket when <=5s and not locked
+  useEffect(() => {
+    if (remainingMs === null || isLocked || timeExpired) return;
+    const secs = remainingMs / 1000;
+    if (secs > 5) {
+      lastUrgentBucketRef.current = null;
+      return;
+    }
+    const bucket = Math.ceil(secs); // 5, 4, 3, 2, 1
+    if (bucket > 0 && bucket !== lastUrgentBucketRef.current) {
+      lastUrgentBucketRef.current = bucket;
+      triggerFeedbackFx('timerTickUrgent');
+    }
+  }, [remainingMs, isLocked, timeExpired]);
 
   useEffect(() => {
     if (timeExpired && !submitted) {
@@ -92,9 +111,13 @@ export function QuestionScreen() {
     );
   }
 
-  const isLocked = submitted || submitting;
   const canSubmit = Boolean(circlePosition) && !isLocked && !timeExpired;
   const questionImageUrl = resolveQuestionImageUrl(question.image_url);
+
+  // Urgency state for vignette overlay
+  const remainingSecs = remainingMs !== null ? remainingMs / 1000 : null;
+  const isUrgent = remainingSecs !== null && remainingSecs <= 5 && !isLocked;
+  const isCritical = remainingSecs !== null && remainingSecs <= 3 && !isLocked;
 
   const handleCircleChange = (pos: CirclePosition) => {
     if (!isLocked) setCirclePosition(pos);
@@ -105,14 +128,41 @@ export function QuestionScreen() {
     triggerFeedbackFx('answerTap', { clientX, clientY });
   };
 
-  const handleSubmitPress = () => {
+  const handleSubmitClick = () => {
     if (!canSubmit) return;
+    void unlockFeedbackAudio();
+    triggerFeedbackFx('answerLocked');
     setButtonPressed(true);
     void submit();
   };
 
+  // Circle class: locked visual when submitted/submitting
+  const circleClass = isLocked ? 'quiz-answer-circle-locked' : '';
+
+  // Button label
+  let btnLabel: string;
+  if (submitting) {
+    btnLabel = 'กำลังล็อก...';
+  } else if (submitted) {
+    btnLabel = '🔒 ล็อกคำตอบแล้ว';
+  } else if (circlePosition) {
+    btnLabel = 'ล็อกคำตอบ';
+  } else {
+    btnLabel = 'แตะที่ภาพเพื่อตอบ';
+  }
+
+  // Root wrapper classes
+  const rootClasses = [
+    'gr-question-screen',
+    isUrgent && !isCritical ? 'gr-question-urgent' : '',
+    isCritical ? 'gr-question-critical' : '',
+  ].filter(Boolean).join(' ');
+
   return (
-    <div style={{ display: 'flex', minHeight: '100%', flexDirection: 'column', background: 'var(--navy)' }}>
+    <div
+      className={rootClasses}
+      style={{ display: 'flex', minHeight: '100%', flexDirection: 'column', background: 'var(--navy)', position: 'relative' }}
+    >
       {/* Header */}
       <div className="gr-qhud-wrap">
         <div className="gr-qhud-order">Question {displayOrder ?? '—'}</div>
@@ -120,6 +170,7 @@ export function QuestionScreen() {
           remainingMs={remainingMs}
           totalMs={durationMs}
         />
+        <SoundFxToggle compact />
       </div>
 
       {/* Question text */}
@@ -142,14 +193,13 @@ export function QuestionScreen() {
             onInteractionStart={handleInteractionStart}
             locked={isLocked}
             shellClassName="quiz-image-shell--question"
+            circleClassName={circleClass}
           />
         </div>
       </div>
 
       {/* Submit bar */}
-      <div
-        className="gr-qsubmit"
-      >
+      <div className="gr-qsubmit">
         <div style={{ marginBottom: submitted || timeExpired || submitError ? 8 : 0 }}>
           {timeExpired && !submitted && !submitting && (
             <p style={{ textAlign: 'center', fontSize: 12, fontWeight: 600, color: 'var(--rose)', marginBottom: 6 }}>
@@ -167,7 +217,7 @@ export function QuestionScreen() {
         </div>
 
         <button
-          onClick={handleSubmitPress}
+          onClick={handleSubmitClick}
           onPointerDown={() => {
             if (canSubmit) setButtonPressed(true);
           }}
@@ -175,10 +225,10 @@ export function QuestionScreen() {
           onPointerCancel={() => setButtonPressed(false)}
           onBlur={() => setButtonPressed(false)}
           disabled={!canSubmit}
-          className={`gr-btn ${submitted ? 'gr-btn-submit-done' : 'gr-btn-gold'}${buttonPressed ? ' gr-btn-is-pressing' : ''}`}
+          className={`gr-btn ${submitted ? 'gr-btn-submit-done gr-btn-submit-locked' : 'gr-btn-gold'}${buttonPressed ? ' gr-btn-is-pressing' : ''}`}
           style={{ marginTop: 0 }}
         >
-          {submitting ? 'กำลังส่ง...' : submitted ? '✓ ส่งแล้ว' : circlePosition ? 'ส่งคำตอบ' : 'แตะที่ภาพเพื่อตอบ'}
+          {btnLabel}
         </button>
       </div>
     </div>

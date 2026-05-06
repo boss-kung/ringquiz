@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { CSSProperties } from 'react';
 
 interface PracticeCircle {
   x: number;
@@ -30,7 +31,13 @@ interface ContainedImageRect {
   offsetY: number;
 }
 
+type FeedbackKind = 'idle' | 'correct' | 'close' | 'wrong';
+
 const PRACTICE_MASK_ALPHA_THRESHOLD = 10;
+// Multiplier for "close" check — expand search radius without counting as correct
+const CLOSE_RADIUS_MULTIPLIER = 1.9;
+// Number of local confetti particles on correct
+const CONFETTI_COUNT = 24;
 
 function withBaseUrl(path: string): string {
   const base = import.meta.env.BASE_URL || '/';
@@ -108,10 +115,11 @@ function evaluateMaskOverlap(
   answer: PracticeCircle,
   mask: PracticeMaskData,
   alphaThreshold: number,
+  radiusMultiplier = 1,
 ): boolean {
   const centerX = answer.x * mask.width;
   const centerY = answer.y * mask.height;
-  const radiusPx = answer.r * mask.width;
+  const radiusPx = answer.r * mask.width * radiusMultiplier;
 
   const minX = clamp(Math.floor(centerX - radiusPx), 0, mask.width - 1);
   const maxX = clamp(Math.ceil(centerX + radiusPx), 0, mask.width - 1);
@@ -137,6 +145,25 @@ function evaluateMaskOverlap(
   return false;
 }
 
+// Lightweight confetti particle data (static per render)
+const CONFETTI_COLORS = ['#F5C74A', '#34D399', '#818CF8', '#FB7185', '#FFF8E7'];
+interface ConfettiParticle {
+  id: number;
+  color: string;
+  angle: number;  // degrees
+  distance: number; // px
+  size: number;
+}
+function makeConfetti(): ConfettiParticle[] {
+  return Array.from({ length: CONFETTI_COUNT }, (_, i) => ({
+    id: i,
+    color: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
+    angle: (360 / CONFETTI_COUNT) * i + Math.random() * 14 - 7,
+    distance: 38 + Math.random() * 28,
+    size: 4 + Math.random() * 4,
+  }));
+}
+
 export function PlayerPracticeCard() {
   const frameRef = useRef<HTMLDivElement>(null);
   const dragPointerId = useRef<number | null>(null);
@@ -146,8 +173,8 @@ export function PlayerPracticeCard() {
   const [maskError, setMaskError] = useState<string | null>(null);
   const [answer, setAnswer] = useState<PracticeCircle | null>(null);
   const [submitted, setSubmitted] = useState(false);
-  const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
+  const [feedbackKind, setFeedbackKind] = useState<FeedbackKind>('idle');
+  const [confetti, setConfetti] = useState<ConfettiParticle[]>([]);
 
   const containedRect = useMemo(
     () => getContainedImageRect(frameSize.width, frameSize.height, imageSize.width, imageSize.height),
@@ -201,8 +228,8 @@ export function PlayerPracticeCard() {
   const resetPractice = useCallback(() => {
     setAnswer(null);
     setSubmitted(false);
-    setIsCorrect(null);
-    setMessage(null);
+    setFeedbackKind('idle');
+    setConfetti([]);
   }, []);
 
   const getCircleFromPointer = useCallback((clientX: number, clientY: number, clampToImage: boolean): PracticeCircle | null => {
@@ -239,7 +266,7 @@ export function PlayerPracticeCard() {
     e.preventDefault();
     e.currentTarget.setPointerCapture(e.pointerId);
     dragPointerId.current = e.pointerId;
-    setMessage(null);
+    setFeedbackKind('idle');
     setAnswer(next);
   }, [containedRect.renderedHeight, containedRect.renderedWidth, getCircleFromPointer, submitted]);
 
@@ -259,27 +286,40 @@ export function PlayerPracticeCard() {
 
   const handleSubmit = useCallback(() => {
     if (!answer) {
-      setMessage('วางวงกลมก่อน');
+      setFeedbackKind('idle');
       return;
     }
     if (!maskData) {
-      setMessage(maskError ?? 'ยังไม่พร้อม ลองใหม่');
       return;
     }
 
     // Local-only practice mode:
     // This evaluation must never call submit-answer and must never write to
     // Supabase or affect any live game state, stats, scores, or answers rows.
-    const correct = evaluateMaskOverlap(answer, maskData, PRACTICE_MASK_ALPHA_THRESHOLD);
+    const correct = evaluateMaskOverlap(answer, maskData, PRACTICE_MASK_ALPHA_THRESHOLD, 1);
+    const close = !correct && evaluateMaskOverlap(answer, maskData, PRACTICE_MASK_ALPHA_THRESHOLD, CLOSE_RADIUS_MULTIPLIER);
 
     setSubmitted(true);
-    setIsCorrect(correct);
-    setMessage(
-      correct
-        ? 'ถูกต้อง!'
-        : 'ยังไม่ถูก ลองใหม่',
-    );
-  }, [answer, maskData, maskError]);
+
+    if (correct) {
+      setFeedbackKind('correct');
+      setConfetti(makeConfetti());
+    } else if (close) {
+      setFeedbackKind('close');
+    } else {
+      setFeedbackKind('wrong');
+    }
+  }, [answer, maskData]);
+
+  const feedbackMessage = (): string | null => {
+    if (!submitted) return null;
+    switch (feedbackKind) {
+      case 'correct': return 'โดนแล้ว!';
+      case 'close': return 'ใกล้มาก ลองขยับอีกนิด';
+      case 'wrong': return 'ยังไม่โดน ลองใหม่';
+      default: return null;
+    }
+  };
 
   const answerStyle = answer
     ? {
@@ -292,11 +332,19 @@ export function PlayerPracticeCard() {
       }
     : null;
 
+  const frameClass = [
+    'pw-practice-frame',
+    submitted ? `is-${feedbackKind}` : '',
+  ].filter(Boolean).join(' ');
+
+  const msg = feedbackMessage() ?? maskError;
+
   return (
     <section className="pw-practice-zone gr-card">
       <div className="pw-practice-head">
         <div>
           <h2 className="pw-practice-title">{PRACTICE_QUESTION.title}</h2>
+          <p className="pw-practice-note">ไม่นับคะแนนในเกมจริง</p>
         </div>
       </div>
 
@@ -304,12 +352,12 @@ export function PlayerPracticeCard() {
 
       <div
         ref={frameRef}
-        className={`pw-practice-frame${submitted ? ' is-submitted' : ''}`}
+        className={frameClass}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerEnd}
         onPointerCancel={handlePointerEnd}
-        style={{ touchAction: 'none' }}
+        style={{ touchAction: 'none', position: 'relative' }}
       >
         <img
           src={PRACTICE_QUESTION.imageUrl}
@@ -358,22 +406,51 @@ export function PlayerPracticeCard() {
 
         {answerStyle && (
           <div
-            className={`pw-circle${submitted ? ' is-locked' : ''}${submitted && isCorrect ? ' is-correct' : ''}${submitted && isCorrect === false ? ' is-wrong' : ''}`}
+            className={[
+              'pw-circle',
+              submitted ? 'is-locked' : '',
+              submitted && feedbackKind === 'correct' ? 'is-correct' : '',
+              submitted && feedbackKind === 'close' ? 'is-close' : '',
+              submitted && feedbackKind === 'wrong' ? 'is-wrong' : '',
+            ].filter(Boolean).join(' ')}
             style={answerStyle}
           />
         )}
+
+        {/* Local confetti on correct — never writes to Supabase */}
+        {feedbackKind === 'correct' && confetti.map((p) => (
+          <div
+            key={p.id}
+            className="pw-confetti-dot"
+            style={{
+              '--pw-angle': `${p.angle}deg`,
+              '--pw-distance': `${p.distance}px`,
+              width: p.size,
+              height: p.size,
+              background: p.color,
+              left: answerStyle ? answerStyle.left : '50%',
+              top: answerStyle ? answerStyle.top : '50%',
+            } as CSSProperties}
+          />
+        ))}
       </div>
 
       <div className="pw-practice-actions">
-        <button type="button" className="pw-submit-btn" onClick={handleSubmit} disabled={submitted}>
+        <button type="button" className="pw-submit-btn" onClick={handleSubmit} disabled={submitted || !answer}>
           {submitted ? 'ส่งแล้ว' : 'ส่ง'}
         </button>
         <button type="button" className="pw-reset-btn" onClick={resetPractice}>
           {submitted ? 'ลองใหม่' : 'เริ่มใหม่'}
         </button>
       </div>
-      <div className={`pw-practice-feedback${submitted && isCorrect ? ' is-correct' : ''}${submitted && isCorrect === false ? ' is-wrong' : ''}${!message ? ' is-empty' : ''}`}>
-        {message ?? maskError ?? ' '}
+      <div
+        className={[
+          'pw-practice-feedback',
+          submitted && feedbackKind !== 'idle' ? `is-${feedbackKind}` : '',
+          !msg ? 'is-empty' : '',
+        ].filter(Boolean).join(' ')}
+      >
+        {msg ?? ' '}
       </div>
     </section>
   );

@@ -1,6 +1,7 @@
 import type { CSSProperties } from 'react';
 import { useGameStore } from '../store/gameStore';
 import { PlayerPracticeCard } from '../components/PlayerPracticeCard';
+import { SoundFxToggle } from '../components/SoundFxToggle';
 
 const PARTICLES = [
   { w: 6, h: 6, top: '18%', left: '12%', bg: 'rgba(245,199,74,.5)', dur: '5.2s', delay: '0s' },
@@ -40,7 +41,10 @@ export function WaitingScreen() {
           <div className="gr-label-xs">Golden Ring · Lobby</div>
           <div className="pw-header-title">รอเริ่มเกม</div>
         </div>
-        <div className="gr-badge gr-badge-live">Live</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <SoundFxToggle />
+          <div className="gr-badge gr-badge-live">Live</div>
+        </div>
       </div>
 
       <div className="pw-body">

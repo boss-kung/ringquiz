@@ -13,6 +13,8 @@ interface Props {
   maskOverlayUrl?: string;
   maskOverlayClassName?: string;
   shellClassName?: string;
+  /** Extra class(es) to apply to the answer circle div */
+  circleClassName?: string;
 }
 
 // ── Coordinate helpers ───────────────────────────────────────────────────────
@@ -104,6 +106,35 @@ function containerToImageRatio(
   };
 }
 
+// ── Drag trail ───────────────────────────────────────────────────────────────
+
+interface TrailPoint {
+  id: number;
+  /** pixel offset from container left, within the quiz-image-circle */
+  x: number;
+  /** pixel offset from container top, within the quiz-image-circle */
+  y: number;
+  createdAt: number;
+}
+
+const TRAIL_MAX_AGE_MS = 450;
+const TRAIL_THROTTLE_MS = 50;
+
+let trailNextId = 1;
+
+function useReducedMotion() {
+  const [reduced, setReduced] = useState(false);
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return;
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const sync = () => setReduced(mq.matches);
+    sync();
+    mq.addEventListener?.('change', sync);
+    return () => mq.removeEventListener?.('change', sync);
+  }, []);
+  return reduced;
+}
+
 export function QuestionImage({
   imageUrl,
   circleRadiusRatio,
@@ -115,12 +146,28 @@ export function QuestionImage({
   maskOverlayUrl,
   maskOverlayClassName,
   shellClassName = '',
+  circleClassName = '',
 }: Props) {
   const imgRef = useRef<HTMLImageElement>(null);
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const [stableNaturalSize, setStableNaturalSize] = useState({ width: 0, height: 0 });
   const [loadFailed, setLoadFailed] = useState(false);
   const isDragging = useRef(false);
+  const reducedMotion = useReducedMotion();
+
+  // Trail state
+  const [trailPoints, setTrailPoints] = useState<TrailPoint[]>([]);
+  const lastTrailTime = useRef(0);
+
+  // Purge old trail points every 100 ms when active
+  useEffect(() => {
+    if (trailPoints.length === 0) return;
+    const id = window.setInterval(() => {
+      const now = Date.now();
+      setTrailPoints((pts) => pts.filter((p) => now - p.createdAt < TRAIL_MAX_AGE_MS));
+    }, 80);
+    return () => window.clearInterval(id);
+  }, [trailPoints.length]);
 
   useEffect(() => {
     setLoadFailed(false);
@@ -169,6 +216,31 @@ export function QuestionImage({
     return pos;
   }, []);
 
+  /** Returns container-local pixel coords (within the quiz-image-circle) for a pointer event, clamped to image rect. */
+  const containerCoordsFromEvent = useCallback((clientX: number, clientY: number): { x: number; y: number } | null => {
+    const img = imgRef.current;
+    if (!img) return null;
+    const rect = img.getBoundingClientRect();
+    const cr = getContainedImageRect(rect.width, rect.height, img.naturalWidth, img.naturalHeight);
+    const x = Math.max(cr.offsetX, Math.min(cr.offsetX + cr.renderedWidth, clientX - rect.left));
+    const y = Math.max(cr.offsetY, Math.min(cr.offsetY + cr.renderedHeight, clientY - rect.top));
+    return { x, y };
+  }, []);
+
+  const addTrailPoint = useCallback((clientX: number, clientY: number) => {
+    if (reducedMotion || locked) return;
+    const now = Date.now();
+    if (now - lastTrailTime.current < TRAIL_THROTTLE_MS) return;
+    lastTrailTime.current = now;
+    const coords = containerCoordsFromEvent(clientX, clientY);
+    if (!coords) return;
+    const id = trailNextId++;
+    setTrailPoints((pts) => [
+      ...pts.slice(-4), // keep at most 5 points (4 old + 1 new)
+      { id, x: coords.x, y: coords.y, createdAt: now },
+    ]);
+  }, [reducedMotion, locked, containerCoordsFromEvent]);
+
   const handlePointerDown = useCallback((e: ReactPointerEvent<HTMLImageElement>) => {
     if (locked) {
       return;
@@ -189,11 +261,13 @@ export function QuestionImage({
       return;
     }
 
+    addTrailPoint(e.clientX, e.clientY);
+
     const pos = coordsFromEvent(e.clientX, e.clientY, true);
     if (pos) {
       onCircleChange(pos);
     }
-  }, [locked, coordsFromEvent, onCircleChange]);
+  }, [locked, coordsFromEvent, onCircleChange, addTrailPoint]);
 
   const handlePointerUp = useCallback(() => {
     isDragging.current = false;
@@ -208,8 +282,9 @@ export function QuestionImage({
   const circlePx = containedRect.renderedWidth * circleRadiusRatio;
   const canRenderImage = Boolean(imageUrl) && !loadFailed;
 
-  const renderCircle = (pos: CirclePosition, style?: CSSProperties) => (
+  const renderCircle = (pos: CirclePosition, style?: CSSProperties, extraClass?: string) => (
     <div
+      className={extraClass}
       style={{
         position: 'absolute',
         left: `${containedRect.offsetX + pos.xRatio * containedRect.renderedWidth}px`,
@@ -230,6 +305,8 @@ export function QuestionImage({
   const wrapperClassName = ['quiz-image-shell', 'no-select', shellClassName]
     .filter(Boolean)
     .join(' ');
+
+  const now = Date.now();
 
   return (
     <div className={wrapperClassName} style={{ touchAction: 'none' }}>
@@ -300,7 +377,26 @@ export function QuestionImage({
           />
         )}
 
-        {circle && renderCircle(circle)}
+        {/* Drag trail dots — local only, never written to Supabase */}
+        {!reducedMotion && !locked && trailPoints.map((pt) => {
+          const age = now - pt.createdAt;
+          const alpha = Math.max(0, 1 - age / TRAIL_MAX_AGE_MS);
+          const scale = 0.35 + alpha * 0.65;
+          return (
+            <div
+              key={pt.id}
+              className="quiz-drag-trail-dot"
+              style={{
+                left: pt.x,
+                top: pt.y,
+                opacity: alpha * 0.55,
+                transform: `translate(-50%, -50%) scale(${scale})`,
+              } as CSSProperties}
+            />
+          );
+        })}
+
+        {circle && renderCircle(circle, undefined, circleClassName || undefined)}
         {revealCircle && revealCircle !== circle && renderCircle(revealCircle, {
           borderColor: 'rgba(250, 204, 21, 0.95)',
           backgroundColor: 'rgba(250, 204, 21, 0.15)',

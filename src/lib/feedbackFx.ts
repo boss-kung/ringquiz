@@ -8,7 +8,8 @@ export type FeedbackFxEventName =
   | 'answerWrong'
   | 'timeout'
   | 'reveal'
-  | 'leaderboardShow';
+  | 'leaderboardShow'
+  | 'timerTickUrgent';
 
 export interface FeedbackFxDetail {
   clientX?: number;
@@ -30,6 +31,7 @@ const vibratePatterns: Partial<Record<FeedbackFxEventName, number | number[]>> =
   timeout: [30, 45, 30],
   reveal: [18, 30, 18],
   leaderboardShow: [18, 50, 30],
+  timerTickUrgent: [10],
 };
 
 const audioProfiles: Partial<Record<FeedbackFxEventName, { frequency: number; durationMs: number; type?: OscillatorType }>> = {

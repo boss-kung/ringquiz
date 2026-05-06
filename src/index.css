@@ -2374,15 +2374,7 @@ body.host-route {
 .fx-screen-flash-wrong { background: radial-gradient(circle at center, rgba(248,113,113,.18), rgba(248,113,113,0) 62%); }
 .fx-screen-flash-timeout { background: radial-gradient(circle at center, rgba(251,191,36,.18), rgba(244,63,94,0) 66%); }
 .fx-screen-flash-reveal { background: radial-gradient(circle at center, rgba(129,140,248,.18), rgba(245,199,74,0) 68%); }
-.fx-answer-ripple {
-  position: absolute;
-  width: 96px;
-  height: 96px;
-  border-radius: 999px;
-  border: 2px solid rgba(245,199,74,.8);
-  box-shadow: 0 0 0 8px rgba(245,199,74,.08);
-  animation: fxAnswerRipple .56s ease-out both;
-}
+/* .fx-answer-ripple — multi-ring version defined in Phase 1 section below */
 .fx-lock-pulse {
   position: absolute;
   left: 50%;
@@ -2482,3 +2474,289 @@ body.host-route {
   }
 }
 .pw-reset-btn:not(:disabled):active { background: rgba(255,255,255,.1); }
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   PHASE 1 — PLAYER EXPERIENCE FX
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+/* ── 1. Multi-ring answer ripple ────────────────────────────────────────────── */
+.fx-answer-ripple {
+  position: absolute;
+  width: 60px;
+  height: 60px;
+  border-radius: 999px;
+  transform: translate(-50%, -50%);
+  animation: fxAnswerRippleOuter .70s ease-out both;
+  pointer-events: none;
+}
+.fx-answer-ripple::before {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 999px;
+  border: 2.5px solid rgba(245,199,74,.85);
+  box-shadow: 0 0 8px rgba(245,199,74,.18);
+  animation: fxRippleInner .38s ease-out both;
+}
+.fx-answer-ripple::after {
+  content: '';
+  position: absolute;
+  inset: -18px;
+  border-radius: 999px;
+  border: 1.5px solid rgba(255,255,255,.28);
+  animation: fxRippleOuter .70s ease-out both;
+}
+@keyframes fxRippleInner {
+  0%   { opacity: .95; transform: scale(.25); }
+  100% { opacity: 0;   transform: scale(1.1); }
+}
+@keyframes fxRippleOuter {
+  0%   { opacity: .7;  transform: scale(.2); }
+  100% { opacity: 0;   transform: scale(1.0); }
+}
+@keyframes fxAnswerRippleOuter {
+  0%   { opacity: 0; }
+  100% { opacity: 0; }
+}
+
+/* ── 1a. Lock flash modifier ────────────────────────────────────────────────── */
+.fx-screen-flash-lock {
+  background: radial-gradient(circle at center, rgba(245,199,74,.24), rgba(245,199,74,0) 58%);
+  animation-duration: .36s;
+}
+
+/* ── 2. Drag trail dot ──────────────────────────────────────────────────────── */
+.quiz-drag-trail-dot {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: rgba(245,199,74,.55);
+  box-shadow: 0 0 6px rgba(245,199,74,.22);
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+
+/* ── 3. Submit lock-in ──────────────────────────────────────────────────────── */
+.quiz-answer-circle-locked {
+  border-color: rgba(245,199,74,.9) !important;
+  background-color: rgba(245,199,74,.12) !important;
+  box-shadow: 0 0 0 3px rgba(245,199,74,.18), 0 0 16px rgba(245,199,74,.22) !important;
+  animation: qaCircleLock .45s cubic-bezier(.34,1.56,.64,1) both;
+}
+@keyframes qaCircleLock {
+  0%  { transform: translate(-50%,-50%) scale(1.12); }
+  60% { transform: translate(-50%,-50%) scale(.93); }
+  100%{ transform: translate(-50%,-50%) scale(1); }
+}
+
+.gr-btn-submit-locked {
+  background: rgba(245,199,74,.08);
+  border: 1.5px solid rgba(245,199,74,.35);
+  color: var(--gold);
+  letter-spacing: .04em;
+}
+.gr-btn-submit-locked:disabled {
+  opacity: 1;
+}
+
+/* ── 4. Timer urgency vignette overlay ──────────────────────────────────────── */
+.gr-question-screen {
+  overflow: hidden; /* contain vignette pseudo-element */
+}
+.gr-question-urgent::after,
+.gr-question-critical::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+  animation: grVignetteUrgent .9s ease-in-out infinite;
+}
+.gr-question-urgent::after {
+  box-shadow: inset 0 0 55px rgba(251,113,133,.18);
+}
+.gr-question-critical::after {
+  box-shadow: inset 0 0 70px rgba(251,113,133,.34);
+  animation-duration: .55s;
+}
+@keyframes grVignetteUrgent {
+  0%,100% { opacity: .5; }
+  50%     { opacity: 1; }
+}
+
+/* ── 6. Reveal screen state classes ─────────────────────────────────────────── */
+.gr-reveal-screen.is-wrong .gr-reveal-banner {
+  animation: grWrongShake .38s ease-out;
+}
+@keyframes grWrongShake {
+  0%,100% { transform: none; }
+  20%     { transform: translateX(-5px); }
+  40%     { transform: translateX(5px); }
+  60%     { transform: translateX(-3px); }
+  80%     { transform: translateX(3px); }
+}
+
+.gr-reveal-screen.is-no-answer {
+  opacity: .85;
+}
+.gr-reveal-screen.is-resolving .gr-reveal-banner {
+  opacity: .7;
+}
+
+/* Floating score */
+@keyframes grScoreFloat {
+  0%   { opacity: 0; transform: translateY(0) scale(.8); }
+  20%  { opacity: 1; transform: translateY(-6px) scale(1.05); }
+  80%  { opacity: 1; transform: translateY(-18px) scale(1); }
+  100% { opacity: 0; transform: translateY(-28px) scale(.95); }
+}
+.gr-score-float {
+  display: inline-block;
+  margin-top: 8px;
+  font: 900 22px/1 var(--font-mono);
+  color: var(--gold);
+  text-shadow: 0 0 16px rgba(245,199,74,.42);
+  animation: grScoreFloat 1.8s ease-out 0.1s both;
+  pointer-events: none;
+}
+
+/* ── 7. Streak pill ─────────────────────────────────────────────────────────── */
+@keyframes grStreakIn {
+  from { opacity: 0; transform: scale(.75) translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+.gr-streak-pill {
+  display: inline-block;
+  margin-top: 10px;
+  padding: 5px 14px;
+  border-radius: 999px;
+  font: 700 12px/1 var(--font-sans);
+  letter-spacing: .08em;
+  background: rgba(245,199,74,.1);
+  border: 1px solid rgba(245,199,74,.25);
+  color: var(--gold);
+  animation: grStreakIn .45s cubic-bezier(.34,1.56,.64,1) both;
+}
+.gr-streak-pill-hot {
+  background: rgba(251,113,133,.12);
+  border-color: rgba(251,113,133,.3);
+  color: var(--rose);
+}
+.gr-streak-pill-fire {
+  background: rgba(251,113,133,.18);
+  border-color: rgba(251,113,133,.45);
+  color: #fca5a5;
+  animation: grStreakIn .45s cubic-bezier(.34,1.56,.64,1) both,
+             grStreakFirePulse 1.1s ease-in-out .6s infinite;
+}
+@keyframes grStreakFirePulse {
+  0%,100% { box-shadow: none; }
+  50% { box-shadow: 0 0 14px rgba(251,113,133,.35); }
+}
+
+/* ── 8. Sound toggle ────────────────────────────────────────────────────────── */
+.gr-sound-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 9px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,.1);
+  background: rgba(255,255,255,.05);
+  color: var(--text-2);
+  font: 700 11px/1 var(--font-sans);
+  cursor: pointer;
+  transition: background .15s, border-color .15s, color .15s;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  flex-shrink: 0;
+}
+.gr-sound-toggle:active { transform: scale(.94); }
+.gr-sound-toggle-on {
+  background: rgba(245,199,74,.08);
+  border-color: rgba(245,199,74,.28);
+  color: var(--gold);
+}
+.gr-sound-toggle-full {
+  padding: 8px 14px;
+  border-radius: 12px;
+}
+.gr-sound-toggle-label {
+  font-size: 11px;
+  letter-spacing: .03em;
+}
+
+/* ── 9. Practice card enhancements ──────────────────────────────────────────── */
+.pw-practice-note {
+  font: 600 10px/1 var(--font-sans);
+  letter-spacing: .06em;
+  color: var(--text-3);
+  margin-top: 3px;
+  text-transform: uppercase;
+}
+
+/* Circle close state */
+.pw-circle.is-close {
+  border-color: rgba(251,191,36,.85) !important;
+  background: rgba(251,191,36,.12) !important;
+  box-shadow: 0 0 0 3px rgba(251,191,36,.16) !important;
+  animation: qaCircleLock .45s cubic-bezier(.34,1.56,.64,1) both;
+}
+
+/* Frame states */
+.pw-practice-frame.is-correct {
+  box-shadow: inset 0 0 0 2px rgba(52,211,153,.35), 0 0 20px rgba(52,211,153,.12);
+}
+.pw-practice-frame.is-close {
+  box-shadow: inset 0 0 0 2px rgba(251,191,36,.35), 0 0 16px rgba(251,191,36,.1);
+}
+.pw-practice-frame.is-wrong {
+  animation: grWrongShake .38s ease-out;
+  box-shadow: inset 0 0 0 2px rgba(251,113,133,.3), 0 0 14px rgba(251,113,133,.1);
+}
+
+/* Feedback message close */
+.pw-practice-feedback.is-close {
+  color: #fde68a;
+}
+
+/* Local confetti particles (correct burst — never writes to Supabase) */
+@keyframes pwConfettiPop {
+  0%   { opacity: 1; transform: rotate(var(--pw-angle)) translateY(0) scale(.5); }
+  80%  { opacity: .8; }
+  100% { opacity: 0; transform: rotate(var(--pw-angle)) translateY(var(--pw-distance)) scale(1.1); }
+}
+.pw-confetti-dot {
+  position: absolute;
+  border-radius: 999px;
+  pointer-events: none;
+  animation: pwConfettiPop .6s ease-out both;
+  transform-origin: center center;
+}
+
+/* ── Reduced motion overrides for Phase 1 additions ─────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .fx-answer-ripple::before,
+  .fx-answer-ripple::after,
+  .quiz-drag-trail-dot,
+  .quiz-answer-circle-locked,
+  .gr-question-urgent::after,
+  .gr-question-critical::after,
+  .gr-score-float,
+  .gr-streak-pill,
+  .gr-streak-pill-hot,
+  .gr-streak-pill-fire,
+  .pw-confetti-dot {
+    animation: none !important;
+    transition: none !important;
+  }
+  .gr-question-urgent::after,
+  .gr-question-critical::after {
+    display: none;
+  }
+  .gr-score-float {
+    opacity: 1;
+    transform: none;
+  }
+}
