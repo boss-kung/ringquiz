@@ -2294,6 +2294,9 @@ body.host-route {
 .pw-practice-frame {
   position: relative;
   width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   flex: 1;
   min-height: 0;
   max-height: clamp(240px, 43dvh, 380px);
@@ -2305,6 +2308,16 @@ body.host-route {
   box-shadow: inset 0 1px 0 rgba(255,255,255,.04);
   user-select: none;
   -webkit-user-select: none;
+}
+.pw-practice-stage {
+  width: 100%;
+  height: 100%;
+  padding: 14px;
+}
+.pw-practice-shell {
+  --quiz-image-size: 100%;
+  --quiz-image-max-width: 100%;
+  --quiz-image-max-height: 100%;
 }
 .pw-practice-image {
   width: 100%;

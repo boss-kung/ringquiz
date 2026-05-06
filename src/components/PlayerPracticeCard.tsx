@@ -1,14 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { supabase } from '../lib/supabase';
 import { resolveQuestionImageUrl } from '../lib/questionAssets';
-import type { PracticeContent } from '../lib/types';
-
-interface PracticeCircle {
-  x: number;
-  y: number;
-  r: number;
-}
+import type { CirclePosition, PracticeContent } from '../lib/types';
+import { QuestionImage } from './QuestionImage';
 
 interface PracticeMaskData {
   width: number;
@@ -27,13 +22,6 @@ interface PracticeQuestionConfig extends PracticeContent {
   answerRadius: number;
 }
 
-interface ContainedImageRect {
-  renderedWidth: number;
-  renderedHeight: number;
-  offsetX: number;
-  offsetY: number;
-}
-
 type FeedbackKind = 'idle' | 'correct' | 'close' | 'wrong';
 
 const PRACTICE_MASK_ALPHA_THRESHOLD = 10;
@@ -41,6 +29,10 @@ const PRACTICE_MASK_ALPHA_THRESHOLD = 10;
 const CLOSE_RADIUS_MULTIPLIER = 1.9;
 // Number of local confetti particles on correct
 const CONFETTI_COUNT = 100;
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
 
 function withBaseUrl(path: string): string {
   const base = import.meta.env.BASE_URL || '/';
@@ -76,32 +68,6 @@ function resolvePracticeAssetUrl(path: string | null | undefined): string | null
   return resolveQuestionImageUrl(trimmed);
 }
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
-}
-
-function getContainedImageRect(
-  containerWidth: number,
-  containerHeight: number,
-  imageWidth: number,
-  imageHeight: number,
-): ContainedImageRect {
-  if (!containerWidth || !containerHeight || !imageWidth || !imageHeight) {
-    return { renderedWidth: 0, renderedHeight: 0, offsetX: 0, offsetY: 0 };
-  }
-
-  const scale = Math.min(containerWidth / imageWidth, containerHeight / imageHeight);
-  const renderedWidth = imageWidth * scale;
-  const renderedHeight = imageHeight * scale;
-
-  return {
-    renderedWidth,
-    renderedHeight,
-    offsetX: (containerWidth - renderedWidth) / 2,
-    offsetY: (containerHeight - renderedHeight) / 2,
-  };
-}
-
 async function loadMaskData(url: string): Promise<PracticeMaskData> {
   const img = new Image();
   img.decoding = 'async';
@@ -132,14 +98,15 @@ async function loadMaskData(url: string): Promise<PracticeMaskData> {
 }
 
 function evaluateMaskOverlap(
-  answer: PracticeCircle,
+  answer: CirclePosition,
+  answerRadius: number,
   mask: PracticeMaskData,
   alphaThreshold: number,
   radiusMultiplier = 1,
 ): boolean {
-  const centerX = answer.x * mask.width;
-  const centerY = answer.y * mask.height;
-  const radiusPx = answer.r * mask.width * radiusMultiplier;
+  const centerX = answer.xRatio * mask.width;
+  const centerY = answer.yRatio * mask.height;
+  const radiusPx = answerRadius * mask.width * radiusMultiplier;
 
   const minX = clamp(Math.floor(centerX - radiusPx), 0, mask.width - 1);
   const maxX = clamp(Math.ceil(centerX + radiusPx), 0, mask.width - 1);
@@ -185,14 +152,10 @@ function makeConfetti(): ConfettiParticle[] {
 }
 
 export function PlayerPracticeCard() {
-  const frameRef = useRef<HTMLDivElement>(null);
-  const dragPointerId = useRef<number | null>(null);
   const [practiceQuestion, setPracticeQuestion] = useState<PracticeQuestionConfig>(PRACTICE_QUESTION);
-  const [imageSize, setImageSize] = useState({ width: 0, height: 0 });
-  const [frameSize, setFrameSize] = useState({ width: 0, height: 0 });
   const [maskData, setMaskData] = useState<PracticeMaskData | null>(null);
   const [maskError, setMaskError] = useState<string | null>(null);
-  const [answer, setAnswer] = useState<PracticeCircle | null>(null);
+  const [answer, setAnswer] = useState<CirclePosition | null>(null);
   const [submitted, setSubmitted] = useState(false);
   const [feedbackKind, setFeedbackKind] = useState<FeedbackKind>('idle');
   const [confetti, setConfetti] = useState<ConfettiParticle[]>([]);
@@ -238,11 +201,6 @@ export function PlayerPracticeCard() {
     };
   }, []);
 
-  const containedRect = useMemo(
-    () => getContainedImageRect(frameSize.width, frameSize.height, imageSize.width, imageSize.height),
-    [frameSize.height, frameSize.width, imageSize.height, imageSize.width],
-  );
-
   useEffect(() => {
     loadMaskData(practiceQuestion.maskUrl)
       .then((loaded) => {
@@ -255,95 +213,11 @@ export function PlayerPracticeCard() {
       });
   }, [practiceQuestion.maskUrl]);
 
-  useEffect(() => {
-    const frame = frameRef.current;
-    if (!frame) return;
-
-    const sync = () => {
-      const rect = frame.getBoundingClientRect();
-      setFrameSize({ width: rect.width, height: rect.height });
-    };
-
-    sync();
-    const ro = new ResizeObserver(sync);
-    ro.observe(frame);
-    return () => ro.disconnect();
-  }, []);
-
-  useEffect(() => {
-    if (!maskData || !imageSize.width || !imageSize.height) return;
-    if (maskData.width !== imageSize.width || maskData.height !== imageSize.height) {
-      console.warn(
-        '[PracticeMode] Practice image and mask dimensions differ.',
-        {
-          imageWidth: imageSize.width,
-          imageHeight: imageSize.height,
-          maskWidth: maskData.width,
-          maskHeight: maskData.height,
-        },
-      );
-    }
-  }, [imageSize.height, imageSize.width, maskData]);
-
-  const answerPxRadius = containedRect.renderedWidth * practiceQuestion.answerRadius;
-
   const resetPractice = useCallback(() => {
     setAnswer(null);
     setSubmitted(false);
     setFeedbackKind('idle');
     setConfetti([]);
-  }, []);
-
-  const getCircleFromPointer = useCallback((clientX: number, clientY: number, clampToImage: boolean): PracticeCircle | null => {
-    const frame = frameRef.current;
-    if (!frame) return null;
-
-    const frameRect = frame.getBoundingClientRect();
-    const localX = clientX - frameRect.left;
-    const localY = clientY - frameRect.top;
-
-    const minX = containedRect.offsetX;
-    const minY = containedRect.offsetY;
-    const maxX = minX + containedRect.renderedWidth;
-    const maxY = minY + containedRect.renderedHeight;
-
-    const isOutside = localX < minX || localX > maxX || localY < minY || localY > maxY;
-    if (isOutside && !clampToImage) return null;
-
-    const safeX = clamp(localX, minX, maxX);
-    const safeY = clamp(localY, minY, maxY);
-
-    return {
-      x: containedRect.renderedWidth > 0 ? (safeX - minX) / containedRect.renderedWidth : 0,
-      y: containedRect.renderedHeight > 0 ? (safeY - minY) / containedRect.renderedHeight : 0,
-      r: practiceQuestion.answerRadius,
-    };
-  }, [containedRect.offsetX, containedRect.offsetY, containedRect.renderedHeight, containedRect.renderedWidth, practiceQuestion.answerRadius]);
-
-  const handlePointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-    if (submitted || !containedRect.renderedWidth || !containedRect.renderedHeight) return;
-    const next = getCircleFromPointer(e.clientX, e.clientY, false);
-    if (!next) return;
-
-    e.preventDefault();
-    e.currentTarget.setPointerCapture(e.pointerId);
-    dragPointerId.current = e.pointerId;
-    setFeedbackKind('idle');
-    setAnswer(next);
-  }, [containedRect.renderedHeight, containedRect.renderedWidth, getCircleFromPointer, submitted]);
-
-  const handlePointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-    if (submitted || dragPointerId.current !== e.pointerId) return;
-    const next = getCircleFromPointer(e.clientX, e.clientY, true);
-    if (!next) return;
-    e.preventDefault();
-    setAnswer(next);
-  }, [getCircleFromPointer, submitted]);
-
-  const handlePointerEnd = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-    if (dragPointerId.current === e.pointerId) {
-      dragPointerId.current = null;
-    }
   }, []);
 
   const handleSubmit = useCallback(() => {
@@ -358,8 +232,8 @@ export function PlayerPracticeCard() {
     // Local-only practice mode:
     // This evaluation must never call submit-answer and must never write to
     // Supabase or affect any live game state, stats, scores, or answers rows.
-    const correct = evaluateMaskOverlap(answer, maskData, PRACTICE_MASK_ALPHA_THRESHOLD, 1);
-    const close = !correct && evaluateMaskOverlap(answer, maskData, PRACTICE_MASK_ALPHA_THRESHOLD, CLOSE_RADIUS_MULTIPLIER);
+    const correct = evaluateMaskOverlap(answer, practiceQuestion.answerRadius, maskData, PRACTICE_MASK_ALPHA_THRESHOLD, 1);
+    const close = !correct && evaluateMaskOverlap(answer, practiceQuestion.answerRadius, maskData, PRACTICE_MASK_ALPHA_THRESHOLD, CLOSE_RADIUS_MULTIPLIER);
 
     setSubmitted(true);
 
@@ -371,7 +245,7 @@ export function PlayerPracticeCard() {
     } else {
       setFeedbackKind('wrong');
     }
-  }, [answer, maskData]);
+  }, [answer, maskData, practiceQuestion.answerRadius]);
 
   const feedbackMessage = (): string | null => {
     if (!submitted) return null;
@@ -382,17 +256,6 @@ export function PlayerPracticeCard() {
       default: return null;
     }
   };
-
-  const answerStyle = answer
-    ? {
-        left: containedRect.offsetX + answer.x * containedRect.renderedWidth,
-        top: containedRect.offsetY + answer.y * containedRect.renderedHeight,
-        width: answerPxRadius * 2,
-        height: answerPxRadius * 2,
-        marginLeft: -answerPxRadius,
-        marginTop: -answerPxRadius,
-      }
-    : null;
 
   const frameClass = [
     'pw-practice-frame',
@@ -419,70 +282,35 @@ export function PlayerPracticeCard() {
       </div>
 
       <div
-        ref={frameRef}
         className={frameClass}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerEnd}
-        onPointerCancel={handlePointerEnd}
         style={{ touchAction: 'none', position: 'relative' }}
       >
-        <img
-          src={practiceQuestion.imageUrl}
-          alt="Practice question"
-          className="pw-practice-image"
-          draggable={false}
-          onLoad={(e) => {
-            const img = e.currentTarget;
-            setImageSize({ width: img.naturalWidth, height: img.naturalHeight });
-          }}
-        />
-
-        {!answer && !submitted && (
-          <div className="pw-practice-hint">แตะแล้วลากได้</div>
-        )}
-
-        {submitted && practiceQuestion.revealOverlayUrl ? (
-          <img
-            src={practiceQuestion.revealOverlayUrl}
-            alt=""
-            aria-hidden
-            className="pw-practice-overlay"
-            style={{
-              left: containedRect.offsetX,
-              top: containedRect.offsetY,
-              width: containedRect.renderedWidth,
-              height: containedRect.renderedHeight,
+        <div className="quiz-image-stage pw-practice-stage">
+          <QuestionImage
+            imageUrl={practiceQuestion.imageUrl}
+            circleRadiusRatio={practiceQuestion.answerRadius}
+            circle={answer}
+            onCircleChange={(pos) => {
+              if (submitted) return;
+              setFeedbackKind('idle');
+              setAnswer(pos);
             }}
-          />
-        ) : null}
-
-        {submitted && !practiceQuestion.revealOverlayUrl ? (
-          <img
-            src={practiceQuestion.maskUrl}
-            alt=""
-            aria-hidden
-            className="pw-practice-overlay pw-practice-overlay-mask"
-            style={{
-              left: containedRect.offsetX,
-              top: containedRect.offsetY,
-              width: containedRect.renderedWidth,
-              height: containedRect.renderedHeight,
-            }}
-          />
-        ) : null}
-
-        {answerStyle && (
-          <div
-            className={[
+            locked={submitted}
+            maskOverlayUrl={submitted ? (practiceQuestion.revealOverlayUrl ?? practiceQuestion.maskUrl) : undefined}
+            maskOverlayClassName={submitted ? 'reveal-mask-static' : undefined}
+            shellClassName="quiz-image-shell--question pw-practice-shell"
+            circleClassName={[
               'pw-circle',
               submitted ? 'is-locked' : '',
               submitted && feedbackKind === 'correct' ? 'is-correct' : '',
               submitted && feedbackKind === 'close' ? 'is-close' : '',
               submitted && feedbackKind === 'wrong' ? 'is-wrong' : '',
             ].filter(Boolean).join(' ')}
-            style={answerStyle}
           />
+        </div>
+
+        {!answer && !submitted && (
+          <div className="pw-practice-hint">แตะแล้วลากได้</div>
         )}
 
         {/* Local confetti on correct — never writes to Supabase */}
@@ -496,8 +324,8 @@ export function PlayerPracticeCard() {
               width: p.size,
               height: p.size,
               background: p.color,
-              left: answerStyle ? answerStyle.left : '50%',
-              top: answerStyle ? answerStyle.top : '50%',
+              left: answer ? `${answer.xRatio * 100}%` : '50%',
+              top: answer ? `${answer.yRatio * 100}%` : '50%',
             } as CSSProperties}
           />
         ))}
