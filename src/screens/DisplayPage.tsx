@@ -1445,8 +1445,10 @@ function DsLeaderboard({
   }, [leaderboard, reducedMotion]);
 
   const visualRankFor = useCallback((entry: LeaderboardEntry) => {
-    if (animationStage === 'steady') return entry.rank;
-    return leaderboardFx[entry.player_id]?.previousRank ?? entry.rank;
+    if (animationStage === 'counting') {
+      return leaderboardFx[entry.player_id]?.previousRank ?? entry.rank;
+    }
+    return entry.rank;
   }, [animationStage, leaderboardFx]);
 
   return (
@@ -1512,7 +1514,7 @@ function DsLeaderboard({
               <div className="ds-pod-av" style={{ background: avGrad(i) }}>{initials(top[i].display_name)}</div>
               <div className="ds-pod-name">{top[i].display_name}</div>
               <div
-                className={`ds-pod-bar ds-pod-bar-${i}`}
+                className={`ds-pod-bar ds-pod-bar-${top[i].rank - 1}`}
                 style={{ height: `${podiumBarHeight(top[i].cumulative_score)}px` }}
               >
                 <span className="ds-mono ds-pod-score">
