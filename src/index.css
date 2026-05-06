@@ -1332,10 +1332,10 @@ body.host-route {
 .ds-rank-delta {
   display: inline-flex;
   align-items: center;
-  padding: 2px 8px;
+  padding: 3px 10px;
   border-radius: 999px;
-  font: 800 clamp(9px,0.9vw,11px)/1 var(--font-sans);
-  letter-spacing: .08em;
+  font: 900 clamp(10px,1vw,13px)/1 var(--font-sans);
+  letter-spacing: .1em;
   text-transform: uppercase;
   border: 1px solid transparent;
 }
@@ -1355,8 +1355,9 @@ body.host-route {
   border-color: rgba(245,199,74,.24);
 }
 .ds-score-delta {
-  font: 800 clamp(10px,1vw,13px)/1 var(--font-mono);
+  font: 900 clamp(12px,1.2vw,16px)/1 var(--font-mono);
   color: var(--gold);
+  text-shadow: 0 0 14px rgba(245,199,74,.22);
 }
 .ds-lb-score {
   font-size: clamp(14px,1.6vw,22px);
@@ -1599,6 +1600,9 @@ body.host-route {
 .ds-podium-slot.ds-podium-slot-leader,
 .ds-winner-card.ds-winner-card-leader {
   animation: dsLeaderPulse 1.4s ease-out 1;
+}
+.ds-lb-row.ds-lb-row-reordering {
+  box-shadow: 0 16px 34px rgba(5, 8, 16, .24);
 }
 
 /* ── REVEAL PHASE LAYOUT ───────────────────────────────────────────────────── */
