@@ -205,7 +205,7 @@ export function RevealScreen() {
   return (
     <div
       className={`gr-reveal-screen ${screenStateClass}`}
-      style={{ display: 'flex', minHeight: '100%', flexDirection: 'column', background: 'var(--navy)', position: 'relative' }}
+      style={{ background: 'var(--navy)', position: 'relative' }}
     >
       {/* Background glows */}
       <div className="gr-glow gr-glow-a" style={{ opacity: .6 }} />
@@ -261,8 +261,8 @@ export function RevealScreen() {
       </div>
 
       {/* Image area */}
-      <div style={{ flex: 1, minHeight: 0, padding: '8px 16px', position: 'relative', zIndex: 1 }}>
-        <div className="quiz-image-stage">
+      <div className="gr-reveal-body">
+        <div className="quiz-image-stage gr-reveal-stage">
           <QuestionImage
             imageUrl={showRevealImage && revealImageReady ? revealBaseImage : originalQuestionImage}
             circleRadiusRatio={question.circle_radius_ratio}
@@ -279,17 +279,7 @@ export function RevealScreen() {
       </div>
 
       {/* Footer */}
-      <div
-        style={{
-          flexShrink: 0,
-          borderTop: '1px solid var(--border)',
-          background: 'rgba(8,13,28,.75)',
-          padding: '8px 18px calc(16px + env(safe-area-inset-bottom, 0px))',
-          textAlign: 'center',
-          position: 'relative',
-          zIndex: 1,
-        }}
-      >
+      <div className="gr-reveal-footer">
         <p className="gr-label-xs">กำลังรอตารางคะแนน…</p>
       </div>
     </div>

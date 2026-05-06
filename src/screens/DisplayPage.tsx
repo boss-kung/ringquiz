@@ -1324,6 +1324,7 @@ function DsCountdown({
       {!showClue ? (
         <div className="ds-countdown-stage">
           <div className="ds-stage-kicker">Next Round</div>
+          <div className="ds-label" style={{ marginBottom: 8 }}>เตรียมพร้อม!</div>
           <div className="ds-countdown-wrap">
             <svg className="ds-ring-svg" viewBox="0 0 260 260" aria-hidden>
               <defs>
@@ -1338,7 +1339,6 @@ function DsCountdown({
                 strokeDasharray={circ} strokeDashoffset={offset} style={{ transition: 'none' }} />
             </svg>
             <div className="ds-countdown-inner">
-              <div className="ds-label" style={{ marginBottom: 8 }}>เตรียมพร้อม!</div>
               <div key={count} className="ds-big-num ds-big-num-pop">{count > 0 ? count : '●'}</div>
             </div>
             {/* Lightweight count-change particle burst — client-only, never written to Supabase */}
@@ -1475,9 +1475,9 @@ function DsQuestion({
           <div className="ds-answer-milestone" aria-live="polite">{milestoneBanner}</div>
         )}
 
-        <div className="ds-q-bar">
+        <div className="ds-q-bar" style={{fontSize: '1.45rem'}}>
           <QPos question={question} totalQs={totalQs} small />
-          <div className="ds-q-meta">
+          <div className="ds-q-meta" style={{fontSize: '1.45rem'}}>
             {question && <SpecialRoundBadge type={question.special_round_type} />}
             {submittedCount !== null && playerCount !== null ? (
               <span className={`ds-stat-pill${statPulse && !reducedMotion ? ' is-pulsing' : ''}`}>
@@ -1635,7 +1635,7 @@ function DsReveal({
               </div>
               <div className="ds-reveal-stat-sep" />
               <div className="ds-reveal-stat-item">
-                <span className="ds-label">ความแม่นยำ</span>
+                <span className="ds-label">สัดส่วนคนเก่ง</span>
                 <span className="ds-reveal-stat-val">{accuracy.toFixed(1)}%</span>
               </div>
             </div>

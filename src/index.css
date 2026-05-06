@@ -411,6 +411,13 @@ body.host-route {
 @keyframes grFloat { 0%,100%{transform:translateY(0)}50%{transform:translateY(-7px)} }
 
 /* ── REVEAL BANNER ──────────────────────────────────────────────────────────── */
+.gr-reveal-screen {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+  height: 100dvh;
+  overflow: hidden;
+}
 .gr-reveal-banner {
   flex-shrink: 0;
   padding: 14px 20px 12px;
@@ -427,6 +434,30 @@ body.host-route {
 .gr-reveal-banner-neutral {
   background: linear-gradient(180deg, rgba(129,140,248,.14) 0%, transparent 100%);
   border-bottom: 1px solid rgba(129,140,248,.18);
+}
+.gr-reveal-body {
+  flex: 1;
+  min-height: 0;
+  padding: 8px 16px;
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.gr-reveal-stage {
+  flex: 1;
+  min-height: 0;
+}
+.gr-reveal-footer {
+  flex-shrink: 0;
+  border-top: 1px solid var(--border);
+  background: rgba(8,13,28,.75);
+  padding: 8px 18px calc(16px + env(safe-area-inset-bottom, 0px));
+  text-align: center;
+  position: relative;
+  z-index: 1;
 }
 
 /* ── PROGRESS BAR ───────────────────────────────────────────────────────────── */
@@ -1151,6 +1182,7 @@ body.host-route {
 .ds-reveal-stats {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 2vw;
   padding: 12px 24px;
   border-radius: 16px;
@@ -1219,7 +1251,6 @@ body.host-route {
 .ds-reveal-text {
   font-size: clamp(14px,2vw,26px);
   font-weight: 600;
-  color: var(--text-2);
   text-align: center;
   max-width: 70vw;
 }
@@ -1676,9 +1707,9 @@ body.host-route {
     inset 0 1px 0 rgba(255,255,255,.06),
     0 22px 48px rgba(0,0,0,.28);
 }
-.ds-stage-card-soft { padding: clamp(18px,2vw,28px); }
-.ds-stage-card-hero { padding: clamp(20px,2.2vw,30px); }
-.ds-stage-card-visual { padding: clamp(14px,1.8vw,20px); }
+.ds-stage-card-soft { padding: clamp(44px,2vw,28px); }
+.ds-stage-card-hero { padding: clamp(44px,2.2vw,30px); }
+.ds-stage-card-visual { padding: clamp(44px,1.8vw,20px); }
 .ds-stage-inset { position: relative; z-index: 1; }
 .ds-stage-rings {
   position: absolute;
@@ -2616,6 +2647,12 @@ body.host-route {
 }
 .gr-reveal-screen.is-resolving .gr-reveal-banner {
   opacity: .7;
+}
+
+@media (max-width: 420px) {
+  .gr-reveal-body {
+    padding: 6px 12px;
+  }
 }
 
 /* Floating score */
