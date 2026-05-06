@@ -424,6 +424,7 @@ body.host-route {
   padding: 14px 20px 12px;
   text-align: center;
   font-size: 16px;
+  line-height: 1.1;
 }
 .gr-reveal-banner-ok {
   background: linear-gradient(180deg, rgba(52,211,153,.14) 0%, transparent 100%);
@@ -460,6 +461,38 @@ body.host-route {
   text-align: center;
   position: relative;
   z-index: 1;
+}
+
+/* ── Reveal Confetti ───────────────────────────────────────────────────────── */
+@keyframes grRevealConfettiFall {
+  0%   { opacity: 0; transform: translate3d(0, -12px, 0) rotate(0deg) scale(.85); }
+  10%  { opacity: 1; }
+  100% {
+    opacity: 0;
+    transform:
+      translate3d(var(--gr-confetti-drift, 0px), 132px, 0)
+      rotate(var(--gr-confetti-rotate, 160deg))
+      scale(1.02);
+  }
+}
+.gr-reveal-confetti {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 10px;
+  height: 150px;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 2;
+}
+.gr-reveal-confetti-piece {
+  position: absolute;
+  top: 0;
+  width: 8px;
+  height: 14px;
+  border-radius: 999px;
+  box-shadow: 0 0 12px rgba(255,255,255,.12);
+  animation: grRevealConfettiFall 3s linear infinite;
 }
 
 /* ── PROGRESS BAR ───────────────────────────────────────────────────────────── */
@@ -816,7 +849,7 @@ body.host-route {
   .gr-join-ring-1, .gr-join-ring-2, .gr-join-ring-3,
   .gr-orbit-dot-1, .gr-orbit-dot-2, .gr-orbit-dot-3,
   .gr-join-glow, .gr-wait-particle, .gr-wait-ring,
-  .gr-glow, .gr-lock-ring, .gr-spark,
+  .gr-glow, .gr-lock-ring, .gr-spark, .gr-reveal-confetti-piece,
   .waiting-float, .waiting-glow, .waiting-dot {
     animation: none;
   }

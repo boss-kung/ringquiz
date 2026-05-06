@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { CSSProperties } from 'react';
 import { useGameStore } from '../store/gameStore';
 import { useRevealResult } from '../hooks/useRevealResult';
 import { useGetServerTime } from '../hooks/useServerTime';
@@ -35,6 +36,29 @@ function streakLabel(n: number): string {
   return `⚡ Streak x${n}`;
 }
 
+interface RevealConfettiParticle {
+  id: number;
+  left: string;
+  delay: string;
+  duration: string;
+  drift: string;
+  rotate: string;
+  color: string;
+}
+
+function makeRevealConfetti(): RevealConfettiParticle[] {
+  const colors = ['#F5C74A', '#FFF8E7', '#34D399', '#818CF8', '#FB7185'];
+  return Array.from({ length: 18 }, (_, i) => ({
+    id: i,
+    left: `${4 + i * 5.3}%`,
+    delay: `${(i % 6) * 0.22}s`,
+    duration: `${2.6 + (i % 5) * 0.28}s`,
+    drift: `${((i % 2 === 0 ? 1 : -1) * (18 + (i % 4) * 8))}px`,
+    rotate: `${(i % 2 === 0 ? 1 : -1) * (110 + (i % 5) * 28)}deg`,
+    color: colors[i % colors.length],
+  }));
+}
+
 export function RevealScreen() {
   useRevealResult();
 
@@ -54,6 +78,7 @@ export function RevealScreen() {
 
   // Local-only visual streak
   const [visualStreak, setVisualStreak] = useState(0);
+  const revealConfetti = useMemo(() => makeRevealConfetti(), []);
 
   useEffect(() => {
     if (!question || !revealStartedAt) {
@@ -198,7 +223,20 @@ export function RevealScreen() {
   let screenStateClass = 'is-resolving';
   if (revealNoAnswer) screenStateClass = 'is-no-answer';
   else if (effectiveRevealResult) screenStateClass = isCorrect ? 'is-correct' : 'is-wrong';
-  const showStreak = visualStreak >= 2 && isCorrect;
+  const displayStreak = useMemo(() => {
+    if (!playerId || !question) return visualStreak;
+    if (revealNoAnswer) return 0;
+    if (!effectiveRevealResult) return visualStreak;
+
+    const resultKey = `${question.id}:${effectiveRevealResult.is_correct}`;
+    if (streakUpdatedRef.current === resultKey) return visualStreak;
+
+    const sessionVersion = gameState?.session_version ?? 0;
+    const key = getStreakKey(playerId, sessionVersion);
+    const current = loadStreak(key);
+    return effectiveRevealResult.is_correct ? current + 1 : 0;
+  }, [effectiveRevealResult, gameState?.session_version, playerId, question, revealNoAnswer, visualStreak]);
+  const showStreak = displayStreak >= 2 && isCorrect;
 
   return (
     <div
@@ -208,6 +246,25 @@ export function RevealScreen() {
       {/* Background glows */}
       <div className="gr-glow gr-glow-a" style={{ opacity: .6 }} />
       <div className="gr-glow gr-glow-b" style={{ opacity: .6 }} />
+
+      {isCorrect && effectiveRevealResult && (
+        <div className="gr-reveal-confetti" aria-hidden>
+          {revealConfetti.map((particle) => (
+            <span
+              key={particle.id}
+              className="gr-reveal-confetti-piece"
+              style={{
+                left: particle.left,
+                animationDelay: particle.delay,
+                animationDuration: particle.duration,
+                '--gr-confetti-drift': particle.drift,
+                '--gr-confetti-rotate': particle.rotate,
+                background: particle.color,
+              } as CSSProperties}
+            />
+          ))}
+        </div>
+      )}
 
       {/* Result banner */}
       <div className={bannerClass} style={{ position: 'relative', zIndex: 1 }}>
@@ -241,10 +298,10 @@ export function RevealScreen() {
             {/* Streak pill */}
             {showStreak && (
               <div
-                className={`gr-streak-pill${visualStreak >= 5 ? ' gr-streak-pill-fire' : visualStreak >= 3 ? ' gr-streak-pill-hot' : ''}`}
-                aria-label={`Streak ${visualStreak}`}
+                className={`gr-streak-pill${displayStreak >= 5 ? ' gr-streak-pill-fire' : displayStreak >= 3 ? ' gr-streak-pill-hot' : ''}`}
+                aria-label={`Streak ${displayStreak}`}
               >
-                {streakLabel(visualStreak)}
+                {streakLabel(displayStreak)}
               </div>
             )}
           </>

@@ -67,7 +67,7 @@ export function LockedScreen() {
           {hasAnswered ? 'รอเฉลยคำตอบ…' : 'รอเฉลยคำตอบ…'}
         </h2>
 
-        <p style={{ fontSize: 18, color: 'var(--text-2)', lineHeight: 1.6 }}>
+        <p style={{ fontSize: 14, color: 'var(--text-2)', lineHeight: 1.6 }}>
           {hasAnswered
             ? submitPending
               ? 'รับคำตอบแล้ว — กำลังบันทึกคำตอบของคุณ...'
