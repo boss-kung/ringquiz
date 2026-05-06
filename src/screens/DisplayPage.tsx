@@ -12,7 +12,7 @@
  *   get-display-stats edge function via polling, not raw answers realtime.
  * - New player highlighting works for both realtime INSERT and polling detection.
  * - Images are preloaded when the current question is known.
- * - All image/mask layers use object-fit:contain to preserve coordinate alignment.
+ * - All image/mask layers use object-fit:cover (same as player view).
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
@@ -728,11 +728,20 @@ export function DisplayPage() {
     void fetchLb();
     const retryTimer = setTimeout(() => void fetchLb(), 400);
 
+    // Debounce realtime INSERT events: compute_leaderboard inserts N rows in
+    // rapid succession; without debouncing every INSERT fires a fetch.
+    // Coalesce the burst into a single fetch after 300 ms of silence.
+    let debounceTimer: ReturnType<typeof setTimeout> | undefined;
+    const debouncedFetchLb = () => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => void fetchLb(), 300);
+    };
+
     const ch = supabase.channel('display-leaderboard')
       .on('postgres_changes', {
         event: 'INSERT', schema: 'public', table: 'leaderboard_snapshot',
         filter: `question_id=eq.${qId}`,
-      }, () => void fetchLb())
+      }, debouncedFetchLb)
       .subscribe((s) => {
         const cs = toChannelStatus(s);
         logDisplayRt('display-leaderboard', s);
@@ -741,6 +750,7 @@ export function DisplayPage() {
 
     return () => {
       clearTimeout(retryTimer);
+      clearTimeout(debounceTimer);
       supabase.removeChannel(ch);
       setRealtimeStatus((prev) => ({ ...prev, leaderboard: 'idle' }));
     };

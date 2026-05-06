@@ -143,6 +143,8 @@ async function executeAction(
             current_question_id: nextGSQ.question_id,
             current_question_index: nextGSQ.play_order,
             current_game_set_question_id: nextGSQ.id,
+            question_started_at: null,
+            question_ends_at: null,
           });
         }
       } else {
@@ -164,6 +166,8 @@ async function executeAction(
             current_question_id: nextQ.id,
             current_question_index: nextQ.order_index,
             current_game_set_question_id: null,
+            question_started_at: null,
+            question_ends_at: null,
           });
         }
       }
@@ -238,8 +242,19 @@ async function executeAction(
     }
 
     // ── show_reveal ──────────────────────────────────────────────────────────
+    // Recomputes the leaderboard on every reveal to pick up answers that arrived
+    // within the 2-second grace window after close_question was called.
     case 'show_reveal': {
       if (!alreadyInState) await updateGameState(db, { status: 'reveal' });
+
+      if (gs.current_question_id) {
+        const { error: lbErr } = await db.rpc('compute_leaderboard', {
+          p_question_id: gs.current_question_id,
+          p_game_set_question_id: gs.current_game_set_question_id ?? undefined,
+        });
+        if (lbErr) console.warn('[show_reveal] recompute_leaderboard failed:', lbErr.message);
+      }
+
       return ok(action, 'reveal', alreadyInState, await refetchGs(db));
     }
 
@@ -318,10 +333,13 @@ async function executeAction(
     // ── soft_reset_game ──────────────────────────────────────────────────────
     // Clears answers, leaderboard, player scores. Keeps questions & game sets.
     case 'soft_reset_game': {
-      const { error: err1 } = await db.from('leaderboard_snapshot').delete().not('question_id', 'is', null);
+      // leaderboard_snapshot and answers have no FK dependency on each other —
+      // delete them in parallel, then reset player scores.
+      const [{ error: err1 }, { error: err2 }] = await Promise.all([
+        db.from('leaderboard_snapshot').delete().not('question_id', 'is', null),
+        db.from('answers').delete().not('id', 'is', null),
+      ]);
       if (err1) throw new Error(`soft_reset: leaderboard_snapshot delete failed: ${err1.message}`);
-
-      const { error: err2 } = await db.from('answers').delete().not('id', 'is', null);
       if (err2) throw new Error(`soft_reset: answers delete failed: ${err2.message}`);
 
       const { error: err3 } = await db.from('players').update({ total_score: 0 }).not('id', 'is', null);
@@ -342,10 +360,13 @@ async function executeAction(
     // ── hard_reset_game ──────────────────────────────────────────────────────
     // Full reset: clears answers, leaderboard, players. Keeps questions & game sets.
     case 'hard_reset_game': {
-      const { error: err1 } = await db.from('leaderboard_snapshot').delete().not('question_id', 'is', null);
+      // leaderboard_snapshot and answers have no FK dependency on each other —
+      // delete them in parallel. answers FK → players, so players must wait.
+      const [{ error: err1 }, { error: err2 }] = await Promise.all([
+        db.from('leaderboard_snapshot').delete().not('question_id', 'is', null),
+        db.from('answers').delete().not('id', 'is', null),
+      ]);
       if (err1) throw new Error(`hard_reset: leaderboard_snapshot delete failed: ${err1.message}`);
-
-      const { error: err2 } = await db.from('answers').delete().not('id', 'is', null);
       if (err2) throw new Error(`hard_reset: answers delete failed: ${err2.message}`);
 
       const { error: err3 } = await db.from('players').delete().not('id', 'is', null);

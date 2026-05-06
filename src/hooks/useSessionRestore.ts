@@ -1,10 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { useGameStore } from '../store/gameStore';
-
-const PLAYER_ID_KEY = 'quiz_player_id';
-const DISPLAY_NAME_KEY = 'quiz_display_name';
-const SESSION_VERSION_KEY = 'quiz_session_version';
+import { PLAYER_ID_KEY, DISPLAY_NAME_KEY, SESSION_VERSION_KEY } from '../lib/constants';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 

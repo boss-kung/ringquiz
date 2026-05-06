@@ -44,24 +44,19 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
     if (gsErr || !gs) throw new Error('Failed to read game_state');
 
-    // Count submitted answers for the current question
-    let submittedCount = 0;
-    if (gs.current_question_id) {
-      const { count, error: countErr } = await db
-        .from('answers')
-        .select('id', { count: 'exact', head: true })
-        .eq('question_id', gs.current_question_id);
+    // Count submitted answers and total joined players in parallel
+    const [answersResult, playersResult] = await Promise.all([
+      gs.current_question_id
+        ? db.from('answers').select('id', { count: 'exact', head: true }).eq('question_id', gs.current_question_id)
+        : Promise.resolve({ count: 0, error: null }),
+      db.from('players').select('id', { count: 'exact', head: true }),
+    ]);
 
-      if (countErr) throw new Error(`Count query failed: ${countErr.message}`);
-      submittedCount = count ?? 0;
-    }
+    if (answersResult.error) throw new Error(`Count query failed: ${answersResult.error.message}`);
+    if (playersResult.error) throw new Error(`Player count failed: ${playersResult.error.message}`);
 
-    // Count total joined players
-    const { count: playerCount, error: playerCountErr } = await db
-      .from('players')
-      .select('id', { count: 'exact', head: true });
-
-    if (playerCountErr) throw new Error(`Player count failed: ${playerCountErr.message}`);
+    const submittedCount = answersResult.count ?? 0;
+    const playerCount    = playersResult.count ?? 0;
 
     // Determine total questions and current position
     let totalQuestions = 0;
@@ -69,56 +64,35 @@ Deno.serve(async (req: Request): Promise<Response> => {
     let activeGameSetName: string | null = null;
 
     if (gs.active_game_set_id) {
-      // Game-set-aware: count enabled questions in the active game set
-      const { count: gsqCount, error: gsqCountErr } = await db
-        .from('game_set_questions')
-        .select('id', { count: 'exact', head: true })
-        .eq('game_set_id', gs.active_game_set_id)
-        .eq('is_enabled', true);
-
-      if (gsqCountErr) throw new Error(`GSQ count failed: ${gsqCountErr.message}`);
-      totalQuestions = gsqCount ?? 0;
-
-      // Current position = play_order of the current game-set question
-      if (gs.current_game_set_question_id) {
-        const { data: gsqRow } = await db
-          .from('game_set_questions')
-          .select('play_order')
-          .eq('id', gs.current_game_set_question_id)
-          .single<{ play_order: number }>();
-
-        if (gsqRow) questionPosition = gsqRow.play_order;
-      }
-
-      // Fetch game set name for display
-      const { data: gsRow } = await db
-        .from('game_sets')
-        .select('name')
-        .eq('id', gs.active_game_set_id)
-        .single<{ name: string }>();
-
-      if (gsRow) activeGameSetName = gsRow.name;
-    } else {
-      // Legacy fallback: count published questions
-      const { count: pubCount, error: pubCountErr } = await db
-        .from('questions')
-        .select('id', { count: 'exact', head: true })
-        .eq('is_published', true);
-
-      if (pubCountErr) throw new Error(`Question count failed: ${pubCountErr.message}`);
-      totalQuestions = pubCount ?? 0;
-
-      // Position by order_index
-      if (gs.current_question_index != null) {
-        const { count: positionCount, error: positionErr } = await db
-          .from('questions')
+      // Game-set-aware: count enabled questions, fetch position and name in parallel
+      const [gsqCountResult, gsqRowResult, gsRowResult] = await Promise.all([
+        db.from('game_set_questions')
           .select('id', { count: 'exact', head: true })
-          .eq('is_published', true)
-          .lte('order_index', gs.current_question_index);
+          .eq('game_set_id', gs.active_game_set_id)
+          .eq('is_enabled', true),
+        gs.current_game_set_question_id
+          ? db.from('game_set_questions').select('play_order').eq('id', gs.current_game_set_question_id).single<{ play_order: number }>()
+          : Promise.resolve({ data: null, error: null }),
+        db.from('game_sets').select('name').eq('id', gs.active_game_set_id).single<{ name: string }>(),
+      ]);
 
-        if (positionErr) throw new Error(`Question position failed: ${positionErr.message}`);
-        questionPosition = positionCount ?? null;
-      }
+      if (gsqCountResult.error) throw new Error(`GSQ count failed: ${gsqCountResult.error.message}`);
+      totalQuestions = gsqCountResult.count ?? 0;
+      if (gsqRowResult.data) questionPosition = gsqRowResult.data.play_order;
+      if (gsRowResult.data)  activeGameSetName = gsRowResult.data.name;
+    } else {
+      // Legacy fallback: count published questions and position in parallel
+      const [pubCountResult, positionResult] = await Promise.all([
+        db.from('questions').select('id', { count: 'exact', head: true }).eq('is_published', true),
+        gs.current_question_index != null
+          ? db.from('questions').select('id', { count: 'exact', head: true }).eq('is_published', true).lte('order_index', gs.current_question_index)
+          : Promise.resolve({ count: null, error: null }),
+      ]);
+
+      if (pubCountResult.error) throw new Error(`Question count failed: ${pubCountResult.error.message}`);
+      if (positionResult.error) throw new Error(`Question position failed: ${positionResult.error.message}`);
+      totalQuestions  = pubCountResult.count ?? 0;
+      questionPosition = positionResult.count ?? null;
     }
 
     const body: QuestionStatsResponse = {
@@ -127,7 +101,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       question_index: questionPosition,
       total_questions: totalQuestions,
       submitted_count: submittedCount,
-      player_count: playerCount ?? 0,
+      player_count: playerCount,
       question_ends_at: gs.question_ends_at,
       active_game_set_id: gs.active_game_set_id,
       active_game_set_name: activeGameSetName,

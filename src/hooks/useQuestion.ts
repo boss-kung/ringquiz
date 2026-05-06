@@ -1,10 +1,10 @@
 import { useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useGameStore } from '../store/gameStore';
+import { PLAYER_ID_KEY } from '../lib/constants';
 import type { Question } from '../lib/types';
 
 type RuntimeQuestionRow = Omit<Question, 'play_order'>;
-const PLAYER_ID_KEY = 'quiz_player_id';
 
 /**
  * Fetches the current question whenever current_question_id changes.
@@ -17,7 +17,6 @@ export function useQuestion() {
   const questionId      = useGameStore((s) => s.gameState?.current_question_id ?? null);
   const gsqId           = useGameStore((s) => s.gameState?.current_game_set_question_id ?? null);
   const currentIndex    = useGameStore((s) => s.gameState?.current_question_index ?? null);
-  const playerId        = useGameStore((s) => s.playerId);
   const setQuestion     = useGameStore((s) => s.setQuestion);
 
   useEffect(() => {
@@ -99,5 +98,5 @@ export function useQuestion() {
     void fetchAll();
 
     return () => { cancelled = true; };
-  }, [questionId, gsqId, currentIndex, playerId, setQuestion]);
+  }, [questionId, gsqId, currentIndex, setQuestion]);
 }
