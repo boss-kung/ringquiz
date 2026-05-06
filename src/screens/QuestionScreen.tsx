@@ -44,7 +44,6 @@ export function QuestionScreen() {
   const lastUrgentBucketRef = useRef<number | null>(null);
 
   const endsAt = gameState?.question_ends_at ?? null;
-  const displayOrder = question?.play_order ?? question?.order_index ?? gameState?.current_question_index ?? null;
   const durationMs = (question?.time_limit_seconds ?? 0) * 1000;
 
   useEffect(() => {
