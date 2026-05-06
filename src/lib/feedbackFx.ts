@@ -101,12 +101,20 @@ function playAudioCue(event: FeedbackFxEventName) {
 
 export function isSoundFxEnabled(): boolean {
   if (!isBrowser()) return false;
-  return window.localStorage.getItem(SOUND_SETTING_KEY) === 'true';
+  try {
+    return window.localStorage.getItem(SOUND_SETTING_KEY) === 'true';
+  } catch {
+    return false;
+  }
 }
 
 export function setSoundFxEnabled(enabled: boolean) {
   if (!isBrowser()) return;
-  window.localStorage.setItem(SOUND_SETTING_KEY, enabled ? 'true' : 'false');
+  try {
+    window.localStorage.setItem(SOUND_SETTING_KEY, enabled ? 'true' : 'false');
+  } catch {
+    // storage failures should not break the player UI
+  }
 }
 
 export async function unlockFeedbackAudio() {

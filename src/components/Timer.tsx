@@ -1,18 +1,20 @@
 interface Props {
   remainingMs: number | null;
   totalMs: number | null;
+  active?: boolean;
 }
 
-export function Timer({ remainingMs, totalMs }: Props) {
+export function Timer({ remainingMs, totalMs, active = true }: Props) {
   if (remainingMs === null) return null;
 
-  const durationMs = totalMs && totalMs > 0 ? totalMs : Math.max(remainingMs, 1);
-  const remainingSeconds = remainingMs / 1000;
+  const clampedRemainingMs = Math.max(0, remainingMs);
+  const durationMs = totalMs && totalMs > 0 ? totalMs : Math.max(clampedRemainingMs, 1);
+  const remainingSeconds = clampedRemainingMs / 1000;
   const displaySeconds = remainingSeconds.toFixed(1);
-  const progressPercent = Math.max(0, Math.min(100, (remainingMs / durationMs) * 100));
+  const progressPercent = Math.max(0, Math.min(100, (clampedRemainingMs / durationMs) * 100));
   const progressRatio = progressPercent / 100;
-  const urgent = remainingSeconds <= 5;
-  const critical = remainingSeconds <= 3;
+  const urgent = active && remainingSeconds <= 5;
+  const critical = active && remainingSeconds <= 3;
 
   return (
     <div className={`gr-timer ${urgent ? 'gr-timer-urgent' : ''}${critical ? ' gr-timer-critical' : ''}`}>

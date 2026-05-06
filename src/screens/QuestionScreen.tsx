@@ -131,9 +131,9 @@ export function QuestionScreen() {
   const handleSubmitClick = () => {
     if (!canSubmit) return;
     void unlockFeedbackAudio();
-    triggerFeedbackFx('answerLocked');
     setButtonPressed(true);
     void submit();
+    setButtonPressed(false);
   };
 
   // Circle class: locked visual when submitted/submitting
@@ -169,6 +169,7 @@ export function QuestionScreen() {
         <Timer
           remainingMs={remainingMs}
           totalMs={durationMs}
+          active={!isLocked && !timeExpired}
         />
         <SoundFxToggle compact />
       </div>

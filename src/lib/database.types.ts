@@ -23,8 +23,10 @@ export type Database = {
           question_started_at: string | null;
           question_ends_at: string | null;
           updated_at: string;
+          session_version: number;
           active_game_set_id: string | null;
           current_game_set_question_id: string | null;
+          display_theme: Database['public']['Enums']['display_theme'];
         };
         Insert: {
           id?: string;
@@ -34,8 +36,10 @@ export type Database = {
           question_started_at?: string | null;
           question_ends_at?: string | null;
           updated_at?: string;
+          session_version?: number;
           active_game_set_id?: string | null;
           current_game_set_question_id?: string | null;
+          display_theme?: Database['public']['Enums']['display_theme'];
         };
         Update: {
           id?: string;
@@ -45,8 +49,10 @@ export type Database = {
           question_started_at?: string | null;
           question_ends_at?: string | null;
           updated_at?: string;
+          session_version?: number;
           active_game_set_id?: string | null;
           current_game_set_question_id?: string | null;
+          display_theme?: Database['public']['Enums']['display_theme'];
         };
         Relationships: [
           {
@@ -56,6 +62,25 @@ export type Database = {
             referencedColumns: ['id'];
           },
         ];
+      };
+
+      display_events: {
+        Row: {
+          id: string;
+          event_type: Database['public']['Enums']['display_event_type'];
+          payload: Json;
+          created_at: string;
+          created_by: string | null;
+        };
+        Insert: {
+          id?: string;
+          event_type: Database['public']['Enums']['display_event_type'];
+          payload?: Json;
+          created_at?: string;
+          created_by?: string | null;
+        };
+        Update: never;
+        Relationships: [];
       };
 
       game_sets: {
@@ -94,6 +119,8 @@ export type Database = {
           min_correct_score: number;
           circle_radius_ratio: number;
           is_enabled: boolean;
+          special_round_type: 'normal' | 'double_score' | 'speed_bonus' | 'mystery_round';
+          special_round_label: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -107,6 +134,8 @@ export type Database = {
           min_correct_score?: number;
           circle_radius_ratio?: number;
           is_enabled?: boolean;
+          special_round_type?: 'normal' | 'double_score' | 'speed_bonus' | 'mystery_round';
+          special_round_label?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -120,6 +149,8 @@ export type Database = {
           min_correct_score?: number;
           circle_radius_ratio?: number;
           is_enabled?: boolean;
+          special_round_type?: 'normal' | 'double_score' | 'speed_bonus' | 'mystery_round';
+          special_round_label?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -286,9 +317,23 @@ export type Database = {
         Args: { p_player_id: string; p_amount: number };
         Returns: undefined;
       };
+      increment_game_session_version: {
+        Args: Record<PropertyKey, never>;
+        Returns: undefined;
+      };
     };
 
     Enums: {
+      display_event_type:
+        | 'hype_cheer'
+        | 'spotlight_leaderboard'
+        | 'final_drumroll'
+        | 'theme_change';
+      display_theme:
+        | 'classic_gold'
+        | 'neon_night'
+        | 'danger_round'
+        | 'final_round';
       game_status:
         | 'waiting'
         | 'countdown'
