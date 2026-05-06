@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { useGameStore } from '../store/gameStore';
 import { useAnswerSubmit } from '../hooks/useAnswerSubmit';
 import { useGetServerTime } from '../hooks/useServerTime';
@@ -38,6 +39,7 @@ export function QuestionScreen() {
   const [showSpecialIntro, setShowSpecialIntro] = useState(false);
   const warmedQuestionIdRef = useRef<string | null>(null);
   const specialIntroQuestionIdRef = useRef<string | null>(null);
+  const latestCirclePositionRef = useRef<CirclePosition | null>(null);
   // Track last whole-second bucket for timerTickUrgent haptic (one per second, not per frame)
   const lastUrgentBucketRef = useRef<number | null>(null);
 
@@ -132,6 +134,10 @@ export function QuestionScreen() {
     return () => clearTimeout(timer);
   }, [question?.id, question?.special_round_type]);
 
+  useEffect(() => {
+    latestCirclePositionRef.current = circlePosition;
+  }, [circlePosition]);
+
   if (!question) {
     return (
       <div style={{ display: 'flex', minHeight: '100%', alignItems: 'center', justifyContent: 'center', background: 'var(--navy)' }}>
@@ -140,7 +146,8 @@ export function QuestionScreen() {
     );
   }
 
-  const canSubmit = Boolean(circlePosition) && !isLocked && !timeExpired;
+  const hasSelection = Boolean(circlePosition ?? latestCirclePositionRef.current);
+  const canSubmit = hasSelection && !isLocked && !timeExpired;
   const questionImageUrl = resolveQuestionImageUrl(question.image_url);
   const specialRoundIntro = getSpecialRoundIntro(question.special_round_type ?? 'normal');
 
@@ -150,7 +157,11 @@ export function QuestionScreen() {
   const isCritical = remainingSecs !== null && remainingSecs <= 3 && !isLocked;
 
   const handleCircleChange = (pos: CirclePosition) => {
-    if (!isLocked) setCirclePosition(pos);
+    if (isLocked) return;
+    latestCirclePositionRef.current = pos;
+    flushSync(() => {
+      setCirclePosition(pos);
+    });
   };
 
   const handleInteractionStart = (clientX: number, clientY: number) => {
@@ -159,10 +170,11 @@ export function QuestionScreen() {
   };
 
   const handleSubmitClick = () => {
-    if (!canSubmit) return;
+    const selectedPosition = latestCirclePositionRef.current ?? circlePosition;
+    if (!selectedPosition || isLocked || timeExpired) return;
     void unlockFeedbackAudio();
     setButtonPressed(true);
-    void submit();
+    void submit(selectedPosition);
     setButtonPressed(false);
   };
 
@@ -175,7 +187,7 @@ export function QuestionScreen() {
     btnLabel = 'กำลังล็อก...';
   } else if (submitted) {
     btnLabel = '🔒 ล็อกคำตอบแล้ว';
-  } else if (circlePosition) {
+  } else if (hasSelection) {
     btnLabel = 'ล็อกคำตอบ';
   } else {
     btnLabel = 'แตะที่ภาพเพื่อตอบ';
@@ -205,7 +217,6 @@ export function QuestionScreen() {
 
       {/* Header */}
       <div className="gr-qhud-wrap">
-        <div className="gr-qhud-order">Question {displayOrder ?? '—'}</div>
         <Timer
           remainingMs={remainingMs}
           totalMs={durationMs}

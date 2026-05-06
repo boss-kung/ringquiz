@@ -1209,8 +1209,8 @@ function QPos({ question, totalQs, small }: { question: DisplayQuestion | null; 
   if (!question) return null;
   const pos = `Question ${question.play_order}${totalQs > 0 ? ` / ${totalQs}` : ''}`;
   return small
-    ? <div className="ds-q-pos-sm">{pos}</div>
-    : <div className="ds-q-pos" style={{ fontSize: '1.25rem' }}>{pos}</div>;
+    ? <div className="ds-q-pos-sm" style={{ fontSize: '2.5rem' }}>{pos}</div>
+    : <div className="ds-q-pos" style={{ fontSize: '2.5rem' }}>{pos}</div>;
 }
 
 // ── 1. LOBBY ──────────────────────────────────────────────────────────────────
@@ -1427,7 +1427,6 @@ function DsCountdown({
         </div>
       ) : (
         <div className="ds-stage-card ds-stage-card-clue ds-clue-wrap ds-clue-enter">
-          <div className="ds-label ds-gold" style={{ marginBottom: 16, fontSize: '1.25rem' }}>ภาพปริศนา</div>
           {question && <SpecialRoundBadge type={question.special_round_type} large />}
           {questionFetchError && !clueUrl ? (
             <div className="ds-muted">ไม่สามารถโหลดภาพคำถามได้</div>
@@ -1600,11 +1599,11 @@ function DsClosed({
     <DsShell centered>
       <QPos question={question} totalQs={totalQs} />
       <div className="ds-locked-stage">
-        <div className="ds-closed-icon">🔒</div>
+        <div className="ds-closed-icon" style={{fontSize: '2.5rem'}}>🔒</div>
         <div className="ds-huge-text">หมดเวลา!</div>
       </div>
       {submittedCount !== null && playerCount !== null && (
-        <div className="ds-stat-line" style={{fontSize:'1.25rem'}}>
+        <div className="ds-stat-line" style={{fontSize:'2rem'}}>
           ตอบแล้ว <strong>{submittedCount}</strong> / {playerCount} คน
         </div>
       )}
@@ -1688,13 +1687,13 @@ function DsReveal({
         <QPos question={question} totalQs={totalQs} small />
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           {question && <SpecialRoundBadge type={question.special_round_type} />}
-          <div className="ds-label ds-gold" style={{ letterSpacing: '.2em' }}>เฉลย</div>
+          <div className="ds-label ds-gold" >เฉลย</div>
         </div>
       </div>
 
       <div className="ds-reveal-layout">
         <div className="ds-stage-card ds-stage-card-soft ds-reveal-left">
-          <div className="ds-reveal-text">{question.text}</div>
+          <div className="ds-reveal-text" style={{fontSize:'2rem'}}>{question.text}</div>
 
           {showReveal && submittedCount > 0 && (
             <div className="ds-reveal-stats">
@@ -1940,7 +1939,7 @@ function DsLeaderboard({
             ].filter(Boolean).join(' ')}
             style={{ animationDelay: `${Math.min(idx * 45, 320)}ms` }}
           >
-            <span className="ds-lb-rank ds-mono">#{visualRankFor(entry)}</span>
+            <span className="ds-lb-rank ds-mono" style={{ fontSize: '2rem' }}>#{visualRankFor(entry)}</span>
             <div className="ds-lb-av" style={{ background: avGrad(visualRankFor(entry) - 1) }}>{initials(entry.display_name)}</div>
             <div className="ds-lb-name-wrap">
               <span className="ds-lb-name">

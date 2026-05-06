@@ -21,8 +21,9 @@ export function useAnswerSubmit() {
   const [submitting, setSubmitting] = useState(false);
   const submitLockRef = useRef(false);
 
-  const submit = useCallback(async () => {
-    if (!question || !circlePosition || submitted || submitting || submitLockRef.current) return;
+  const submit = useCallback(async (positionOverride?: { xRatio: number; yRatio: number }) => {
+    const positionToSubmit = positionOverride ?? circlePosition;
+    if (!question || !positionToSubmit || submitted || submitting || submitLockRef.current) return;
 
     submitLockRef.current = true;
     setSubmitting(true);
@@ -40,8 +41,8 @@ export function useAnswerSubmit() {
 
       const body: SubmitAnswerRequest = {
         question_id: question.id,
-        x_ratio: circlePosition.xRatio,
-        y_ratio: circlePosition.yRatio,
+        x_ratio: positionToSubmit.xRatio,
+        y_ratio: positionToSubmit.yRatio,
       };
 
       const res = await fetch(`${FUNCTIONS_URL}/submit-answer`, {
