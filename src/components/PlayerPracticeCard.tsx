@@ -290,6 +290,7 @@ export function PlayerPracticeCard() {
 
   const msg = feedbackMessage() ?? maskError ?? (!practiceLoaded ? 'กำลังโหลดโจทย์ซ้อม...' : null);
   const canSubmit = Boolean(answer) && Boolean(maskData) && !submitted;
+  const showRevealImage = submitted && feedbackKind === 'correct' && Boolean(practiceQuestion.revealOverlayUrl);
 
   return (
     <section className="pw-practice-zone gr-card">
@@ -311,7 +312,7 @@ export function PlayerPracticeCard() {
       >
         <div className="quiz-image-stage pw-practice-stage">
           <QuestionImage
-            imageUrl={practiceQuestion.imageUrl || null}
+            imageUrl={showRevealImage ? (practiceQuestion.revealOverlayUrl ?? null) : (practiceQuestion.imageUrl || null)}
             circleRadiusRatio={practiceQuestion.answerRadius}
             circle={answer}
             onCircleChange={(pos) => {
@@ -321,9 +322,9 @@ export function PlayerPracticeCard() {
               setAnswer(pos);
             }}
             locked={submitted}
-            maskOverlayUrl={submitted ? (practiceQuestion.revealOverlayUrl ?? practiceQuestion.maskUrl) : undefined}
+            maskOverlayUrl={submitted ? practiceQuestion.maskUrl : undefined}
             maskOverlayClassName={submitted ? 'reveal-mask-static' : undefined}
-            shellClassName="quiz-image-shell--question pw-practice-shell"
+            shellClassName={`quiz-image-shell--question pw-practice-shell${showRevealImage ? ' quiz-image-shell--reveal-active' : ''}`}
             circleClassName={[
               'pw-circle',
               submitted ? 'is-locked' : '',

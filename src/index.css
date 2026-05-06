@@ -2882,36 +2882,6 @@ body.host-route {
   justify-content: center;
   isolation: isolate;
 }
-@keyframes dsQrRingSpin {
-  to { transform: rotate(360deg); }
-}
-@keyframes dsQrPulse {
-  0%, 100% { opacity: .35; transform: scale(1); }
-  50%       { opacity: .65; transform: scale(1.04); }
-}
-.ds-qr-wrap::before {
-  content: '';
-  position: absolute;
-  inset: -14px;
-  border-radius: 20px;
-  border: 2px solid transparent;
-  background:
-    linear-gradient(var(--navy-deep), var(--navy-deep)) padding-box,
-    conic-gradient(from 0deg, #F5C74A, transparent 60%, #F5C74A) border-box;
-  animation: dsQrRingSpin 4s linear infinite;
-  pointer-events: none;
-  z-index: -1;
-}
-.ds-qr-wrap::after {
-  content: '';
-  position: absolute;
-  inset: -20px;
-  border-radius: 24px;
-  background: radial-gradient(ellipse at center, rgba(245,199,74,.15) 0%, transparent 70%);
-  animation: dsQrPulse 3s ease-in-out infinite;
-  pointer-events: none;
-  z-index: -1;
-}
 
 /* ── Hype meter ─────────────────────────────────────────────────────────────── */
 .ds-hype-meter-wrap {

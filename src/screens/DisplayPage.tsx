@@ -1198,7 +1198,7 @@ function DsLobby({
         <div>
           <div className="ds-label">Golden Ring Stage · Display Lobby</div>
           <div className="ds-title">เกมวงแหวนปริศนา</div>
-          <div className="ds-lobby-subtitle">สแกนเพื่อเข้าร่วม และรอพิธีกรเปิดเวที</div>
+          <div className="ds-lobby-subtitle">สแกน QR Code เพื่อเข้าร่วมเกม</div>
         </div>
         <div className="ds-lobby-badges">
           <div className="ds-live-badge">
