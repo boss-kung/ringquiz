@@ -1200,6 +1200,13 @@ function DsLobby({
           <div className="ds-title">เกมวงแหวนปริศนา</div>
           <div className="ds-lobby-subtitle">สแกน QR Code เพื่อเข้าร่วมเกม</div>
         </div>
+        <div className="ds-player-count ds-stage-inset">
+              {/* key triggers re-animation on count change */}
+              <div key={players.length} className="ds-lobby-player-count-hero ds-count-pop">
+                {players.length}
+              </div>
+              <div className="ds-lobby-player-count-label">ผู้เล่น</div>
+            </div>
         <div className="ds-lobby-badges">
           <div className="ds-live-badge">
             <span className="ds-live-dot" />LIVE
@@ -1228,13 +1235,6 @@ function DsLobby({
         <div className="ds-stage-card ds-stage-card-soft ds-lobby-right">
           <div className="ds-lobby-wall-header">
             <div className="ds-label">{latestJoined ? 'ผู้เล่นใหม่กำลังเข้าห้อง' : 'ผู้เล่นในห้อง'}</div>
-            <div className="ds-player-count ds-stage-inset">
-              {/* key triggers re-animation on count change */}
-              <div key={players.length} className="ds-lobby-player-count-hero ds-count-pop">
-                {players.length}
-              </div>
-              <div className="ds-lobby-player-count-label">ผู้เล่น</div>
-            </div>
           </div>
 
           {latestJoined && (
