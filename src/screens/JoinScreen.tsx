@@ -92,12 +92,12 @@ export function JoinScreen() {
             เกมวงแหวนปริศนา
           </h1>
           <p className="gr-join-subtitle" style={{ marginTop: 10, fontSize: 18, color: 'var(--text-2)', lineHeight: 1.55 }}>
-            ใส่ชื่อของคุณเพื่อเข้าสู่เกมและแข่งขันกับผู้เล่นคนอื่นๆ ในการแก้ปริศนาวงแหวนที่ท้าทายที่สุด!
+            ใส่ชื่อของคุณเพื่อเข้าสู่เกม<br/>แข่งขันกับผู้เล่นคนอื่นๆ ในการแก้ปริศนาวงแหวนที่ท้าทายที่สุด!
           </p>
         </div>
 
         <form onSubmit={handleSubmit} className="gr-join-form" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <label htmlFor={inputId} className="gr-label-xs" style={{ color: 'var(--text-2)' }}>
+          <label htmlFor={inputId} className="gr-label-xs" style={{ color: 'var(--text-2)',fontSize: 16 }}>
             กรอกชื่อเล่นของคุณ
           </label>
           <input
@@ -112,7 +112,7 @@ export function JoinScreen() {
           />
 
           {error && (
-            <p style={{ color: 'var(--rose)', fontSize: 20, textAlign: 'center' }}>{error}</p>
+            <p style={{ color: 'var(--rose)', fontSize: 16, textAlign: 'center' }}>{error}</p>
           )}
 
           <button

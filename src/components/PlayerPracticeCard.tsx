@@ -49,7 +49,7 @@ const PRACTICE_QUESTION: PracticeQuestionConfig = {
   id: 'local-practice-1',
   title: 'มาซ้อมก่อนเริ่มเกมกันเถอะ!',
   prompt: 'ซ้อมก่อนเริ่ม',
-  instruction: 'วิธีเล่น: วางวงกลมที่คิดว่าเป็นคำตอบ → กดปุ่มยืนยันคำตอบ (ตอนนี้ยังไม่คิดคะแนน)',
+  instruction: 'วิธีเล่น: อ่านโจทย์ → วางวงกลมที่คิดว่าเป็นคำตอบ → กดปุ่มยืนยันคำตอบ',
   imageUrl: withBaseUrl('practice/practice-demo-image.svg'),
   maskUrl: withBaseUrl('practice/practice-demo-mask.svg'),
   revealOverlayUrl: withBaseUrl('practice/practice-demo-reveal.svg'),
@@ -344,7 +344,9 @@ export function PlayerPracticeCard() {
       <div className="pw-practice-head">
         <div>
           <h2 className="pw-practice-title">{PRACTICE_QUESTION.title}</h2>
-          <p className="pw-practice-note">ไม่นับคะแนนในเกมจริง</p>
+          <p className="pw-practice-note" style={{ fontSize: 14 }}>
+            ไม่นับคะแนนในเกมจริง
+          </p>
         </div>
       </div>
 

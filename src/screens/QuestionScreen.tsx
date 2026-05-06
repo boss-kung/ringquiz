@@ -202,13 +202,13 @@ export function QuestionScreen() {
 
       {/* Question text */}
       <div className="gr-qtext-wrap">
-        <div className="gr-card gr-qtext-card">
+        <div className="gr-card gr-qtext-card" style={{ marginBottom: 20 }}>
           {question.special_round_type && question.special_round_type !== 'normal' && (
             <div className={`gr-special-round-badge gr-special-badge-${question.special_round_type}`}>
               {specialRoundIntro?.badge ?? 'Special Round'}
             </div>
           )}
-          <p className="gr-qtext">
+          <p className="gr-qtext" style={{ fontSize:24 }}>
             {question.text}
           </p>
         </div>

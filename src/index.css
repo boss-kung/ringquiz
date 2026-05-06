@@ -423,7 +423,7 @@ body.host-route {
   flex-shrink: 0;
   padding: 14px 20px 12px;
   text-align: center;
-  font-size: 18px;
+  font-size: 16px;
 }
 .gr-reveal-banner-ok {
   background: linear-gradient(180deg, rgba(52,211,153,.14) 0%, transparent 100%);

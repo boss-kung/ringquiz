@@ -90,7 +90,7 @@ export function CountdownScreen() {
       <div className="gr-glow gr-glow-b" />
 
       <div style={{ position: 'relative', zIndex: 1, width: '100%', maxWidth: cluePhase ? 480 : 320 }}>
-        {question && (
+        {displayOrder !== null && (
           <div className="gr-label-sm gr-gold" style={{ marginBottom: 10, letterSpacing: '.18em', fontSize: 24 }}>
             Question {displayOrder ?? '—'}
           </div>
@@ -99,7 +99,7 @@ export function CountdownScreen() {
         <div className="gr-card" style={{ padding: cluePhase ? '18px 12px' : '28px 20px' }}>
           {!cluePhase ? (
             <>
-              <p style={{ fontSize: 14, color: 'var(--text-2)', marginBottom: 22 }}>เตรียมพร้อม!</p>
+              <p style={{ fontSize: 18, color: 'var(--text-2)', marginBottom: 22 }}>เตรียมพร้อม!</p>
 
               {/* Countdown ring */}
               <div style={{ position: 'relative', width: 160, height: 160, margin: '0 auto' }}>
@@ -170,7 +170,7 @@ export function CountdownScreen() {
                   </div>
                 </div>
               ) : (
-                <div className="gr-card" style={{ padding: '16px 18px', color: 'var(--text-2)', fontSize: 13 }}>
+                <div className="gr-card" style={{ padding: '16px 18px', color: 'var(--text-2)', fontSize: 18 }}>
                   ไม่มีภาพปริศนาสำหรับคำถามนี้
                 </div>
               )}

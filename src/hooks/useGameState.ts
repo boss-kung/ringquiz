@@ -11,6 +11,7 @@ import type { GameState } from '../lib/types';
  */
 export function useGameState() {
   const setGameState = useGameStore((s) => s.setGameState);
+  const setQuestion = useGameStore((s) => s.setQuestion);
   const resetAnswerState = useGameStore((s) => s.resetAnswerState);
   const setRevealResult = useGameStore((s) => s.setRevealResult);
   const setLeaderboard = useGameStore((s) => s.setLeaderboard);
@@ -25,6 +26,7 @@ export function useGameState() {
       setGameState(gs);
 
       if (gs.current_question_id !== prevQuestionId.current) {
+        setQuestion(null);
         resetAnswerState();
         setRevealResult(null);
         setLeaderboard([], null);
@@ -101,5 +103,5 @@ export function useGameState() {
       document.removeEventListener('visibilitychange', handleResume);
       supabase.removeChannel(channel);
     };
-  }, [setGameState, resetAnswerState, setRevealResult, setLeaderboard]);
+  }, [setGameState, setQuestion, resetAnswerState, setRevealResult, setLeaderboard]);
 }

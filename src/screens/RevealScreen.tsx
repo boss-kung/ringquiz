@@ -177,18 +177,18 @@ export function RevealScreen() {
 
   if (revealNoAnswer) {
     bannerClass = 'gr-reveal-banner gr-reveal-banner-neutral';
-    resultIcon = '—';
+    resultIcon = '❓';
     resultLabel = 'ไม่ได้ตอบ';
     resultSub = 'คุณไม่ได้ส่งคำตอบสำหรับคำถามนี้';
   } else if (effectiveRevealResult) {
     if (isCorrect) {
       bannerClass = 'gr-reveal-banner gr-reveal-banner-ok';
-      resultIcon = '🎯';
+      resultIcon = '✅';
       resultLabel = 'ถูกต้อง!';
       resultSub = `+${effectiveRevealResult.score.toLocaleString()} คะแนน`;
     } else {
       bannerClass = 'gr-reveal-banner gr-reveal-banner-bad';
-      resultIcon = '✗';
+      resultIcon = '❌';
       resultLabel = 'ไม่ถูกต้อง';
       resultSub = 'ไว้ลองใหม่ในข้อหน้า';
     }
@@ -198,8 +198,6 @@ export function RevealScreen() {
   let screenStateClass = 'is-resolving';
   if (revealNoAnswer) screenStateClass = 'is-no-answer';
   else if (effectiveRevealResult) screenStateClass = isCorrect ? 'is-correct' : 'is-wrong';
-
-  const showScoreFloat = isCorrect && effectiveRevealResult && effectiveRevealResult.score > 0;
   const showStreak = visualStreak >= 2 && isCorrect;
 
   return (
@@ -237,13 +235,6 @@ export function RevealScreen() {
                 }}
               >
                 {resultSub}
-              </div>
-            )}
-
-            {/* Floating score */}
-            {showScoreFloat && (
-              <div className="gr-score-float" aria-hidden>
-                +{effectiveRevealResult!.score.toLocaleString()}
               </div>
             )}
 
