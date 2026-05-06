@@ -17,6 +17,23 @@ export type DisplayTheme = 'classic_gold' | 'neon_night' | 'danger_round' | 'fin
 
 export type SpecialRoundType = 'normal' | 'double_score' | 'speed_bonus' | 'mystery_round';
 
+export interface PracticeContent {
+  key: string;
+  title: string;
+  prompt: string;
+  instruction: string;
+  image_url: string;
+  mask_url: string;
+  reveal_image_url: string | null;
+  circle_radius_ratio: number;
+  image_width: number;
+  image_height: number;
+  mask_width: number;
+  mask_height: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export type DisplayEventType =
   | 'hype_cheer'
   | 'spotlight_leaderboard'

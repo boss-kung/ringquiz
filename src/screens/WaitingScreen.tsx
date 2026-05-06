@@ -53,7 +53,7 @@ export function WaitingScreen() {
         <div className="gr-card-gold pw-status-bar">
           <div className="pw-status-line" style={{fontSize:20}}>
             <span className="pw-status-dot" />
-            ยินดีต้อนรับ!<strong>{displayName}</strong> พร้อมเล่นเกมแล้ว~
+            ยินดีต้อนรับ!<strong>{displayName}</strong><br />พร้อมเล่นเกมแล้ว~
           </div>
         </div>
 

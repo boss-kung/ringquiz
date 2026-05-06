@@ -170,6 +170,58 @@ export type Database = {
         ];
       };
 
+      practice_content: {
+        Row: {
+          key: string;
+          title: string;
+          prompt: string;
+          instruction: string;
+          image_url: string;
+          mask_url: string;
+          reveal_image_url: string | null;
+          circle_radius_ratio: number;
+          image_width: number;
+          image_height: number;
+          mask_width: number;
+          mask_height: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          key: string;
+          title: string;
+          prompt: string;
+          instruction: string;
+          image_url: string;
+          mask_url: string;
+          reveal_image_url?: string | null;
+          circle_radius_ratio: number;
+          image_width: number;
+          image_height: number;
+          mask_width: number;
+          mask_height: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          key?: string;
+          title?: string;
+          prompt?: string;
+          instruction?: string;
+          image_url?: string;
+          mask_url?: string;
+          reveal_image_url?: string | null;
+          circle_radius_ratio?: number;
+          image_width?: number;
+          image_height?: number;
+          mask_width?: number;
+          mask_height?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+
       questions: {
         Row: {
           id: string;

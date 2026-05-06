@@ -15,13 +15,16 @@ import {
 import type {
   AdminQuestionPreviewItem,
   AdminQuestionRecord,
+  AdminPracticeAssetsResponse,
   AdminQuestionRequest,
   AdminQuestionResponse,
   AdminQuestionValidationIssue,
+  PracticeContentPayload,
+  PracticeContentRecord,
   AdminUploadAssetsResponse,
 } from '../../lib/adminTypes';
 
-type AdminTab = 'manual' | 'bulk' | 'bank';
+type AdminTab = 'manual' | 'bulk' | 'bank' | 'practice';
 type BulkMode = 'zip' | 'json';
 type EditorMode = 'create' | 'edit';
 
@@ -48,6 +51,20 @@ type AssetFilesState = {
   revealFile: File | null;
 };
 
+type PracticeFormState = {
+  title: string;
+  prompt: string;
+  instruction: string;
+  image_url: string;
+  mask_url: string;
+  reveal_image_url: string;
+  circle_radius_ratio: string;
+  image_width: string;
+  image_height: string;
+  mask_width: string;
+  mask_height: string;
+};
+
 const DEFAULT_EDITOR_FORM: EditorFormState = {
   text: '',
   image_url: '',
@@ -69,6 +86,20 @@ const EMPTY_ASSET_FILES: AssetFilesState = {
   imageFile: null,
   maskFile: null,
   revealFile: null,
+};
+
+const DEFAULT_PRACTICE_FORM: PracticeFormState = {
+  title: 'มาซ้อมก่อนเริ่มเกมกันเถอะ!',
+  prompt: 'ซ้อมก่อนเริ่ม',
+  instruction: 'วิธีเล่น: อ่านโจทย์ → วางวงกลมที่คิดว่าเป็นคำตอบ → กดปุ่มยืนยันคำตอบ',
+  image_url: '',
+  mask_url: '',
+  reveal_image_url: '',
+  circle_radius_ratio: '0.085',
+  image_width: '',
+  image_height: '',
+  mask_width: '',
+  mask_height: '',
 };
 
 const BULK_IMPORT_EXAMPLE = `[
@@ -163,6 +194,51 @@ async function uploadQuestionAssets(
   return response.json() as Promise<AdminUploadAssetsResponse>;
 }
 
+async function uploadPracticeAssets(
+  secret: string,
+  form: PracticeFormState,
+  files: AssetFilesState,
+): Promise<AdminPracticeAssetsResponse> {
+  if (!files.imageFile || !files.maskFile) {
+    throw new Error('Select both an image file and a mask file before uploading.');
+  }
+
+  const body = new FormData();
+  body.set('action', 'upload_practice_assets');
+  body.set('image_file', files.imageFile);
+  body.set('mask_file', files.maskFile);
+  if (files.revealFile) body.set('reveal_file', files.revealFile);
+  body.set('image_width', form.image_width);
+  body.set('image_height', form.image_height);
+  body.set('mask_width', form.mask_width);
+  body.set('mask_height', form.mask_height);
+
+  const response = await fetch(`${FUNCTIONS_URL}/admin-question-action`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+      'X-Host-Secret': secret,
+    },
+    body,
+  });
+
+  if (!response.ok) {
+    let errJson: Record<string, unknown> = {};
+    try { errJson = await response.json(); } catch { /* non-JSON body */ }
+    const msg =
+      (typeof errJson.error === 'string' ? errJson.error : null) ??
+      (typeof errJson.code === 'string' ? errJson.code : null) ??
+      `HTTP ${response.status}`;
+    const detail =
+      (typeof errJson.detail === 'string' ? errJson.detail : null) ??
+      (typeof errJson.message === 'string' ? errJson.message : null) ??
+      response.statusText;
+    throw new Error(detail ? `${msg}: ${detail}` : msg);
+  }
+
+  return response.json() as Promise<AdminPracticeAssetsResponse>;
+}
+
 function normalizeEditorForm(form: EditorFormState): Record<string, unknown> {
   return {
     ...form,
@@ -206,6 +282,83 @@ function questionToForm(question: AdminQuestionRecord): EditorFormState {
   };
 }
 
+function practiceToForm(practice: PracticeContentRecord): PracticeFormState {
+  return {
+    title: practice.title,
+    prompt: practice.prompt,
+    instruction: practice.instruction,
+    image_url: practice.image_url,
+    mask_url: practice.mask_url,
+    reveal_image_url: practice.reveal_image_url ?? '',
+    circle_radius_ratio: String(practice.circle_radius_ratio),
+    image_width: String(practice.image_width),
+    image_height: String(practice.image_height),
+    mask_width: String(practice.mask_width),
+    mask_height: String(practice.mask_height),
+  };
+}
+
+function normalizePracticeForm(form: PracticeFormState): Record<string, unknown> {
+  return {
+    ...form,
+    reveal_image_url: form.reveal_image_url.trim() || null,
+  };
+}
+
+function validatePracticeContentInput(input: unknown): {
+  normalizedPracticeContent?: PracticeContentPayload;
+  errors: AdminQuestionValidationIssue[];
+} {
+  const baseValidation = validateAdminQuestionInput({
+    text: 'practice-placeholder',
+    image_url: (input as Record<string, unknown>)?.image_url,
+    mask_storage_path: (input as Record<string, unknown>)?.mask_url,
+    reveal_image_url: (input as Record<string, unknown>)?.reveal_image_url,
+    circle_radius_ratio: (input as Record<string, unknown>)?.circle_radius_ratio,
+    time_limit_seconds: 30,
+    max_score: 1000,
+    min_correct_score: 100,
+    image_width: (input as Record<string, unknown>)?.image_width,
+    image_height: (input as Record<string, unknown>)?.image_height,
+    mask_width: (input as Record<string, unknown>)?.mask_width,
+    mask_height: (input as Record<string, unknown>)?.mask_height,
+    is_published: true,
+  });
+
+  const source = (typeof input === 'object' && input !== null ? input : {}) as Record<string, unknown>;
+  const title = typeof source.title === 'string' ? source.title.trim() : '';
+  const prompt = typeof source.prompt === 'string' ? source.prompt.trim() : '';
+  const instruction = typeof source.instruction === 'string' ? source.instruction.trim() : '';
+  const errors = [...baseValidation.errors].map((issue) =>
+    issue.field === 'mask_storage_path' ? { ...issue, field: 'mask_url' } : issue,
+  );
+
+  if (!title) errors.push({ field: 'title', message: 'Title is required.' });
+  if (!prompt) errors.push({ field: 'prompt', message: 'Prompt is required.' });
+  if (!instruction) errors.push({ field: 'instruction', message: 'Instruction is required.' });
+
+  if (!baseValidation.normalizedQuestion || errors.length > 0) {
+    return { errors };
+  }
+
+  return {
+    errors: [],
+    normalizedPracticeContent: {
+      title,
+      prompt,
+      instruction,
+      image_url: baseValidation.normalizedQuestion.image_url,
+      mask_url: baseValidation.normalizedQuestion.mask_storage_path,
+      reveal_image_url: baseValidation.normalizedQuestion.reveal_image_url ?? null,
+      circle_radius_ratio: baseValidation.normalizedQuestion.circle_radius_ratio,
+      image_width: baseValidation.normalizedQuestion.image_width,
+      image_height: baseValidation.normalizedQuestion.image_height,
+      mask_width: baseValidation.normalizedQuestion.mask_width,
+      mask_height: baseValidation.normalizedQuestion.mask_height,
+    },
+  };
+}
+
 function issuesToFieldMap(issues: AdminQuestionValidationIssue[]): Record<string, string> {
   return issues.reduce<Record<string, string>>((acc, issue) => {
     if (!acc[issue.field]) acc[issue.field] = issue.message;
@@ -230,6 +383,12 @@ export function AdminQuestionManager({ secret }: { secret: string }) {
   const [editorMessage, setEditorMessage] = useState('');
   const [editorError, setEditorError] = useState('');
 
+  const [practiceForm, setPracticeForm] = useState<PracticeFormState>(DEFAULT_PRACTICE_FORM);
+  const [practiceAssetFiles, setPracticeAssetFiles] = useState<AssetFilesState>(EMPTY_ASSET_FILES);
+  const [practiceErrors, setPracticeErrors] = useState<Record<string, string>>({});
+  const [practiceMessage, setPracticeMessage] = useState('');
+  const [practiceError, setPracticeError] = useState('');
+
   const [bulkText, setBulkText] = useState(BULK_IMPORT_EXAMPLE);
   const [bulkPreview, setBulkPreview] = useState<AdminQuestionPreviewItem[]>([]);
   const [bulkGlobalErrors, setBulkGlobalErrors] = useState<string[]>([]);
@@ -253,6 +412,22 @@ export function AdminQuestionManager({ secret }: { secret: string }) {
   useEffect(() => {
     void loadQuestions();
   }, [loadQuestions]);
+
+  const loadPracticeContent = useCallback(async () => {
+    setPracticeError('');
+    try {
+      const response = await callAdminQuestionAction(secret, { action: 'get_practice_content' });
+      if (response.practice_content) {
+        setPracticeForm(practiceToForm(response.practice_content));
+      }
+    } catch (error) {
+      setPracticeError(error instanceof Error ? error.message : 'Failed to load practice content.');
+    }
+  }, [secret]);
+
+  useEffect(() => {
+    void loadPracticeContent();
+  }, [loadPracticeContent]);
 
   const resetEditor = useCallback(() => {
     setEditorMode('create');
@@ -315,6 +490,57 @@ export function AdminQuestionManager({ secret }: { secret: string }) {
     void applyDetectedDimensions(kind, file);
   };
 
+  const handlePracticeFieldChange = <K extends keyof PracticeFormState>(
+    field: K,
+    value: PracticeFormState[K],
+  ) => {
+    setPracticeForm((current) => ({ ...current, [field]: value }));
+    setPracticeErrors((current) => {
+      const next = { ...current };
+      delete next[field];
+      return next;
+    });
+    setPracticeError('');
+    setPracticeMessage('');
+  };
+
+  const applyPracticeDetectedDimensions = async (
+    kind: 'imageFile' | 'maskFile' | 'revealFile',
+    file: File | null,
+  ) => {
+    setPracticeAssetFiles((current) => ({ ...current, [kind]: file }));
+    setPracticeError('');
+    setPracticeMessage('');
+
+    if (!file || kind === 'revealFile') return;
+
+    try {
+      const dimensions = await getLocalImageDimensions(file);
+      setPracticeForm((current) => ({
+        ...current,
+        ...(kind === 'imageFile'
+          ? {
+              image_width: String(dimensions.width),
+              image_height: String(dimensions.height),
+            }
+          : {
+              mask_width: String(dimensions.width),
+              mask_height: String(dimensions.height),
+            }),
+      }));
+    } catch (error) {
+      setPracticeError(error instanceof Error ? error.message : 'Failed to read file dimensions.');
+    }
+  };
+
+  const handlePracticeFileInputChange = (
+    kind: 'imageFile' | 'maskFile' | 'revealFile',
+    event: ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = event.target.files?.[0] ?? null;
+    void applyPracticeDetectedDimensions(kind, file);
+  };
+
   const handleUploadAssets = async () => {
     if (!assetFiles.imageFile || !assetFiles.maskFile) {
       setEditorError('Select both the image file and the mask file first.');
@@ -351,6 +577,47 @@ export function AdminQuestionManager({ secret }: { secret: string }) {
       setEditorMessage('Files uploaded. You can save the question now.');
     } catch (error) {
       setEditorError(error instanceof Error ? error.message : 'Asset upload failed.');
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  const handleUploadPracticeAssets = async () => {
+    if (!practiceAssetFiles.imageFile || !practiceAssetFiles.maskFile) {
+      setPracticeError('Select both the image file and the mask file first.');
+      return;
+    }
+
+    if (
+      practiceForm.image_width &&
+      practiceForm.mask_width &&
+      practiceForm.image_height &&
+      practiceForm.mask_height &&
+      (practiceForm.image_width !== practiceForm.mask_width || practiceForm.image_height !== practiceForm.mask_height)
+    ) {
+      setPracticeError('Image and mask dimensions must match.');
+      return;
+    }
+
+    setBusyAction('practice-asset-upload');
+    setPracticeError('');
+    setPracticeMessage('');
+
+    try {
+      const response = await uploadPracticeAssets(secret, practiceForm, practiceAssetFiles);
+      setPracticeForm((current) => ({
+        ...current,
+        image_url: response.image_url,
+        mask_url: response.mask_url,
+        reveal_image_url: response.reveal_image_url ?? '',
+        image_width: String(response.image_width),
+        image_height: String(response.image_height),
+        mask_width: String(response.mask_width),
+        mask_height: String(response.mask_height),
+      }));
+      setPracticeMessage('Practice assets uploaded. You can save the practice card now.');
+    } catch (error) {
+      setPracticeError(error instanceof Error ? error.message : 'Practice asset upload failed.');
     } finally {
       setBusyAction(null);
     }
@@ -432,6 +699,88 @@ export function AdminQuestionManager({ secret }: { secret: string }) {
       setBankMessage(editorMode === 'create' ? 'Question created.' : 'Question updated.');
     } catch (error) {
       setEditorError(error instanceof Error ? error.message : 'Failed to save question.');
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  const handleSavePracticeContent = async () => {
+    setPracticeError('');
+    setPracticeMessage('');
+
+    let nextForm = practiceForm;
+    const hasSelectedUploadFiles = !!practiceAssetFiles.imageFile || !!practiceAssetFiles.maskFile || !!practiceAssetFiles.revealFile;
+    const isMissingRequiredAssetPaths = !practiceForm.image_url.trim() || !practiceForm.mask_url.trim();
+
+    if (hasSelectedUploadFiles) {
+      if (!practiceAssetFiles.imageFile || !practiceAssetFiles.maskFile) {
+        setPracticeError('Select both the image file and the mask file before saving.');
+        return;
+      }
+
+      if (
+        !practiceForm.image_width ||
+        !practiceForm.image_height ||
+        !practiceForm.mask_width ||
+        !practiceForm.mask_height
+      ) {
+        setPracticeError('Please wait for the image and mask dimensions to be detected before saving.');
+        return;
+      }
+
+      if (
+        practiceForm.image_width !== practiceForm.mask_width ||
+        practiceForm.image_height !== practiceForm.mask_height
+      ) {
+        setPracticeError('Image and mask dimensions must match.');
+        return;
+      }
+
+      setBusyAction('practice-save');
+      try {
+        const uploaded = await uploadPracticeAssets(secret, practiceForm, practiceAssetFiles);
+        nextForm = {
+          ...practiceForm,
+          image_url: uploaded.image_url,
+          mask_url: uploaded.mask_url,
+          reveal_image_url: uploaded.reveal_image_url ?? '',
+          image_width: String(uploaded.image_width),
+          image_height: String(uploaded.image_height),
+          mask_width: String(uploaded.mask_width),
+          mask_height: String(uploaded.mask_height),
+        };
+        setPracticeForm(nextForm);
+        setPracticeMessage('Practice assets uploaded. Saving practice card…');
+      } catch (error) {
+        setBusyAction(null);
+        setPracticeError(error instanceof Error ? error.message : 'Practice asset upload failed.');
+        return;
+      }
+    } else if (isMissingRequiredAssetPaths) {
+      setPracticeError('Choose image and mask files from your computer, or use an existing uploaded asset set.');
+      return;
+    }
+
+    const validation = validatePracticeContentInput(normalizePracticeForm(nextForm));
+    if (!validation.normalizedPracticeContent || validation.errors.length > 0) {
+      setPracticeErrors(issuesToFieldMap(validation.errors));
+      setPracticeError('Please fix the highlighted practice fields before saving.');
+      return;
+    }
+
+    setBusyAction('practice-save');
+    try {
+      const response = await callAdminQuestionAction(secret, {
+        action: 'upsert_practice_content',
+        practice_content: validation.normalizedPracticeContent,
+      });
+      if (response.practice_content) {
+        setPracticeForm(practiceToForm(response.practice_content));
+      }
+      setPracticeAssetFiles(EMPTY_ASSET_FILES);
+      setPracticeMessage('Practice card updated.');
+    } catch (error) {
+      setPracticeError(error instanceof Error ? error.message : 'Failed to save practice content.');
     } finally {
       setBusyAction(null);
     }
@@ -576,6 +925,11 @@ export function AdminQuestionManager({ secret }: { secret: string }) {
     hasUploadedAssetPaths ||
     (!!assetFiles.imageFile && !!assetFiles.maskFile)
   );
+  const hasUploadedPracticeAssets = !!practiceForm.image_url.trim() && !!practiceForm.mask_url.trim();
+  const canSavePractice = busyAction === null && (
+    hasUploadedPracticeAssets ||
+    (!!practiceAssetFiles.imageFile && !!practiceAssetFiles.maskFile)
+  );
 
   return (
     <div className="bg-slate-800 rounded-2xl border border-white/10 p-4 space-y-4">
@@ -601,10 +955,11 @@ export function AdminQuestionManager({ secret }: { secret: string }) {
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-2 rounded-xl bg-slate-900/50 p-1">
+      <div className="grid grid-cols-4 gap-2 rounded-xl bg-slate-900/50 p-1">
         <TabButton label="Manual Add" active={activeTab === 'manual'} onClick={() => setActiveTab('manual')} />
         <TabButton label="Bulk Import" active={activeTab === 'bulk'} onClick={() => setActiveTab('bulk')} />
         <TabButton label="Question Bank" active={activeTab === 'bank'} onClick={() => setActiveTab('bank')} />
+        <TabButton label="Practice" active={activeTab === 'practice'} onClick={() => setActiveTab('practice')} />
       </div>
 
       {activeTab === 'manual' && (
@@ -860,6 +1215,223 @@ export function AdminQuestionManager({ secret }: { secret: string }) {
                 : editorMode === 'create'
                   ? 'Save Question'
                   : 'Save Changes'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'practice' && (
+        <div className="space-y-4">
+          {practiceError && <FeedbackBox tone="error" message={practiceError} />}
+          {practiceMessage && <FeedbackBox tone="success" message={practiceMessage} />}
+
+          <div className="flex items-center justify-between gap-3 rounded-xl bg-slate-900/40 px-4 py-3">
+            <div>
+              <p className="font-semibold text-white">Waiting Screen Practice</p>
+              <p className="text-sm text-slate-400">
+                Configure the local-only practice card players see while waiting for the game to begin.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => { void loadPracticeContent(); }}
+              disabled={busyAction !== null}
+              className="rounded-lg bg-white/10 px-3 py-2 text-sm text-slate-200 disabled:opacity-50"
+            >
+              Reload Practice
+            </button>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-3">
+            <StatCard label="Prompt" value={practiceForm.prompt.trim() ? 'Ready' : 'Missing'} tone={practiceForm.prompt.trim() ? 'success' : 'error'} />
+            <StatCard label="Image + Mask" value={hasUploadedPracticeAssets || (!!practiceAssetFiles.imageFile && !!practiceAssetFiles.maskFile) ? 'Ready' : 'Missing'} tone={hasUploadedPracticeAssets || (!!practiceAssetFiles.imageFile && !!practiceAssetFiles.maskFile) ? 'success' : 'error'} />
+            <StatCard label="Save status" value={canSavePractice ? 'Ready' : 'Blocked'} tone={canSavePractice ? 'success' : 'error'} />
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <FieldBlock
+              label="Practice title"
+              error={practiceErrors.title}
+              helperText="Short heading shown above the waiting-screen practice card."
+              fullWidth
+              input={(
+                <input
+                  value={practiceForm.title}
+                  onChange={(event) => handlePracticeFieldChange('title', event.target.value)}
+                  className={inputClassName(!!practiceErrors.title)}
+                  placeholder="มาซ้อมก่อนเริ่มเกมกันเถอะ!"
+                />
+              )}
+            />
+            <FieldBlock
+              label="Practice prompt"
+              error={practiceErrors.prompt}
+              helperText="This is the actual question text shown to players in practice mode."
+              fullWidth
+              input={(
+                <textarea
+                  value={practiceForm.prompt}
+                  onChange={(event) => handlePracticeFieldChange('prompt', event.target.value)}
+                  rows={3}
+                  className={inputClassName(!!practiceErrors.prompt)}
+                  placeholder="แตะตำแหน่งวงแหวนทองในภาพ"
+                />
+              )}
+            />
+            <FieldBlock
+              label="Instruction"
+              error={practiceErrors.instruction}
+              helperText="Small helper text above the practice image."
+              fullWidth
+              input={(
+                <textarea
+                  value={practiceForm.instruction}
+                  onChange={(event) => handlePracticeFieldChange('instruction', event.target.value)}
+                  rows={3}
+                  className={inputClassName(!!practiceErrors.instruction)}
+                  placeholder="วิธีเล่น: อ่านโจทย์ → วางวงกลม..."
+                />
+              )}
+            />
+            <FilePicker
+              label="Practice image"
+              helperText="Required. Shown on the waiting screen."
+              file={practiceAssetFiles.imageFile}
+              onChange={(event) => handlePracticeFileInputChange('imageFile', event)}
+            />
+            <FilePicker
+              label="Practice mask"
+              helperText="Required. Used locally to score the waiting-screen practice answer."
+              file={practiceAssetFiles.maskFile}
+              onChange={(event) => handlePracticeFileInputChange('maskFile', event)}
+            />
+            <FilePicker
+              label="Practice reveal image (optional)"
+              helperText="Optional full reveal image shown after the local practice submit."
+              file={practiceAssetFiles.revealFile}
+              onChange={(event) => handlePracticeFileInputChange('revealFile', event)}
+            />
+            <FieldBlock
+              label="Uploaded image path"
+              error={practiceErrors.image_url}
+              helperText="Filled automatically after a successful upload."
+              fullWidth
+              input={(
+                <input
+                  value={practiceForm.image_url}
+                  readOnly
+                  className={inputClassName(!!practiceErrors.image_url, true)}
+                  placeholder="Upload files to populate this path"
+                />
+              )}
+            />
+            <FieldBlock
+              label="Practice mask path"
+              error={practiceErrors.mask_url}
+              helperText="Stored in the public image bucket for local-only practice mode."
+              fullWidth
+              input={(
+                <input
+                  value={practiceForm.mask_url}
+                  readOnly
+                  className={inputClassName(!!practiceErrors.mask_url, true)}
+                  placeholder="Upload files to populate this path"
+                />
+              )}
+            />
+            <FieldBlock
+              label="Practice reveal path"
+              error={practiceErrors.reveal_image_url}
+              helperText="Optional."
+              fullWidth
+              input={(
+                <input
+                  value={practiceForm.reveal_image_url}
+                  readOnly
+                  className={inputClassName(!!practiceErrors.reveal_image_url, true)}
+                  placeholder="Optional"
+                />
+              )}
+            />
+            <FieldBlock
+              label="Circle radius ratio"
+              error={practiceErrors.circle_radius_ratio}
+              helperText="Keep this close to live gameplay so the practice feel matches the real round."
+              input={(
+                <input
+                  value={practiceForm.circle_radius_ratio}
+                  onChange={(event) => handlePracticeFieldChange('circle_radius_ratio', event.target.value)}
+                  className={inputClassName(!!practiceErrors.circle_radius_ratio)}
+                  placeholder="0.085"
+                />
+              )}
+            />
+            <FieldBlock
+              label="Image width"
+              error={practiceErrors.image_width}
+              input={(
+                <input
+                  value={practiceForm.image_width}
+                  readOnly
+                  className={inputClassName(!!practiceErrors.image_width, true)}
+                  placeholder="Detected automatically"
+                />
+              )}
+            />
+            <FieldBlock
+              label="Image height"
+              error={practiceErrors.image_height}
+              input={(
+                <input
+                  value={practiceForm.image_height}
+                  readOnly
+                  className={inputClassName(!!practiceErrors.image_height, true)}
+                  placeholder="Detected automatically"
+                />
+              )}
+            />
+            <FieldBlock
+              label="Mask width"
+              error={practiceErrors.mask_width}
+              input={(
+                <input
+                  value={practiceForm.mask_width}
+                  readOnly
+                  className={inputClassName(!!practiceErrors.mask_width, true)}
+                  placeholder="Detected automatically"
+                />
+              )}
+            />
+            <FieldBlock
+              label="Mask height"
+              error={practiceErrors.mask_height}
+              input={(
+                <input
+                  value={practiceForm.mask_height}
+                  readOnly
+                  className={inputClassName(!!practiceErrors.mask_height, true)}
+                  placeholder="Detected automatically"
+                />
+              )}
+            />
+          </div>
+
+          <div className="flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={() => { void handleUploadPracticeAssets(); }}
+              disabled={busyAction !== null || !practiceAssetFiles.imageFile || !practiceAssetFiles.maskFile}
+              className="rounded-lg bg-white/10 px-4 py-3 text-sm font-medium text-slate-100 disabled:opacity-50"
+            >
+              Upload Practice Assets
+            </button>
+            <button
+              type="button"
+              onClick={() => { void handleSavePracticeContent(); }}
+              disabled={!canSavePractice}
+              className="rounded-lg bg-indigo-600 px-4 py-3 text-sm font-medium text-white disabled:opacity-50"
+            >
+              Save Practice Card
             </button>
           </div>
         </div>

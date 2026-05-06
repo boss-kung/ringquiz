@@ -30,7 +30,10 @@ type AdminActionName =
   | 'remove_game_set_question'
   | 'update_game_set_question'
   | 'reorder_game_set_questions'
-  | 'toggle_game_set_question_enabled';
+  | 'toggle_game_set_question_enabled'
+  // Practice content
+  | 'get_practice_content'
+  | 'upsert_practice_content';
 
 // ── Shared record shapes ─────────────────────────────────────────────────────
 
@@ -104,6 +107,37 @@ interface GameSetQuestionRecord {
   question_image_height: number | null;
 }
 
+interface PracticeContentPayload {
+  title: string;
+  prompt: string;
+  instruction: string;
+  image_url: string;
+  mask_url: string;
+  reveal_image_url?: string | null;
+  circle_radius_ratio: number;
+  image_width: number;
+  image_height: number;
+  mask_width: number;
+  mask_height: number;
+}
+
+interface PracticeContentRecord {
+  key: string;
+  title: string;
+  prompt: string;
+  instruction: string;
+  image_url: string;
+  mask_url: string;
+  reveal_image_url: string | null;
+  circle_radius_ratio: number;
+  image_width: number;
+  image_height: number;
+  mask_width: number;
+  mask_height: number;
+  created_at: string;
+  updated_at: string;
+}
+
 interface AdminRequest {
   action: AdminActionName;
   // Question Bank
@@ -125,6 +159,7 @@ interface AdminRequest {
   ordered_ids?: string[];
   special_round_type?: SpecialRoundType;
   special_round_label?: string | null;
+  practice_content?: unknown;
 }
 
 interface ValidationIssue {
@@ -133,6 +168,7 @@ interface ValidationIssue {
 }
 
 const GAME_STATE_ID = '00000000-0000-0000-0000-000000000001';
+const PRACTICE_CONTENT_KEY = 'waiting_practice';
 
 // ── Main handler ─────────────────────────────────────────────────────────────
 
@@ -179,7 +215,7 @@ async function handleAssetUpload(
 ): Promise<Response> {
   const form = await req.formData();
   const action = form.get('action');
-  if (action !== 'upload_assets') return error(400, 'unknown_action');
+  if (action !== 'upload_assets' && action !== 'upload_practice_assets') return error(400, 'unknown_action');
 
   const imageFile = form.get('image_file');
   const maskFile  = form.get('mask_file');
@@ -231,36 +267,56 @@ async function handleAssetUpload(
     }
   }
 
-  const assetId   = crypto.randomUUID();
+  const assetId = crypto.randomUUID();
   const imagePath = `${assetId}${getFileExtension(imageFile.name, '.png')}`;
-  const maskPath  = `${assetId}_mask${getFileExtension(maskFile.name, '.png')}`;
+  const maskPath = action === 'upload_practice_assets'
+    ? `${assetId}_practice_mask${getFileExtension(maskFile.name, '.png')}`
+    : `${assetId}_mask${getFileExtension(maskFile.name, '.png')}`;
   const revealPath = revealFile instanceof File
     ? `${assetId}_reveal${getFileExtension(revealFile.name, '.png')}`
     : null;
 
+  const imageBucket = 'question-images';
+  const maskBucket = action === 'upload_practice_assets' ? 'question-images' : 'question-masks';
+
   const { error: imageUploadError } = await db.storage
-    .from('question-images')
+    .from(imageBucket)
     .upload(imagePath, imageFile, { contentType: imageFile.type || 'image/png', upsert: false });
-  if (imageUploadError)
+  if (imageUploadError) {
     return error(400, 'upload_failed', `Image upload failed: ${imageUploadError.message}`);
+  }
 
   const { error: maskUploadError } = await db.storage
-    .from('question-masks')
+    .from(maskBucket)
     .upload(maskPath, maskFile, { contentType: maskFile.type || 'image/png', upsert: false });
   if (maskUploadError) {
-    await db.storage.from('question-images').remove([imagePath]);
+    await db.storage.from(imageBucket).remove([imagePath]);
     return error(400, 'upload_failed', `Mask upload failed: ${maskUploadError.message}`);
   }
 
   if (revealPath && revealFile instanceof File) {
     const { error: revealUploadError } = await db.storage
-      .from('question-images')
+      .from(imageBucket)
       .upload(revealPath, revealFile, { contentType: revealFile.type || 'image/png', upsert: false });
     if (revealUploadError) {
-      await db.storage.from('question-images').remove([imagePath]);
-      await db.storage.from('question-masks').remove([maskPath]);
+      await db.storage.from(imageBucket).remove([imagePath]);
+      await db.storage.from(maskBucket).remove([maskPath]);
       return error(400, 'upload_failed', `Reveal upload failed: ${revealUploadError.message}`);
     }
+  }
+
+  if (action === 'upload_practice_assets') {
+    return ok({
+      ok: true,
+      action: 'upload_practice_assets',
+      image_url: imagePath,
+      mask_url: maskPath,
+      reveal_image_url: revealPath,
+      image_width: imageWidth!,
+      image_height: imageHeight!,
+      mask_width: maskWidth!,
+      mask_height: maskHeight!,
+    });
   }
 
   return ok({
@@ -307,6 +363,10 @@ async function executeAction(
       return reorderGameSetQuestions(body.game_set_id, body.ordered_ids, db);
     case 'toggle_game_set_question_enabled':
       return toggleGameSetQuestionEnabled(body.game_set_question_id, body.is_enabled, db);
+    case 'get_practice_content':
+      return getPracticeContent(db);
+    case 'upsert_practice_content':
+      return upsertPracticeContent(body.practice_content, db);
     default:
       return error(400, 'unknown_action');
   }
@@ -1313,8 +1373,122 @@ async function compactGameSetPlayOrder(
 }
 
 // ============================================================================
+// PRACTICE CONTENT HELPERS
+// ============================================================================
+
+async function getPracticeContent(
+  db: ReturnType<typeof getSupabaseAdmin>,
+): Promise<Response> {
+  const { data, error: fetchError } = await db
+    .from('practice_content')
+    .select('*')
+    .eq('key', PRACTICE_CONTENT_KEY)
+    .maybeSingle<PracticeContentRecord>();
+
+  if (fetchError) throw new Error(`Failed to fetch practice content: ${fetchError.message}`);
+
+  return ok({
+    ok: true,
+    action: 'get_practice_content',
+    practice_content: data ?? null,
+  });
+}
+
+async function upsertPracticeContent(
+  input: unknown,
+  db: ReturnType<typeof getSupabaseAdmin>,
+): Promise<Response> {
+  const parsed = parsePracticeContentPayload(input);
+  if (!parsed.ok) return error(400, 'invalid_practice_content', parsed.detail);
+
+  const now = new Date().toISOString();
+  const { error: upsertError } = await db
+    .from('practice_content')
+    .upsert({
+      key: PRACTICE_CONTENT_KEY,
+      ...parsed.practiceContent,
+      updated_at: now,
+    }, { onConflict: 'key' });
+
+  if (upsertError) throw new Error(`Failed to save practice content: ${upsertError.message}`);
+
+  const { data, error: fetchError } = await db
+    .from('practice_content')
+    .select('*')
+    .eq('key', PRACTICE_CONTENT_KEY)
+    .single<PracticeContentRecord>();
+
+  if (fetchError || !data) throw new Error(fetchError?.message ?? 'Failed to fetch saved practice content');
+
+  return ok({
+    ok: true,
+    action: 'upsert_practice_content',
+    practice_content: data,
+  });
+}
+
+// ============================================================================
 // PARSING + VALIDATION HELPERS (unchanged from original)
 // ============================================================================
+
+function parsePracticeContentPayload(input: unknown):
+  | { ok: true; practiceContent: PracticeContentPayload }
+  | { ok: false; detail: string } {
+  if (!isPlainObject(input)) return { ok: false, detail: 'Practice content must be an object.' };
+
+  const issues: ValidationIssue[] = [];
+  const title = readString(input, 'title', 'Title', issues);
+  const prompt = readString(input, 'prompt', 'Prompt', issues);
+  const instruction = readString(input, 'instruction', 'Instruction', issues);
+  const imageUrl = readString(input, 'image_url', 'Image URL', issues);
+  const maskUrl = readString(input, 'mask_url', 'Mask URL', issues);
+  const revealImageUrl = readOptionalString(input, 'reveal_image_url', 'Reveal image URL', issues);
+  const circleRadiusRatio = readNumber(input, 'circle_radius_ratio', 'Circle radius ratio', issues, { min: 0.0001, max: 0.5 });
+  const imageWidth = readNumber(input, 'image_width', 'Image width', issues, { integer: true, min: 1 });
+  const imageHeight = readNumber(input, 'image_height', 'Image height', issues, { integer: true, min: 1 });
+  const maskWidth = readNumber(input, 'mask_width', 'Mask width', issues, { integer: true, min: 1 });
+  const maskHeight = readNumber(input, 'mask_height', 'Mask height', issues, { integer: true, min: 1 });
+
+  if (imageWidth != null && maskWidth != null && imageWidth !== maskWidth) {
+    issues.push({ field: 'mask_width', message: 'Mask width must match image width.' });
+  }
+  if (imageHeight != null && maskHeight != null && imageHeight !== maskHeight) {
+    issues.push({ field: 'mask_height', message: 'Mask height must match image height.' });
+  }
+
+  if (
+    issues.length > 0 ||
+    title == null ||
+    prompt == null ||
+    instruction == null ||
+    imageUrl == null ||
+    maskUrl == null ||
+    circleRadiusRatio == null ||
+    imageWidth == null ||
+    imageHeight == null ||
+    maskWidth == null ||
+    maskHeight == null
+  ) {
+    return { ok: false, detail: issues.map((issue) => `${issue.field}: ${issue.message}`).join(' ') };
+  }
+
+  return {
+    ok: true,
+    practiceContent: {
+      title,
+      prompt,
+      instruction,
+      image_url: imageUrl,
+      mask_url: maskUrl,
+      reveal_image_url: revealImageUrl,
+      circle_radius_ratio: circleRadiusRatio,
+      image_width: imageWidth,
+      image_height: imageHeight,
+      mask_width: maskWidth,
+      mask_height: maskHeight,
+    },
+  };
+}
 
 function parseQuestionPayload(input: unknown):
   | { ok: true; question: AdminQuestionPayload }

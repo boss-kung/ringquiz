@@ -21,7 +21,10 @@ export type AdminQuestionActionName =
   | 'remove_game_set_question'
   | 'update_game_set_question'
   | 'reorder_game_set_questions'
-  | 'toggle_game_set_question_enabled';
+  | 'toggle_game_set_question_enabled'
+  // Practice content
+  | 'get_practice_content'
+  | 'upsert_practice_content';
 
 export interface AdminQuestionRecord {
   id: string;
@@ -79,6 +82,7 @@ export interface AdminQuestionRequest {
   ordered_ids?: string[];              // for reorder_game_set_questions
   special_round_type?: import('./types').SpecialRoundType;
   special_round_label?: string | null;
+  practice_content?: PracticeContentPayload;
 }
 
 export interface AdminQuestionResponse {
@@ -94,6 +98,7 @@ export interface AdminQuestionResponse {
   game_set?: GameSetRecord;
   game_set_questions?: GameSetQuestionRecord[];
   game_set_question?: GameSetQuestionRecord;
+  practice_content?: PracticeContentRecord;
 }
 
 export interface AdminUploadAssetsResponse {
@@ -101,6 +106,18 @@ export interface AdminUploadAssetsResponse {
   action: 'upload_assets';
   image_url: string;
   mask_storage_path: string;
+  reveal_image_url: string | null;
+  image_width: number;
+  image_height: number;
+  mask_width: number;
+  mask_height: number;
+}
+
+export interface AdminPracticeAssetsResponse {
+  ok: boolean;
+  action: 'upload_practice_assets';
+  image_url: string;
+  mask_url: string;
   reveal_image_url: string | null;
   image_width: number;
   image_height: number;
@@ -153,4 +170,35 @@ export interface GameSetQuestionRecord {
   question_reveal_image_url: string | null;
   question_image_width: number | null;
   question_image_height: number | null;
+}
+
+export interface PracticeContentRecord {
+  key: string;
+  title: string;
+  prompt: string;
+  instruction: string;
+  image_url: string;
+  mask_url: string;
+  reveal_image_url: string | null;
+  circle_radius_ratio: number;
+  image_width: number;
+  image_height: number;
+  mask_width: number;
+  mask_height: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PracticeContentPayload {
+  title: string;
+  prompt: string;
+  instruction: string;
+  image_url: string;
+  mask_url: string;
+  reveal_image_url?: string | null;
+  circle_radius_ratio: number;
+  image_width: number;
+  image_height: number;
+  mask_width: number;
+  mask_height: number;
 }

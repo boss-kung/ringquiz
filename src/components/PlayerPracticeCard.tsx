@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
+import { supabase } from '../lib/supabase';
+import { resolveQuestionImageUrl } from '../lib/questionAssets';
+import type { PracticeContent } from '../lib/types';
 
 interface PracticeCircle {
   x: number;
@@ -13,7 +16,7 @@ interface PracticeMaskData {
   imageData: ImageData;
 }
 
-interface PracticeQuestionConfig {
+interface PracticeQuestionConfig extends PracticeContent {
   id: string;
   title: string;
   prompt: string;
@@ -46,6 +49,7 @@ function withBaseUrl(path: string): string {
 }
 
 const PRACTICE_QUESTION: PracticeQuestionConfig = {
+  key: 'waiting_practice',
   id: 'local-practice-1',
   title: 'มาซ้อมก่อนเริ่มเกมกันเถอะ!',
   prompt: 'ซ้อมก่อนเริ่ม',
@@ -54,7 +58,23 @@ const PRACTICE_QUESTION: PracticeQuestionConfig = {
   maskUrl: withBaseUrl('practice/practice-demo-mask.svg'),
   revealOverlayUrl: withBaseUrl('practice/practice-demo-reveal.svg'),
   answerRadius: 0.085,
+  image_url: 'practice/practice-demo-image.svg',
+  mask_url: 'practice/practice-demo-mask.svg',
+  reveal_image_url: 'practice/practice-demo-reveal.svg',
+  circle_radius_ratio: 0.085,
+  image_width: 1200,
+  image_height: 900,
+  mask_width: 1200,
+  mask_height: 900,
 };
+
+function resolvePracticeAssetUrl(path: string | null | undefined): string | null {
+  if (!path?.trim()) return null;
+  const trimmed = path.trim();
+  if (/^(https?:|data:|blob:)/i.test(trimmed)) return trimmed;
+  if (trimmed.startsWith('practice/') || trimmed.startsWith('/practice/')) return withBaseUrl(trimmed);
+  return resolveQuestionImageUrl(trimmed);
+}
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
@@ -167,6 +187,7 @@ function makeConfetti(): ConfettiParticle[] {
 export function PlayerPracticeCard() {
   const frameRef = useRef<HTMLDivElement>(null);
   const dragPointerId = useRef<number | null>(null);
+  const [practiceQuestion, setPracticeQuestion] = useState<PracticeQuestionConfig>(PRACTICE_QUESTION);
   const [imageSize, setImageSize] = useState({ width: 0, height: 0 });
   const [frameSize, setFrameSize] = useState({ width: 0, height: 0 });
   const [maskData, setMaskData] = useState<PracticeMaskData | null>(null);
@@ -176,13 +197,54 @@ export function PlayerPracticeCard() {
   const [feedbackKind, setFeedbackKind] = useState<FeedbackKind>('idle');
   const [confetti, setConfetti] = useState<ConfettiParticle[]>([]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadPracticeContent = async () => {
+      const { data, error } = await supabase
+        .from('practice_content')
+        .select('*')
+        .eq('key', 'waiting_practice')
+        .maybeSingle();
+
+      if (cancelled || error || !data) return;
+
+      setPracticeQuestion({
+        key: data.key,
+        id: data.key,
+        title: data.title,
+        prompt: data.prompt,
+        instruction: data.instruction,
+        imageUrl: resolvePracticeAssetUrl(data.image_url) ?? PRACTICE_QUESTION.imageUrl,
+        maskUrl: resolvePracticeAssetUrl(data.mask_url) ?? PRACTICE_QUESTION.maskUrl,
+        revealOverlayUrl: resolvePracticeAssetUrl(data.reveal_image_url) ?? undefined,
+        answerRadius: data.circle_radius_ratio,
+        image_url: data.image_url,
+        mask_url: data.mask_url,
+        reveal_image_url: data.reveal_image_url,
+        circle_radius_ratio: data.circle_radius_ratio,
+        image_width: data.image_width,
+        image_height: data.image_height,
+        mask_width: data.mask_width,
+        mask_height: data.mask_height,
+        created_at: data.created_at,
+        updated_at: data.updated_at,
+      });
+    };
+
+    void loadPracticeContent();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const containedRect = useMemo(
     () => getContainedImageRect(frameSize.width, frameSize.height, imageSize.width, imageSize.height),
     [frameSize.height, frameSize.width, imageSize.height, imageSize.width],
   );
 
   useEffect(() => {
-    loadMaskData(PRACTICE_QUESTION.maskUrl)
+    loadMaskData(practiceQuestion.maskUrl)
       .then((loaded) => {
         setMaskData(loaded);
         setMaskError(null);
@@ -191,7 +253,7 @@ export function PlayerPracticeCard() {
         setMaskData(null);
         setMaskError('โหลดโหมดซ้อมไม่สำเร็จ');
       });
-  }, []);
+  }, [practiceQuestion.maskUrl]);
 
   useEffect(() => {
     const frame = frameRef.current;
@@ -223,7 +285,7 @@ export function PlayerPracticeCard() {
     }
   }, [imageSize.height, imageSize.width, maskData]);
 
-  const answerPxRadius = containedRect.renderedWidth * PRACTICE_QUESTION.answerRadius;
+  const answerPxRadius = containedRect.renderedWidth * practiceQuestion.answerRadius;
 
   const resetPractice = useCallback(() => {
     setAnswer(null);
@@ -254,9 +316,9 @@ export function PlayerPracticeCard() {
     return {
       x: containedRect.renderedWidth > 0 ? (safeX - minX) / containedRect.renderedWidth : 0,
       y: containedRect.renderedHeight > 0 ? (safeY - minY) / containedRect.renderedHeight : 0,
-      r: PRACTICE_QUESTION.answerRadius,
+      r: practiceQuestion.answerRadius,
     };
-  }, [containedRect.offsetX, containedRect.offsetY, containedRect.renderedHeight, containedRect.renderedWidth]);
+  }, [containedRect.offsetX, containedRect.offsetY, containedRect.renderedHeight, containedRect.renderedWidth, practiceQuestion.answerRadius]);
 
   const handlePointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     if (submitted || !containedRect.renderedWidth || !containedRect.renderedHeight) return;
@@ -343,14 +405,18 @@ export function PlayerPracticeCard() {
     <section className="pw-practice-zone gr-card">
       <div className="pw-practice-head">
         <div>
-          <h2 className="pw-practice-title">{PRACTICE_QUESTION.title}</h2>
+          <h2 className="pw-practice-title">{practiceQuestion.title}</h2>
           <p className="pw-practice-note" style={{ fontSize: 14 }}>
             ไม่นับคะแนนในเกมจริง
           </p>
         </div>
       </div>
 
-      <p className="pw-practice-tip">{PRACTICE_QUESTION.instruction}</p>
+      <p className="pw-practice-tip">{practiceQuestion.instruction}</p>
+      <div className="pw-practice-prompt gr-card">
+        <div className="gr-label-xs" style={{ marginBottom: 6 }}>Practice Question</div>
+        <p className="gr-qtext" style={{ margin: 0, textAlign: 'left' }}>{practiceQuestion.prompt}</p>
+      </div>
 
       <div
         ref={frameRef}
@@ -362,7 +428,7 @@ export function PlayerPracticeCard() {
         style={{ touchAction: 'none', position: 'relative' }}
       >
         <img
-          src={PRACTICE_QUESTION.imageUrl}
+          src={practiceQuestion.imageUrl}
           alt="Practice question"
           className="pw-practice-image"
           draggable={false}
@@ -376,9 +442,9 @@ export function PlayerPracticeCard() {
           <div className="pw-practice-hint">แตะแล้วลากได้</div>
         )}
 
-        {submitted && PRACTICE_QUESTION.revealOverlayUrl ? (
+        {submitted && practiceQuestion.revealOverlayUrl ? (
           <img
-            src={PRACTICE_QUESTION.revealOverlayUrl}
+            src={practiceQuestion.revealOverlayUrl}
             alt=""
             aria-hidden
             className="pw-practice-overlay"
@@ -391,9 +457,9 @@ export function PlayerPracticeCard() {
           />
         ) : null}
 
-        {submitted && !PRACTICE_QUESTION.revealOverlayUrl ? (
+        {submitted && !practiceQuestion.revealOverlayUrl ? (
           <img
-            src={PRACTICE_QUESTION.maskUrl}
+            src={practiceQuestion.maskUrl}
             alt=""
             aria-hidden
             className="pw-practice-overlay pw-practice-overlay-mask"

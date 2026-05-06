@@ -87,20 +87,20 @@ export function EndScreen() {
           </div>
         </div>
 
-        <div className="gr-label-sm gr-gold" style={{ marginBottom: 7, letterSpacing: '.18em', fontSize: 22 }}>
+        <div className="gr-label-sm gr-gold" style={{ marginBottom: 7, letterSpacing: '.18em', fontSize: 20 }}>
           Final Leaderboard
         </div>
-        <h2 style={{ fontSize: 32, fontWeight: 900, marginBottom: 5, color: 'var(--text)' }}>จบเกม!</h2>
+        <h2 style={{ fontSize: 26, fontWeight: 900, marginBottom: 5, color: 'var(--text)' }}>จบเกม!</h2>
 
         {winner && (
-          <p style={{ fontSize: 22, color: 'var(--text-2)', marginBottom: 14 }}>
+          <p style={{ fontSize: 20, color: 'var(--text-2)', marginBottom: 14 }}>
             ผู้ชนะคือ — <strong style={{ color: 'var(--gold)' }}>{winner.display_name}</strong>
           </p>
         )}
 
         {playerEntry && (
           <>
-            <div className="gr-label-xs" style={{ marginBottom: 6, fontSize: 22 }}>
+            <div className="gr-label-xs" style={{ marginBottom: 6, fontSize: 16 }}>
               สถิติของ {displayName}
             </div>
             <div
@@ -108,19 +108,19 @@ export function EndScreen() {
               style={{ display: 'inline-flex', gap: 18, padding: '11px 20px', borderRadius: 14 }}
             >
               <div style={{ textAlign: 'center' }}>
-                <div className="gr-label-xs" style={{ marginBottom: 4, fontSize: 22 }}>
+                <div className="gr-label-xs" style={{ marginBottom: 4, fontSize: 16 }}>
                   อันดับ
                 </div>
-                <div className="gr-mono" style={{ fontSize: 28, fontWeight: 900, color: 'var(--gold)' }}>
+                <div className="gr-mono" style={{ fontSize: 24, fontWeight: 900, color: 'var(--gold)' }}>
                   #{playerEntry.rank}
                 </div>
               </div>
               <div style={{ width: 1, background: 'rgba(245,199,74,.18)' }} />
               <div style={{ textAlign: 'center' }}>
-                <div className="gr-label-xs" style={{ marginBottom: 4, fontSize: 22 }}>
+                <div className="gr-label-xs" style={{ marginBottom: 4, fontSize: 16 }}>
                   คะแนนรวม
                 </div>
-                <div className="gr-mono" style={{ fontSize: 28, fontWeight: 900, color: 'var(--gold)' }}>
+                <div className="gr-mono" style={{ fontSize: 24, fontWeight: 900, color: 'var(--gold)' }}>
                   {playerEntry.cumulative_score.toLocaleString()}
                 </div>
               </div>
@@ -131,7 +131,7 @@ export function EndScreen() {
 
       {/* Rankings */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '14px 16px 20px', position: 'relative', zIndex: 1 }}>
-        <div className="gr-label-xs" style={{ textAlign: 'center', marginBottom: 10, fontSize: 22 }}>
+        <div className="gr-label-xs" style={{ textAlign: 'center', marginBottom: 10, fontSize: 16 }}>
           Final Rankings
         </div>
         <LeaderboardTable
