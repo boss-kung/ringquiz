@@ -29,6 +29,11 @@ const PRACTICE_MASK_ALPHA_THRESHOLD = 10;
 const CLOSE_RADIUS_MULTIPLIER = 1.9;
 // Number of local confetti particles on correct
 const CONFETTI_COUNT = 100;
+const LEGACY_MOCKUP_PRACTICE_ASSETS = new Set([
+  'practice/practice-demo-image.svg',
+  'practice/practice-demo-mask.svg',
+  'practice/practice-demo-reveal.svg',
+]);
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -42,17 +47,17 @@ function withBaseUrl(path: string): string {
 
 const PRACTICE_QUESTION: PracticeQuestionConfig = {
   key: 'waiting_practice',
-  id: 'local-practice-1',
+  id: 'waiting_practice',
   title: 'มาซ้อมก่อนเริ่มเกมกันเถอะ!',
   prompt: 'ซ้อมก่อนเริ่ม',
   instruction: 'วิธีเล่น: อ่านโจทย์ → วางวงกลมที่คิดว่าเป็นคำตอบ → กดปุ่มยืนยันคำตอบ',
-  imageUrl: withBaseUrl('practice/practice-demo-image.svg'),
-  maskUrl: withBaseUrl('practice/practice-demo-mask.svg'),
-  revealOverlayUrl: withBaseUrl('practice/practice-demo-reveal.svg'),
+  imageUrl: '',
+  maskUrl: '',
+  revealOverlayUrl: undefined,
   answerRadius: 0.085,
-  image_url: 'practice/practice-demo-image.svg',
-  mask_url: 'practice/practice-demo-mask.svg',
-  reveal_image_url: 'practice/practice-demo-reveal.svg',
+  image_url: '',
+  mask_url: '',
+  reveal_image_url: null,
   circle_radius_ratio: 0.085,
   image_width: 1200,
   image_height: 900,
@@ -63,6 +68,8 @@ const PRACTICE_QUESTION: PracticeQuestionConfig = {
 function resolvePracticeAssetUrl(path: string | null | undefined): string | null {
   if (!path?.trim()) return null;
   const trimmed = path.trim();
+  const normalized = trimmed.replace(/^\//, '');
+  if (LEGACY_MOCKUP_PRACTICE_ASSETS.has(normalized)) return null;
   if (/^(https?:|data:|blob:)/i.test(trimmed)) return trimmed;
   if (trimmed.startsWith('practice/') || trimmed.startsWith('/practice/')) return withBaseUrl(trimmed);
   return resolveQuestionImageUrl(trimmed);
@@ -71,6 +78,7 @@ function resolvePracticeAssetUrl(path: string | null | undefined): string | null
 async function loadMaskData(url: string): Promise<PracticeMaskData> {
   const img = new Image();
   img.decoding = 'async';
+  img.crossOrigin = 'anonymous';
 
   await new Promise<void>((resolve, reject) => {
     img.onload = () => resolve();
@@ -155,6 +163,7 @@ export function PlayerPracticeCard() {
   const [practiceQuestion, setPracticeQuestion] = useState<PracticeQuestionConfig>(PRACTICE_QUESTION);
   const [maskData, setMaskData] = useState<PracticeMaskData | null>(null);
   const [maskError, setMaskError] = useState<string | null>(null);
+  const [practiceLoaded, setPracticeLoaded] = useState(false);
   const [answer, setAnswer] = useState<CirclePosition | null>(null);
   const [submitted, setSubmitted] = useState(false);
   const [feedbackKind, setFeedbackKind] = useState<FeedbackKind>('idle');
@@ -170,7 +179,13 @@ export function PlayerPracticeCard() {
         .eq('key', 'waiting_practice')
         .maybeSingle();
 
-      if (cancelled || error || !data) return;
+      if (cancelled) return;
+
+      if (error || !data) {
+        setPracticeLoaded(true);
+        setMaskError('ยังไม่ได้ตั้งค่าโจทย์ซ้อม');
+        return;
+      }
 
       setPracticeQuestion({
         key: data.key,
@@ -178,8 +193,8 @@ export function PlayerPracticeCard() {
         title: data.title,
         prompt: data.prompt,
         instruction: data.instruction,
-        imageUrl: resolvePracticeAssetUrl(data.image_url) ?? PRACTICE_QUESTION.imageUrl,
-        maskUrl: resolvePracticeAssetUrl(data.mask_url) ?? PRACTICE_QUESTION.maskUrl,
+        imageUrl: resolvePracticeAssetUrl(data.image_url) ?? '',
+        maskUrl: resolvePracticeAssetUrl(data.mask_url) ?? '',
         revealOverlayUrl: resolvePracticeAssetUrl(data.reveal_image_url) ?? undefined,
         answerRadius: data.circle_radius_ratio,
         image_url: data.image_url,
@@ -193,6 +208,7 @@ export function PlayerPracticeCard() {
         created_at: data.created_at,
         updated_at: data.updated_at,
       });
+      setPracticeLoaded(true);
     };
 
     void loadPracticeContent();
@@ -202,6 +218,14 @@ export function PlayerPracticeCard() {
   }, []);
 
   useEffect(() => {
+    if (!practiceQuestion.maskUrl) {
+      setMaskData(null);
+      if (practiceLoaded) {
+        setMaskError(practiceQuestion.imageUrl ? 'โจทย์ซ้อมยังตั้งค่าเฉลยไม่ครบ' : 'ยังไม่ได้ตั้งค่าโจทย์ซ้อม');
+      }
+      return;
+    }
+
     loadMaskData(practiceQuestion.maskUrl)
       .then((loaded) => {
         setMaskData(loaded);
@@ -211,7 +235,7 @@ export function PlayerPracticeCard() {
         setMaskData(null);
         setMaskError('โหลดโหมดซ้อมไม่สำเร็จ');
       });
-  }, [practiceQuestion.maskUrl]);
+  }, [practiceLoaded, practiceQuestion.imageUrl, practiceQuestion.maskUrl]);
 
   const resetPractice = useCallback(() => {
     setAnswer(null);
@@ -226,6 +250,8 @@ export function PlayerPracticeCard() {
       return;
     }
     if (!maskData) {
+      setFeedbackKind('idle');
+      setMaskError((current) => current ?? 'โจทย์ซ้อมยังไม่พร้อม');
       return;
     }
 
@@ -262,16 +288,14 @@ export function PlayerPracticeCard() {
     submitted ? `is-${feedbackKind}` : '',
   ].filter(Boolean).join(' ');
 
-  const msg = feedbackMessage() ?? maskError;
+  const msg = feedbackMessage() ?? maskError ?? (!practiceLoaded ? 'กำลังโหลดโจทย์ซ้อม...' : null);
+  const canSubmit = Boolean(answer) && Boolean(maskData) && !submitted;
 
   return (
     <section className="pw-practice-zone gr-card">
       <div className="pw-practice-head">
         <div>
           <h2 className="pw-practice-title">{practiceQuestion.title}</h2>
-          <p className="pw-practice-note" style={{ fontSize: 14 }}>
-            ไม่นับคะแนนในเกมจริง
-          </p>
         </div>
       </div>
 
@@ -287,12 +311,13 @@ export function PlayerPracticeCard() {
       >
         <div className="quiz-image-stage pw-practice-stage">
           <QuestionImage
-            imageUrl={practiceQuestion.imageUrl}
+            imageUrl={practiceQuestion.imageUrl || null}
             circleRadiusRatio={practiceQuestion.answerRadius}
             circle={answer}
             onCircleChange={(pos) => {
               if (submitted) return;
               setFeedbackKind('idle');
+              setMaskError(null);
               setAnswer(pos);
             }}
             locked={submitted}
@@ -332,7 +357,7 @@ export function PlayerPracticeCard() {
       </div>
 
       <div className="pw-practice-actions">
-        <button type="button" className="pw-submit-btn" onClick={handleSubmit} disabled={submitted || !answer}>
+        <button type="button" className="pw-submit-btn" onClick={handleSubmit} disabled={!canSubmit}>
           {submitted ? 'ส่งแล้ว' : 'ยืนยันคำตอบ'}
         </button>
         <button type="button" className="pw-reset-btn" onClick={resetPractice}>
