@@ -2882,15 +2882,21 @@ body.host-route {
   justify-content: center;
   isolation: isolate;
 }
+.ds-qr-wrap::before,
+.ds-qr-wrap::after {
+  content: none !important;
+  display: none !important;
+  animation: none !important;
+}
 
 /* ── Hype meter ─────────────────────────────────────────────────────────────── */
 .ds-hype-meter-wrap {
   margin-top: 14px;
   width: 100%;
-  max-width: 260px;
+  max-width: 350px;
 }
 .ds-hype-label {
-  font-size: 11px;
+  font-size: 16px;
   letter-spacing: .12em;
   text-transform: uppercase;
   color: var(--text-2);
@@ -2898,7 +2904,7 @@ body.host-route {
   text-align: center;
 }
 .ds-hype-meter {
-  height: 8px;
+  height: 20px;
   border-radius: 99px;
   background: rgba(255,255,255,.08);
   overflow: hidden;

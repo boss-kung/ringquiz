@@ -1212,7 +1212,6 @@ function DsLobby({
 
       <div className="ds-lobby-body">
         <div className="ds-stage-card ds-stage-card-hero ds-lobby-left">
-          <div className="ds-stage-rings" aria-hidden />
           <QRCode url={joinUrl} />
           {/* Hype meter — under QR, visual-only */}
           <div className="ds-hype-meter-wrap">
