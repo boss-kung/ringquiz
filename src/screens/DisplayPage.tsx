@@ -860,11 +860,12 @@ export function DisplayPage() {
         };
 
         if (gsqId) {
-          const { data: gsqData } = await supabase
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { data: gsqData } = await (supabase as any)
             .from('game_set_questions')
             .select('play_order, time_limit_seconds, max_score, min_correct_score, circle_radius_ratio, special_round_type')
             .eq('id', gsqId)
-            .single();
+            .single() as { data: { play_order: number; time_limit_seconds: number; max_score: number; min_correct_score: number; circle_radius_ratio: number; special_round_type?: string } | null };
           if (gsqData) {
             dq = { ...dq, play_order: gsqData.play_order, time_limit_seconds: gsqData.time_limit_seconds,
               max_score: gsqData.max_score, min_correct_score: gsqData.min_correct_score,
