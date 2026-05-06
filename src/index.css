@@ -592,9 +592,8 @@ body.host-route {
 .reveal-mask-pulse { animation: revealMaskPulse 1s ease-in-out infinite; transform-origin: center; }
 .reveal-mask-static { opacity: .92; transform-origin: center; }
 @keyframes revealImageBloom {
-  0% { opacity: 0; transform: scale(1.045) translateY(10px); filter: blur(10px) saturate(.88); }
-  58% { opacity: 1; transform: scale(1.012) translateY(0); filter: blur(0) saturate(1.08); }
-  100% { opacity: 1; transform: scale(1) translateY(0); filter: blur(0) saturate(1); }
+  0% { opacity: 0; }
+  100% { opacity: 1; }
 }
 
 /* ── QUIZ IMAGE STAGE ───────────────────────────────────────────────────────── */
@@ -716,8 +715,8 @@ body.host-route {
   -webkit-user-drag: none;
 }
 .quiz-image-shell--reveal-active .quiz-image-media {
-  animation: revealImageBloom .9s cubic-bezier(.2,.9,.2,1) both;
-  will-change: transform, opacity, filter;
+  animation: revealImageBloom .45s ease-out both;
+  will-change: opacity;
 }
 
 .quiz-image-shell--question {

@@ -172,7 +172,7 @@ export function RevealScreen() {
             circle={persistentCircle}
             onCircleChange={() => {}}
             locked
-            maskOverlayClassName={!showRevealImage ? 'reveal-mask-static' : undefined}
+            maskOverlayClassName={!showRevealImage ? 'reveal-mask-pulse' : undefined}
             maskOverlayUrl={!showRevealImage ? `${FUNCTIONS_URL}/get-reveal-mask?questionId=${encodeURIComponent(
               question.id
             )}&updatedAt=${encodeURIComponent(gameState?.updated_at ?? '')}` : undefined}
