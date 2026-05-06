@@ -324,6 +324,42 @@ function AnimatedScore({
   return <>{displayValue.toLocaleString()}</>;
 }
 
+// ── ConfettiBurst (Phase 2 — audience-safe, CSS-only, max 32 particles) ──────
+
+const CONFETTI_COLORS_DS = ['#F5C74A','#FFF8E7','#34D399','#818CF8','#FB7185','#FBBF24'];
+
+function ConfettiBurst({
+  active,
+  mode = 'gold',
+  count = 28,
+}: {
+  active: boolean;
+  mode?: 'gold' | 'success';
+  count?: number;
+}) {
+  if (!active) return null;
+  const colors = mode === 'success'
+    ? ['#34D399','#6EE7B7','#F5C74A','#818CF8','#FFF8E7']
+    : CONFETTI_COLORS_DS;
+  return (
+    <div className="ds-confetti-burst" aria-hidden>
+      {Array.from({ length: Math.min(count, 32) }, (_, i) => (
+        <span
+          key={i}
+          className="ds-confetti-piece"
+          style={{
+            '--x': `${(Math.random() * 2 - 1) * 120}px`,
+            '--delay': `${(i / count) * 0.6}s`,
+            '--rot': `${Math.random() * 720 - 360}deg`,
+            '--dur': `${0.9 + Math.random() * 0.7}s`,
+            background: colors[i % colors.length],
+          } as CSSProperties}
+        />
+      ))}
+    </div>
+  );
+}
+
 // ── Root component ────────────────────────────────────────────────────────────
 
 const MAX_VISIBLE_PLAYERS = 24;
@@ -855,6 +891,7 @@ export function DisplayPage() {
         playersFetchError={playersFetchError}
         gameStateFetchError={gameStateFetchError}
         statsFetchError={statsFetchError}
+        reducedMotion={reducedMotion}
       />
     );
   } else if (status === 'countdown') {
@@ -865,6 +902,7 @@ export function DisplayPage() {
         totalQs={totalQs}
         getServerTime={getServerTime}
         questionFetchError={questionFetchError}
+        reducedMotion={reducedMotion}
       />
     );
   } else if (status === 'question_open') {
@@ -876,6 +914,7 @@ export function DisplayPage() {
         totalQs={totalQs}
         getServerTime={getServerTime}
         questionFetchError={questionFetchError}
+        reducedMotion={reducedMotion}
       />
     );
   } else if (status === 'question_closed') {
@@ -927,6 +966,7 @@ export function DisplayPage() {
         playersFetchError={playersFetchError}
         gameStateFetchError={gameStateFetchError}
         statsFetchError={statsFetchError}
+        reducedMotion={reducedMotion}
       />
     );
   }
@@ -971,6 +1011,7 @@ function DsLobby({
   playersFetchError,
   gameStateFetchError,
   statsFetchError,
+  reducedMotion,
 }: {
   players: Player[];
   newPlayerIds: Set<string>;
@@ -979,11 +1020,20 @@ function DsLobby({
   playersFetchError: boolean;
   gameStateFetchError: boolean;
   statsFetchError: boolean;
+  reducedMotion: boolean;
 }) {
   const joinUrl = window.location.origin + (import.meta.env.BASE_URL || '/');
   const visible = players.slice(0, MAX_VISIBLE_PLAYERS);
   const overflow = players.length - MAX_VISIBLE_PLAYERS;
   const badge = deriveConnBadge(realtimeStatus, playersFetchError, gameStateFetchError, statsFetchError);
+
+  // Hype meter (visual-only, no Supabase write)
+  const hypeRatio = Math.min(players.length / 50, 1);
+  const hypeLabel =
+    players.length === 0 ? 'รอผู้เล่นคนแรก' :
+    players.length <= 20 ? 'Warm up' :
+    players.length <= 50 ? 'Getting loud' :
+    'Full house';
 
   return (
     <DsShell>
@@ -1007,20 +1057,35 @@ function DsLobby({
         <div className="ds-stage-card ds-stage-card-hero ds-lobby-left">
           <div className="ds-stage-rings" aria-hidden />
           <QRCode url={joinUrl} />
+          {/* Hype meter — under QR, visual-only */}
+          <div className="ds-hype-meter-wrap">
+            <div className="ds-hype-label">{hypeLabel}</div>
+            <div className="ds-hype-meter" aria-hidden>
+              <div
+                className="ds-hype-meter-fill"
+                style={{ width: `${hypeRatio * 100}%` }}
+              />
+            </div>
+          </div>
         </div>
 
         <div className="ds-stage-card ds-stage-card-soft ds-lobby-right">
           <div className="ds-lobby-wall-header">
             <div className="ds-label">{latestJoined ? 'ผู้เล่นใหม่กำลังเข้าห้อง' : 'ผู้เล่นในห้อง'}</div>
             <div className="ds-player-count ds-stage-inset">
-              <div className="ds-lobby-player-count-hero">{players.length}</div>
+              {/* key triggers re-animation on count change */}
+              <div key={players.length} className="ds-lobby-player-count-hero ds-count-pop">
+                {players.length}
+              </div>
               <div className="ds-lobby-player-count-label">ผู้เล่น</div>
             </div>
           </div>
 
           {latestJoined && (
-            <div className="ds-latest-joined">
-              🎉 {truncate(latestJoined.display_name, 24)} เข้าร่วมแล้ว!
+            <div className="ds-latest-joined-hero">
+              <span className="ds-latest-joined-icon">🎉</span>
+              <span className="ds-latest-joined-name">{truncate(latestJoined.display_name, 28)}</span>
+              <span className="ds-latest-joined-sub">เข้าร่วมแล้ว!</span>
             </div>
           )}
 
@@ -1036,7 +1101,7 @@ function DsLobby({
                 >
                   <div className="ds-chip-av" style={{ background: avGrad(i) }}>{initials(p.display_name)}</div>
                   <span className="ds-chip-name">{p.display_name}</span>
-                  {newPlayerIds.has(p.id) && <span className="ds-player-new-badge">NEW</span>}
+                  {newPlayerIds.has(p.id) && !reducedMotion && <span className="ds-player-new-badge">NEW</span>}
                 </div>
               ))}
               {overflow > 0 && (
@@ -1056,13 +1121,14 @@ function DsLobby({
 // ── 2. COUNTDOWN ──────────────────────────────────────────────────────────────
 
 function DsCountdown({
-  gameState, question, totalQs, getServerTime, questionFetchError,
+  gameState, question, totalQs, getServerTime, questionFetchError, reducedMotion,
 }: {
   gameState: GameState;
   question: DisplayQuestion | null;
   totalQs: number;
   getServerTime: () => number;
   questionFetchError: boolean;
+  reducedMotion: boolean;
 }) {
   const totalMs = COUNTDOWN_DISPLAY_SECONDS * 1000;
   const [remainingMs, setRemainingMs] = useState(totalMs);
@@ -1116,27 +1182,39 @@ function DsCountdown({
         <div className="ds-countdown-stage">
           <div className="ds-stage-kicker">Next Round</div>
           <div className="ds-countdown-wrap">
-          <svg className="ds-ring-svg" viewBox="0 0 260 260" aria-hidden>
-            <defs>
-              <linearGradient id="dsRingGrad" x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0%" stopColor="#C49A1A" />
-                <stop offset="100%" stopColor="#F5C74A" />
-              </linearGradient>
-            </defs>
-            <circle cx="130" cy="130" r="110" fill="none" stroke="rgba(255,255,255,.06)" strokeWidth="12" />
-            <circle cx="130" cy="130" r="110" fill="none" stroke="url(#dsRingGrad)" strokeWidth="12"
-              strokeLinecap="round" transform="rotate(-90 130 130)"
-              strokeDasharray={circ} strokeDashoffset={offset} style={{ transition: 'none' }} />
-          </svg>
-          <div className="ds-countdown-inner">
-            <div className="ds-label" style={{ marginBottom: 8 }}>เตรียมพร้อม!</div>
-            <div key={count} className="ds-big-num">{count > 0 ? count : '●'}</div>
-          </div>
+            <svg className="ds-ring-svg" viewBox="0 0 260 260" aria-hidden>
+              <defs>
+                <linearGradient id="dsRingGrad" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0%" stopColor="#C49A1A" />
+                  <stop offset="100%" stopColor="#F5C74A" />
+                </linearGradient>
+              </defs>
+              <circle cx="130" cy="130" r="110" fill="none" stroke="rgba(255,255,255,.06)" strokeWidth="12" />
+              <circle cx="130" cy="130" r="110" fill="none" stroke="url(#dsRingGrad)" strokeWidth="12"
+                strokeLinecap="round" transform="rotate(-90 130 130)"
+                strokeDasharray={circ} strokeDashoffset={offset} style={{ transition: 'none' }} />
+            </svg>
+            <div className="ds-countdown-inner">
+              <div className="ds-label" style={{ marginBottom: 8 }}>เตรียมพร้อม!</div>
+              <div key={count} className="ds-big-num ds-big-num-pop">{count > 0 ? count : '●'}</div>
+            </div>
+            {/* Lightweight count-change particle burst — client-only, never written to Supabase */}
+            {!reducedMotion && count > 0 && (
+              <div key={`p-${count}`} className="ds-countdown-particles" aria-hidden>
+                {Array.from({ length: 10 }, (_, i) => (
+                  <span
+                    key={i}
+                    className="ds-countdown-pop-particle"
+                    style={{ '--ds-cd-angle': `${i * 36}deg` } as CSSProperties}
+                  />
+                ))}
+              </div>
+            )}
           </div>
           <div className="ds-stage-caption">ภาพปริศนาจะขึ้นทันทีเมื่อ countdown จบ</div>
         </div>
       ) : (
-        <div className="ds-stage-card ds-stage-card-clue ds-clue-wrap">
+        <div className="ds-stage-card ds-stage-card-clue ds-clue-wrap ds-clue-enter">
           <div className="ds-label ds-gold" style={{ marginBottom: 16, letterSpacing: '.2em' }}>ภาพปริศนา</div>
           {questionFetchError && !clueUrl ? (
             <div className="ds-muted">ไม่สามารถโหลดภาพคำถามได้</div>
@@ -1153,7 +1231,7 @@ function DsCountdown({
 // ── 3. QUESTION OPEN ──────────────────────────────────────────────────────────
 
 function DsQuestion({
-  gameState, question, stats, totalQs, getServerTime, questionFetchError,
+  gameState, question, stats, totalQs, getServerTime, questionFetchError, reducedMotion,
 }: {
   gameState: GameState;
   question: DisplayQuestion | null;
@@ -1161,8 +1239,14 @@ function DsQuestion({
   totalQs: number;
   getServerTime: () => number;
   questionFetchError: boolean;
+  reducedMotion: boolean;
 }) {
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
+  const prevSubmittedRef = useRef<number | null>(null);
+  const [statPulse, setStatPulse] = useState(false);
+  const milestoneRef = useRef<number>(0);
+  const [milestoneBanner, setMilestoneBanner] = useState<string | null>(null);
+  const milestoneTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const endsAt = gameState.question_ends_at;
@@ -1174,9 +1258,60 @@ function DsQuestion({
     return () => clearInterval(id);
   }, [gameState.question_ends_at, getServerTime]);
 
+  // Reset milestone tracker when question changes
+  useEffect(() => {
+    milestoneRef.current = 0;
+    setMilestoneBanner(null);
+    if (milestoneTimerRef.current) { clearTimeout(milestoneTimerRef.current); milestoneTimerRef.current = null; }
+  }, [gameState.current_question_id]);
+
+  // Stat pill pulse on answer count increase
+  useEffect(() => {
+    const count = stats?.submitted_count ?? null;
+    if (count === null) return;
+    if (prevSubmittedRef.current !== null && count > prevSubmittedRef.current) {
+      setStatPulse(true);
+      const t = setTimeout(() => setStatPulse(false), 600);
+      prevSubmittedRef.current = count;
+      return () => clearTimeout(t);
+    }
+    prevSubmittedRef.current = count;
+  }, [stats?.submitted_count]);
+
+  // Milestone banners at 50 / 75 / 90 / 100 %
+  useEffect(() => {
+    const count = stats?.submitted_count ?? 0;
+    const total = stats?.player_count ?? 0;
+    if (!total || !count) return;
+    const pct = count / total;
+    const thresholds: Array<{ pct: number; label: string }> = [
+      { pct: 1.0, label: '🎯 ครบ 100% แล้ว!' },
+      { pct: 0.9, label: '🔥 90% ตอบแล้ว' },
+      { pct: 0.75, label: '75% ตอบแล้ว' },
+      { pct: 0.5, label: '50% ตอบแล้ว' },
+    ];
+    for (const th of thresholds) {
+      if (pct >= th.pct && milestoneRef.current < th.pct) {
+        milestoneRef.current = th.pct;
+        setMilestoneBanner(th.label);
+        if (milestoneTimerRef.current) clearTimeout(milestoneTimerRef.current);
+        milestoneTimerRef.current = setTimeout(() => {
+          setMilestoneBanner(null);
+          milestoneTimerRef.current = null;
+        }, 2500);
+        break;
+      }
+    }
+  }, [stats?.submitted_count, stats?.player_count]);
+
+  useEffect(() => {
+    return () => { if (milestoneTimerRef.current) clearTimeout(milestoneTimerRef.current); };
+  }, []);
+
   const totalSec = question?.time_limit_seconds ?? 30;
   const ratio = timeLeft != null ? Math.max(0, Math.min(1, timeLeft / totalSec)) : 1;
   const urgent = timeLeft != null && timeLeft <= 5;
+  const critical = timeLeft != null && timeLeft <= 3;
   const imgUrl = question ? resolveQuestionImageUrl(question.image_url) : null;
 
   const submittedCount = stats?.submitted_count ?? null;
@@ -1184,43 +1319,59 @@ function DsQuestion({
 
   return (
     <DsShell>
-      <div className="ds-q-bar">
-        <QPos question={question} totalQs={totalQs} small />
-        <div className="ds-q-meta">
-          {submittedCount !== null && playerCount !== null ? (
-            <span className="ds-stat-pill">ตอบแล้ว {submittedCount} / {playerCount}</span>
-          ) : null}
-        </div>
-      </div>
+      <div
+        className={[
+          'ds-q-root',
+          urgent ? 'ds-question-urgent' : '',
+          critical ? 'ds-question-critical' : '',
+        ].filter(Boolean).join(' ')}
+        style={{ position: 'relative' }}
+      >
+        {!reducedMotion && <div className="ds-q-shockwave" aria-hidden />}
+        {milestoneBanner && !reducedMotion && (
+          <div className="ds-answer-milestone" aria-live="polite">{milestoneBanner}</div>
+        )}
 
-      <div className="ds-q-body">
-        <div className="ds-stage-card ds-stage-card-soft ds-q-left">
-          {questionFetchError && !question ? (
-            <div className="ds-muted">ไม่สามารถโหลดคำถามได้</div>
-          ) : (
-            <div className="ds-q-text">{question?.text ?? 'กำลังโหลด...'}</div>
-          )}
-          <div className="ds-q-progress-meta">
-            <div className="ds-stage-kicker">Live Question</div>
+        <div className="ds-q-bar">
+          <QPos question={question} totalQs={totalQs} small />
+          <div className="ds-q-meta">
             {submittedCount !== null && playerCount !== null ? (
-              <div className="ds-stage-pill">{submittedCount} / {playerCount} answered</div>
+              <span className={`ds-stat-pill${statPulse && !reducedMotion ? ' is-pulsing' : ''}`}>
+                ตอบแล้ว {submittedCount} / {playerCount}
+              </span>
             ) : null}
           </div>
-          <div className={`ds-big-timer ${urgent ? 'ds-timer-urgent' : ''}`}>
-            {timeLeft != null ? timeLeft.toFixed(1) : '—'}
-            <span className="ds-timer-unit">s</span>
-          </div>
-          <div className="ds-timer-bar-track">
-            <div
-              className={`ds-timer-bar-fill ${urgent ? 'ds-timer-bar-urgent' : ''}`}
-              style={{ width: `${ratio * 100}%` }}
-            />
-          </div>
-          <div className="ds-muted" style={{ marginTop: 8 }}>กำลังรับคำตอบ...</div>
         </div>
 
-        <div className="ds-stage-card ds-stage-card-visual ds-q-right">
-          <DisplayImageStage imageUrl={imgUrl} variant="question" />
+        <div className="ds-q-body">
+          <div className="ds-stage-card ds-stage-card-soft ds-q-left">
+            {questionFetchError && !question ? (
+              <div className="ds-muted">ไม่สามารถโหลดคำถามได้</div>
+            ) : (
+              <div className="ds-q-text">{question?.text ?? 'กำลังโหลด...'}</div>
+            )}
+            <div className="ds-q-progress-meta">
+              <div className="ds-stage-kicker">Live Question</div>
+              {submittedCount !== null && playerCount !== null ? (
+                <div className="ds-stage-pill">{submittedCount} / {playerCount} answered</div>
+              ) : null}
+            </div>
+            <div className={`ds-big-timer ${urgent ? 'ds-timer-urgent' : ''}`}>
+              {timeLeft != null ? timeLeft.toFixed(1) : '—'}
+              <span className="ds-timer-unit">s</span>
+            </div>
+            <div className="ds-timer-bar-track">
+              <div
+                className={`ds-timer-bar-fill ${urgent ? 'ds-timer-bar-urgent' : ''}`}
+                style={{ width: `${ratio * 100}%` }}
+              />
+            </div>
+            <div className="ds-muted" style={{ marginTop: 8 }}>กำลังรับคำตอบ...</div>
+          </div>
+
+          <div className="ds-stage-card ds-stage-card-visual ds-q-right">
+            <DisplayImageStage imageUrl={imgUrl} variant="question" />
+          </div>
         </div>
       </div>
     </DsShell>
@@ -1242,8 +1393,10 @@ function DsClosed({
   return (
     <DsShell centered>
       <QPos question={question} totalQs={totalQs} />
-      <div className="ds-closed-icon">🔒</div>
-      <div className="ds-huge-text">หมดเวลา!</div>
+      <div className="ds-locked-stage">
+        <div className="ds-closed-icon">🔒</div>
+        <div className="ds-huge-text">หมดเวลา!</div>
+      </div>
       {submittedCount !== null && playerCount !== null && (
         <div className="ds-stat-line">
           ตอบแล้ว <strong>{submittedCount}</strong> / {playerCount} คน
@@ -1392,6 +1545,20 @@ function DsLeaderboard({
   const top = leaderboard.slice(0, 10);
   const MEDALS = ['🥇', '🥈', '🥉'];
   const podiumSlots = [1, 0, 2].filter((i) => top[i]);
+
+  // Biggest climber: highest positive rankDelta ≥ 2
+  const climber = top.reduce<LeaderboardEntry | null>((best, entry) => {
+    const delta = leaderboardFx[entry.player_id]?.rankDelta ?? 0;
+    if (delta < 2) return best;
+    const bestDelta = best ? (leaderboardFx[best.player_id]?.rankDelta ?? 0) : 0;
+    return delta > bestDelta ? entry : best;
+  }, null);
+
+  // Comeback: was outside top 3, now inside top 3
+  const comeback = top.find((entry) => {
+    const meta = leaderboardFx[entry.player_id];
+    return meta && (meta.previousRank ?? 0) > 3 && entry.rank <= 3;
+  }) ?? null;
   const podiumMaxScore = podiumSlots.length > 0
     ? Math.max(...podiumSlots.map((i) => top[i].cumulative_score))
     : 0;
@@ -1474,11 +1641,14 @@ function DsLeaderboard({
                   </span>
                 </div>
                 {!reducedMotion && (
-                  <div className="ds-final-burst" aria-hidden>
-                    {Array.from({ length: 12 }, (_, i) => (
-                      <span key={i} className="ds-final-burst-particle" style={{ '--ds-angle': `${i * 30}deg` } as CSSProperties} />
-                    ))}
-                  </div>
+                  <>
+                    <div className="ds-final-burst" aria-hidden>
+                      {Array.from({ length: 12 }, (_, i) => (
+                        <span key={i} className="ds-final-burst-particle" style={{ '--ds-angle': `${i * 30}deg` } as CSSProperties} />
+                      ))}
+                    </div>
+                    <ConfettiBurst active mode="gold" count={28} />
+                  </>
                 )}
               </div>
             )}
@@ -1494,6 +1664,16 @@ function DsLeaderboard({
             {leaderChange && (
               <div className="ds-new-leader-banner">New Leader · {leaderChange.displayName}</div>
             )}
+            {!leaderChange && climber && !reducedMotion && (
+              <div className="ds-climber-banner">
+                🚀 {climber.display_name} ขยับขึ้น +{leaderboardFx[climber.player_id]?.rankDelta} อันดับ!
+              </div>
+            )}
+            {!leaderChange && comeback && !reducedMotion && (
+              <div className="ds-comeback-banner">
+                ⚡ Comeback! {comeback.display_name} ติด Top 3!
+              </div>
+            )}
           </>
         )}
       </div>
@@ -1506,7 +1686,7 @@ function DsLeaderboard({
               className={`ds-podium-slot${i === 0 ? ' ds-podium-slot-leader' : ''}`}
               style={{
                 order: i === 0 ? 1 : i === 1 ? 0 : 2,
-                animationDelay: i === 0 ? '.3s' : i === 1 ? '.1s' : '.2s',
+                animationDelay: i === 0 ? '1.8s' : i === 1 ? '1.0s' : '.2s',
               }}
             >
               <div className="ds-pod-medal">{MEDALS[i]}</div>
@@ -1539,7 +1719,16 @@ function DsLeaderboard({
               if (node) rowRefs.current.set(entry.player_id, node);
               else rowRefs.current.delete(entry.player_id);
             }}
-            className={`ds-lb-row${visualRankFor(entry) === 1 ? ' ds-lb-row-gold' : ''}${visualRankFor(entry) <= 3 ? ' ds-lb-row-top3' : ''}${leaderboardFx[entry.player_id]?.isNew ? ' ds-lb-row-new' : ''}${leaderChange?.playerId === entry.player_id ? ' ds-lb-row-leader-change' : ''}${animationStage === 'reordering' ? ' ds-lb-row-reordering' : ''}`}
+            className={[
+              'ds-lb-row',
+              visualRankFor(entry) === 1 ? 'ds-lb-row-gold' : '',
+              entry.rank === 1 ? 'ds-lb-row-top1' : entry.rank === 2 ? 'ds-lb-row-top2' : entry.rank === 3 ? 'ds-lb-row-top3' : '',
+              leaderboardFx[entry.player_id]?.rankDelta && leaderboardFx[entry.player_id].rankDelta! > 0 ? 'ds-lb-row-up' : '',
+              leaderboardFx[entry.player_id]?.rankDelta && leaderboardFx[entry.player_id].rankDelta! < 0 ? 'ds-lb-row-down' : '',
+              leaderboardFx[entry.player_id]?.isNew ? 'ds-lb-row-new' : '',
+              leaderChange?.playerId === entry.player_id ? 'ds-lb-row-leader-change' : '',
+              animationStage === 'reordering' ? 'ds-lb-row-reordering' : '',
+            ].filter(Boolean).join(' ')}
             style={{ animationDelay: `${Math.min(idx * 45, 320)}ms` }}
           >
             <span className="ds-lb-rank ds-mono">#{visualRankFor(entry)}</span>
