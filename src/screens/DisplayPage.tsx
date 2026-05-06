@@ -240,8 +240,8 @@ function DisplayImageStage({
         circle={null}
         onCircleChange={() => {}}
         locked
-        maskOverlayUrl={!showReveal ? (maskUrl ?? undefined) : undefined}
-        maskOverlayClassName={!showReveal ? 'reveal-mask-pulse ds-display-mask' : undefined}
+        maskOverlayUrl={maskUrl ?? undefined}
+        maskOverlayClassName="reveal-mask-pulse ds-display-mask"
         shellClassName={shellClassName}
       />
     </div>

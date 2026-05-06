@@ -172,10 +172,10 @@ export function RevealScreen() {
             circle={persistentCircle}
             onCircleChange={() => {}}
             locked
-            maskOverlayClassName={!showRevealImage ? 'reveal-mask-pulse' : undefined}
-            maskOverlayUrl={!showRevealImage ? `${FUNCTIONS_URL}/get-reveal-mask?questionId=${encodeURIComponent(
+            maskOverlayClassName="reveal-mask-pulse"
+            maskOverlayUrl={`${FUNCTIONS_URL}/get-reveal-mask?questionId=${encodeURIComponent(
               question.id
-            )}&updatedAt=${encodeURIComponent(gameState?.updated_at ?? '')}` : undefined}
+            )}&updatedAt=${encodeURIComponent(gameState?.updated_at ?? '')}`}
             shellClassName={`quiz-image-shell--reveal${showRevealImage && revealImageReady ? ' quiz-image-shell--reveal-active' : ''}`}
           />
         </div>
