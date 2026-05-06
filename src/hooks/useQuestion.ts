@@ -81,9 +81,9 @@ export function useQuestion() {
       if (gsqId) {
         const { data: gsqData, error: gsqErr } = await supabase
           .from('game_set_questions')
-          .select('play_order, time_limit_seconds, max_score, min_correct_score, circle_radius_ratio')
+          .select('play_order, time_limit_seconds, max_score, min_correct_score, circle_radius_ratio, special_round_type')
           .eq('id', gsqId)
-          .single<Pick<Question, 'play_order' | 'time_limit_seconds' | 'max_score' | 'min_correct_score' | 'circle_radius_ratio'>>();
+          .single<Pick<Question, 'play_order' | 'time_limit_seconds' | 'max_score' | 'min_correct_score' | 'circle_radius_ratio'> & { special_round_type?: string }>();
 
         if (!cancelled && gsqErr) {
           console.error('[useQuestion] game_set overlay fetch:', gsqErr.message);
@@ -99,6 +99,7 @@ export function useQuestion() {
             max_score: gsqData.max_score,
             min_correct_score: gsqData.min_correct_score,
             circle_radius_ratio: gsqData.circle_radius_ratio,
+            special_round_type: (gsqData.special_round_type as import('../lib/types').SpecialRoundType) ?? 'normal',
           };
         }
       }

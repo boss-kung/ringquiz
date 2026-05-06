@@ -77,6 +77,8 @@ export interface AdminQuestionRequest {
   circle_radius_ratio?: number;
   is_enabled?: boolean;
   ordered_ids?: string[];              // for reorder_game_set_questions
+  special_round_type?: import('./types').SpecialRoundType;
+  special_round_label?: string | null;
 }
 
 export interface AdminQuestionResponse {
@@ -141,6 +143,8 @@ export interface GameSetQuestionRecord {
   min_correct_score: number;
   circle_radius_ratio: number;
   is_enabled: boolean;
+  special_round_type: import('./types').SpecialRoundType;
+  special_round_label: string | null;
   created_at: string;
   updated_at: string;
   // Joined question data (populated by list_game_set_questions)

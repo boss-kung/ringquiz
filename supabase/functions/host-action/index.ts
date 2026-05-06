@@ -17,6 +17,7 @@ import { getSupabaseAdmin } from '../_shared/supabase-admin.ts';
 import type {
   GameState,
   GameStatus,
+  DisplayTheme,
   HostActionName,
   HostActionRequest,
   HostActionResponse,
@@ -30,17 +31,22 @@ const GAME_STATE_ID = '00000000-0000-0000-0000-000000000001';
 // ---------------------------------------------------------------------------
 
 const VALID_FROM: Record<HostActionName, GameStatus[] | '*'> = {
-  start_countdown:       ['waiting', 'leaderboard'],
-  open_question:         ['countdown'],
-  close_question:        ['question_open', 'question_closed'],
-  show_reveal:           ['question_closed', 'reveal'],
-  show_leaderboard:      ['reveal', 'leaderboard'],
-  next_question:         ['leaderboard'],
-  end_game:              ['countdown', 'question_open', 'question_closed', 'reveal', 'leaderboard', 'ended'],
-  soft_reset_game:       '*',
-  hard_reset_game:       '*',
-  force_close_question:  ['question_open', 'question_closed'],
-  recompute_leaderboard: ['question_closed', 'reveal', 'leaderboard'],
+  start_countdown:              ['waiting', 'leaderboard'],
+  open_question:                ['countdown'],
+  close_question:               ['question_open', 'question_closed'],
+  show_reveal:                  ['question_closed', 'reveal'],
+  show_leaderboard:             ['reveal', 'leaderboard'],
+  next_question:                ['leaderboard'],
+  end_game:                     ['countdown', 'question_open', 'question_closed', 'reveal', 'leaderboard', 'ended'],
+  soft_reset_game:              '*',
+  hard_reset_game:              '*',
+  force_close_question:         ['question_open', 'question_closed'],
+  recompute_leaderboard:        ['question_closed', 'reveal', 'leaderboard'],
+  // Visual FX — can fire at any game state; never affect game_state.status
+  trigger_hype_cheer:           '*',
+  trigger_spotlight_leaderboard:'*',
+  trigger_final_drumroll:       '*',
+  set_display_theme:            '*',
 };
 
 const TRANSITION_TARGET: Partial<Record<HostActionName, GameStatus>> = {
@@ -54,6 +60,7 @@ const TRANSITION_TARGET: Partial<Record<HostActionName, GameStatus>> = {
   end_game:             'ended',
   soft_reset_game:      'waiting',
   hard_reset_game:      'waiting',
+  // FX actions have no target status — they do not advance game flow
 };
 
 // ---------------------------------------------------------------------------
@@ -103,7 +110,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       );
     }
 
-    return await executeAction(action, gs, db);
+    return await executeAction(action, gs, db, body.payload);
   } catch (err) {
     console.error('[host-action]', action, err);
     return error(500, 'internal', String(err));
@@ -118,6 +125,7 @@ async function executeAction(
   action: HostActionName,
   gs: GameState,
   db: ReturnType<typeof getSupabaseAdmin>,
+  payload?: Record<string, unknown>,
 ): Promise<Response> {
   const targetStatus = TRANSITION_TARGET[action];
   const alreadyInState = targetStatus !== undefined && gs.status === targetStatus;
@@ -404,6 +412,60 @@ async function executeAction(
       });
     }
 
+    // ── trigger_hype_cheer ───────────────────────────────────────────────────
+    // Inserts a display_events row; Display subscribes and shows a 2s cheer banner.
+    // Never touches game_state.status.
+    case 'trigger_hype_cheer': {
+      const { error: insErr } = await db.from('display_events').insert({
+        event_type: 'hype_cheer',
+        payload: {},
+        created_by: 'host',
+      });
+      if (insErr) throw new Error(`trigger_hype_cheer insert failed: ${insErr.message}`);
+      return ok(action, gs.status, false, gs);
+    }
+
+    // ── trigger_spotlight_leaderboard ────────────────────────────────────────
+    case 'trigger_spotlight_leaderboard': {
+      const { error: insErr } = await db.from('display_events').insert({
+        event_type: 'spotlight_leaderboard',
+        payload: {},
+        created_by: 'host',
+      });
+      if (insErr) throw new Error(`trigger_spotlight_leaderboard insert failed: ${insErr.message}`);
+      return ok(action, gs.status, false, gs);
+    }
+
+    // ── trigger_final_drumroll ───────────────────────────────────────────────
+    case 'trigger_final_drumroll': {
+      const { error: insErr } = await db.from('display_events').insert({
+        event_type: 'final_drumroll',
+        payload: {},
+        created_by: 'host',
+      });
+      if (insErr) throw new Error(`trigger_final_drumroll insert failed: ${insErr.message}`);
+      return ok(action, gs.status, false, gs);
+    }
+
+    // ── set_display_theme ────────────────────────────────────────────────────
+    // Updates game_state.display_theme so the Big Screen persists it on reload.
+    // Also inserts a theme_change display_event for instant Realtime delivery.
+    case 'set_display_theme': {
+      const VALID_THEMES: DisplayTheme[] = ['classic_gold', 'neon_night', 'danger_round', 'final_round'];
+      const theme = payload?.theme as string | undefined;
+      if (!theme || !VALID_THEMES.includes(theme as DisplayTheme)) {
+        return error(400, 'invalid_payload', `payload.theme must be one of: ${VALID_THEMES.join(', ')}`);
+      }
+      await updateGameState(db, { display_theme: theme as DisplayTheme });
+      const { error: insErr } = await db.from('display_events').insert({
+        event_type: 'theme_change',
+        payload: { theme },
+        created_by: 'host',
+      });
+      if (insErr) console.warn('[host-action] theme_change event insert non-critical:', insErr.message);
+      return ok(action, gs.status, false, await refetchGs(db));
+    }
+
     default:
       return error(400, 'unknown_action');
   }
@@ -438,6 +500,7 @@ async function refetchGs(
     session_version: data.session_version ?? 1,
     active_game_set_id: data.active_game_set_id ?? null,
     current_game_set_question_id: data.current_game_set_question_id ?? null,
+    display_theme: data.display_theme ?? 'classic_gold',
   } as GameState;
 }
 

@@ -19,7 +19,7 @@ import type { CSSProperties } from 'react';
 import { supabase, GAME_STATE_ID, FUNCTIONS_URL, SUPABASE_ANON_KEY } from '../lib/supabase';
 import { resolveQuestionImageUrl, resolveRevealImageUrl } from '../lib/questionAssets';
 import { COUNTDOWN_DISPLAY_SECONDS, SERVER_TIME_RESYNC_INTERVAL_MS } from '../lib/constants';
-import type { GameState, Player, LeaderboardEntry, DisplayStatsResponse } from '../lib/types';
+import type { GameState, Player, LeaderboardEntry, DisplayStatsResponse, DisplayEvent, DisplayEventType, DisplayTheme, SpecialRoundType } from '../lib/types';
 import { QuestionImage } from '../components/QuestionImage';
 
 // ── Local types ───────────────────────────────────────────────────────────────
@@ -37,6 +37,7 @@ interface DisplayQuestion {
   min_correct_score: number;
   circle_radius_ratio: number;
   play_order: number;
+  special_round_type: SpecialRoundType;
 }
 
 interface LeaderboardFxMeta {
@@ -360,6 +361,75 @@ function ConfettiBurst({
   );
 }
 
+// ── Special round badge (shared across question phases) ───────────────────────
+
+function SpecialRoundBadge({ type, large = false }: { type: SpecialRoundType; large?: boolean }) {
+  if (type === 'normal') return null;
+  const cfg = {
+    double_score: { label: 'DOUBLE SCORE ×2', color: 'var(--gold)',    bg: 'rgba(245,199,74,.18)' },
+    speed_bonus:  { label: 'SPEED BONUS ⚡',  color: 'var(--emerald)', bg: 'rgba(52,211,153,.15)' },
+    mystery_round:{ label: 'MYSTERY ROUND 🎭', color: 'var(--indigo)', bg: 'rgba(129,140,248,.18)' },
+  }[type];
+  return (
+    <div
+      className={`ds-special-badge${large ? ' ds-special-badge-lg' : ''}${type === 'mystery_round' ? ' ds-special-badge-mystery' : ''}`}
+      style={{ background: cfg.bg, color: cfg.color }}
+    >
+      {cfg.label}
+    </div>
+  );
+}
+
+// ── DisplayStageFxOverlay — host-triggered visual events ──────────────────────
+
+interface ActiveDisplayFx {
+  type: DisplayEventType;
+  id: string;
+  startedAt: number;
+  payload: Record<string, unknown>;
+}
+
+function DisplayStageFxOverlay({ fx }: { fx: ActiveDisplayFx | null }) {
+  if (!fx) return null;
+
+  if (fx.type === 'hype_cheer') {
+    return (
+      <div className="ds-fx-overlay ds-fx-cheer" aria-hidden>
+        <div className="ds-fx-cheer-banner">
+          <span className="ds-fx-cheer-emoji">🎉</span>
+          <span className="ds-fx-cheer-text">เชียร์!</span>
+          <span className="ds-fx-cheer-emoji">🎉</span>
+        </div>
+        <div className="ds-fx-sparkle-ring" aria-hidden>
+          {Array.from({ length: 12 }, (_, i) => (
+            <span key={i} className="ds-fx-sparkle" style={{ '--ds-sp-angle': `${i * 30}deg` } as CSSProperties} />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (fx.type === 'spotlight_leaderboard') {
+    return (
+      <div className="ds-fx-overlay ds-fx-spotlight" aria-hidden>
+        <div className="ds-fx-spotlight-beam" />
+        <div className="ds-fx-spotlight-text">🏆 Leaderboard Spotlight</div>
+      </div>
+    );
+  }
+
+  if (fx.type === 'final_drumroll') {
+    return (
+      <div className="ds-fx-overlay ds-fx-drumroll" aria-hidden>
+        <div className="ds-fx-drumroll-text">🥁 Final Drumroll!</div>
+        <div className="ds-fx-drumroll-ring" />
+      </div>
+    );
+  }
+
+  return null;
+}
+
 // ── Root component ────────────────────────────────────────────────────────────
 
 const MAX_VISIBLE_PLAYERS = 24;
@@ -404,6 +474,9 @@ export function DisplayPage() {
   const lastStatsErrLogRef = useRef(0);
   const lastGameStateErrLogRef = useRef(0);
 
+  const [activeDisplayFx, setActiveDisplayFx] = useState<ActiveDisplayFx | null>(null);
+  const displayFxTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const getServerTime = useDisplayServerTime();
   const reducedMotion = useReducedMotion();
   const prevQuestionKeyRef = useRef<string | null>(null);
@@ -422,6 +495,7 @@ export function DisplayPage() {
       if (leaderChangeTimerRef.current) clearTimeout(leaderChangeTimerRef.current);
       if (leaderboardStageTimerRef.current) clearTimeout(leaderboardStageTimerRef.current);
       if (leaderboardSettleTimerRef.current) clearTimeout(leaderboardSettleTimerRef.current);
+      if (displayFxTimerRef.current) clearTimeout(displayFxTimerRef.current);
     };
   }, []);
 
@@ -782,18 +856,20 @@ export function DisplayPage() {
           min_correct_score: qData.min_correct_score,
           circle_radius_ratio: qData.circle_radius_ratio,
           play_order: qData.order_index,
+          special_round_type: 'normal',
         };
 
         if (gsqId) {
           const { data: gsqData } = await supabase
             .from('game_set_questions')
-            .select('play_order, time_limit_seconds, max_score, min_correct_score, circle_radius_ratio')
+            .select('play_order, time_limit_seconds, max_score, min_correct_score, circle_radius_ratio, special_round_type')
             .eq('id', gsqId)
             .single();
           if (gsqData) {
             dq = { ...dq, play_order: gsqData.play_order, time_limit_seconds: gsqData.time_limit_seconds,
               max_score: gsqData.max_score, min_correct_score: gsqData.min_correct_score,
-              circle_radius_ratio: gsqData.circle_radius_ratio };
+              circle_radius_ratio: gsqData.circle_radius_ratio,
+              special_round_type: (gsqData.special_round_type as SpecialRoundType) ?? 'normal' };
           }
         }
 
@@ -824,6 +900,43 @@ export function DisplayPage() {
   const preloadImageUrl = question ? resolveQuestionImageUrl(question.image_url) : null;
   const preloadRevealUrl = question ? resolveRevealImageUrl(question.reveal_image_url) : null;
   usePreloadImages(preloadImageUrl, preloadRevealUrl);
+
+  // ── 7.5 Display events subscription ─────────────────────────────────────────
+  // Events older than 10s on initial load are ignored to prevent stale hype.
+  // Same event_type restarts the animation (clear existing timer first).
+  const activateFx = useCallback((event: DisplayEvent) => {
+    if (reducedMotion) return;
+    const ageMs = Date.now() - new Date(event.created_at).getTime();
+    if (ageMs > 10_000) return; // ignore stale events on page load
+
+    if (displayFxTimerRef.current) clearTimeout(displayFxTimerRef.current);
+
+    setActiveDisplayFx({
+      type: event.event_type,
+      id: event.id,
+      startedAt: Date.now(),
+      payload: event.payload,
+    });
+
+    const durationMs = event.event_type === 'hype_cheer' ? 2200
+      : event.event_type === 'final_drumroll' ? 3000
+      : 2000;
+
+    displayFxTimerRef.current = setTimeout(() => {
+      setActiveDisplayFx(null);
+      displayFxTimerRef.current = null;
+    }, durationMs);
+  }, [reducedMotion]);
+
+  useEffect(() => {
+    // Subscribe to Realtime INSERT events on display_events.
+    const ch = supabase.channel('display-events')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'display_events' }, (payload) => {
+        activateFx(payload.new as DisplayEvent);
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [activateFx]);
 
   // ── 8. Leaderboard fetch + subscription ─────────────────────────────────────
   useEffect(() => {
@@ -930,6 +1043,7 @@ export function DisplayPage() {
         statsFetchError={statsFetchError}
       />
     );
+    // Note: special_round_type is already in question object passed to DsReveal
   } else if (status === 'leaderboard') {
     screen = (
       <DsLeaderboard
@@ -971,10 +1085,15 @@ export function DisplayPage() {
     );
   }
 
+  const theme: DisplayTheme = gameState?.display_theme ?? 'classic_gold';
+
   return (
-    <DisplayTransition phase={status} reducedMotion={reducedMotion}>
-      {screen}
-    </DisplayTransition>
+    <div className={`ds-theme-${theme.replace(/_/g, '-')}`} style={{ height: '100%' }}>
+      <DisplayTransition phase={status} reducedMotion={reducedMotion}>
+        {screen}
+      </DisplayTransition>
+      {!reducedMotion && <DisplayStageFxOverlay fx={activeDisplayFx} />}
+    </div>
   );
 }
 
@@ -1216,6 +1335,7 @@ function DsCountdown({
       ) : (
         <div className="ds-stage-card ds-stage-card-clue ds-clue-wrap ds-clue-enter">
           <div className="ds-label ds-gold" style={{ marginBottom: 16, letterSpacing: '.2em' }}>ภาพปริศนา</div>
+          {question && <SpecialRoundBadge type={question.special_round_type} large />}
           {questionFetchError && !clueUrl ? (
             <div className="ds-muted">ไม่สามารถโหลดภาพคำถามได้</div>
           ) : (
@@ -1335,6 +1455,7 @@ function DsQuestion({
         <div className="ds-q-bar">
           <QPos question={question} totalQs={totalQs} small />
           <div className="ds-q-meta">
+            {question && <SpecialRoundBadge type={question.special_round_type} />}
             {submittedCount !== null && playerCount !== null ? (
               <span className={`ds-stat-pill${statPulse && !reducedMotion ? ' is-pulsing' : ''}`}>
                 ตอบแล้ว {submittedCount} / {playerCount}
@@ -1480,7 +1601,10 @@ function DsReveal({
     <DsShell>
       <div className="ds-reveal-header">
         <QPos question={question} totalQs={totalQs} small />
-        <div className="ds-label ds-gold" style={{ letterSpacing: '.2em' }}>เฉลย</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {question && <SpecialRoundBadge type={question.special_round_type} />}
+          <div className="ds-label ds-gold" style={{ letterSpacing: '.2em' }}>เฉลย</div>
+        </div>
       </div>
 
       <div className="ds-reveal-layout">

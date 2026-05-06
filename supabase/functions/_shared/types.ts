@@ -10,6 +10,8 @@ export type GameStatus =
   | 'leaderboard'
   | 'ended';
 
+export type DisplayTheme = 'classic_gold' | 'neon_night' | 'danger_round' | 'final_round';
+
 export interface GameState {
   id: string;
   status: GameStatus;
@@ -21,6 +23,7 @@ export interface GameState {
   session_version: number;                         // incremented on hard_reset_game
   active_game_set_id: string | null;               // FK → game_sets.id
   current_game_set_question_id: string | null;     // FK → game_set_questions.id
+  display_theme: DisplayTheme;                     // Big Screen theme, set by host
 }
 
 export interface Question {
@@ -39,6 +42,8 @@ export interface Question {
   created_at: string;
 }
 
+export type SpecialRoundType = 'normal' | 'double_score' | 'speed_bonus' | 'mystery_round';
+
 export interface GameSetQuestion {
   id: string;
   game_set_id: string;
@@ -49,6 +54,8 @@ export interface GameSetQuestion {
   min_correct_score: number;
   circle_radius_ratio: number;
   is_enabled: boolean;
+  special_round_type: SpecialRoundType;
+  special_round_label: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -91,6 +98,22 @@ export interface LeaderboardEntry {
   cumulative_score: number;
 }
 
+// ── display-events ────────────────────────────────────────────────────────────
+
+export type DisplayEventType =
+  | 'hype_cheer'
+  | 'spotlight_leaderboard'
+  | 'final_drumroll'
+  | 'theme_change';
+
+export interface DisplayEvent {
+  id: string;
+  event_type: DisplayEventType;
+  payload: Record<string, unknown>;
+  created_at: string;
+  created_by: string | null;
+}
+
 // ── host-action ──────────────────────────────────────────────────────────────
 
 export type HostActionName =
@@ -104,10 +127,15 @@ export type HostActionName =
   | 'soft_reset_game'
   | 'hard_reset_game'
   | 'force_close_question'
-  | 'recompute_leaderboard';
+  | 'recompute_leaderboard'
+  | 'trigger_hype_cheer'
+  | 'trigger_spotlight_leaderboard'
+  | 'trigger_final_drumroll'
+  | 'set_display_theme';
 
 export interface HostActionRequest {
   action: HostActionName;
+  payload?: Record<string, unknown>;
 }
 
 export interface HostActionResponse {

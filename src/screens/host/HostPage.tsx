@@ -11,6 +11,7 @@ import type {
   HostActionResponse,
   QuestionStatsResponse,
   EdgeFunctionError,
+  DisplayTheme,
 } from '../../lib/types';
 
 const SESSION_KEY = 'quiz_host_secret';
@@ -141,6 +142,7 @@ function HostDashboard({ secret, onLogout }: { secret: string; onLogout: () => v
   const [stats, setStats] = useState<QuestionStatsResponse | null>(null);
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const [actionLoading, setActionLoading] = useState<HostActionName | null>(null);
+  const [fxLoading, setFxLoading] = useState<HostActionName | null>(null);
   const [actionError, setActionError] = useState('');
   const [actionSuccess, setActionSuccess] = useState('');
   const [statsError, setStatsError] = useState('');
@@ -254,12 +256,12 @@ function HostDashboard({ secret, onLogout }: { secret: string; onLogout: () => v
     await doAction(action);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const doAction = async (action: HostActionName) => {
+  const doAction = async (action: HostActionName, payload?: Record<string, unknown>) => {
     setActionLoading(action);
     setActionError('');
     setActionSuccess('');
     try {
-      const body: HostActionRequest = { action };
+      const body: HostActionRequest = { action, ...(payload ? { payload } : {}) };
       const res = await fetch(`${FUNCTIONS_URL}/host-action`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPABASE_ANON_KEY}`, 'X-Host-Secret': secret },
@@ -277,6 +279,30 @@ function HostDashboard({ secret, onLogout }: { secret: string; onLogout: () => v
       setActionError('Network error');
     } finally {
       setActionLoading(null);
+    }
+  };
+
+  const doFxAction = async (action: HostActionName, payload?: Record<string, unknown>) => {
+    setFxLoading(action);
+    setActionError('');
+    setActionSuccess('');
+    try {
+      const body: HostActionRequest = { action, ...(payload ? { payload } : {}) };
+      const res = await fetch(`${FUNCTIONS_URL}/host-action`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPABASE_ANON_KEY}`, 'X-Host-Secret': secret },
+        body: JSON.stringify(body),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setActionError((json as EdgeFunctionError).error ?? 'Unknown error');
+      } else {
+        setActionSuccess(`✓ ${action} sent`);
+      }
+    } catch {
+      setActionError('Network error');
+    } finally {
+      setFxLoading(null);
     }
   };
 
@@ -503,6 +529,55 @@ function HostDashboard({ secret, onLogout }: { secret: string; onLogout: () => v
                   >
                     <span style={{ fontSize: 12, fontWeight: 700 }}>
                       {actionLoading === action ? '…' : label}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Stage FX — visual-only, never affect game_state.status */}
+            <div>
+              <div className="gr-label-xs" style={{ marginBottom: 8 }}>Stage FX</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 7 }}>
+                {([
+                  { action: 'trigger_hype_cheer' as HostActionName,           label: 'ส่งเสียงเชียร์' },
+                  { action: 'trigger_spotlight_leaderboard' as HostActionName, label: 'Spotlight LB' },
+                  { action: 'trigger_final_drumroll' as HostActionName,        label: 'Final Drumroll' },
+                ] as const).map(({ action, label }) => (
+                  <button
+                    key={action}
+                    onClick={() => doFxAction(action)}
+                    disabled={fxLoading !== null}
+                    className="gr-hbtn"
+                    style={{ borderColor: 'rgba(129,140,248,.25)', color: 'var(--indigo)' }}
+                  >
+                    <span style={{ fontSize: 11, fontWeight: 700 }}>
+                      {fxLoading === action ? '…' : label}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Stage Theme */}
+            <div>
+              <div className="gr-label-xs" style={{ marginBottom: 8 }}>Stage Theme</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 7 }}>
+                {([
+                  { theme: 'classic_gold'  as DisplayTheme, label: 'Classic Gold' },
+                  { theme: 'neon_night'    as DisplayTheme, label: 'Neon Night' },
+                  { theme: 'danger_round'  as DisplayTheme, label: 'Danger Round' },
+                  { theme: 'final_round'   as DisplayTheme, label: 'Final Round' },
+                ]).map(({ theme, label }) => (
+                  <button
+                    key={theme}
+                    onClick={() => doFxAction('set_display_theme', { theme })}
+                    disabled={fxLoading !== null}
+                    className={`gr-hbtn ds-theme-btn-${theme}`}
+                    style={{ fontSize: 11 }}
+                  >
+                    <span style={{ fontSize: 11, fontWeight: 700 }}>
+                      {fxLoading === 'set_display_theme' ? '…' : label}
                     </span>
                   </button>
                 ))}

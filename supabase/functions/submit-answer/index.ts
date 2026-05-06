@@ -148,26 +148,30 @@ Deno.serve(async (req: Request): Promise<Response> => {
     if (!player) return err(404, 'player_not_found');
 
     // 7. Fetch runtime scoring config:
-    //    - If current_game_set_question_id is set, use game_set_questions snapshot values.
+    //    - If current_game_set_question_id is set, use game_set_questions snapshot values
+    //      (including special_round_type for bonus scoring in step 11).
     //    - Otherwise fall back to questions table (legacy / pre-migration).
     let circleRadiusRatio: number;
     let maxScore: number;
     let minCorrectScore: number;
+    let specialRoundType: string = 'normal';
 
     if (gs.current_game_set_question_id) {
       const { data: gsq, error: gqErr } = await db
         .from('game_set_questions')
-        .select('circle_radius_ratio, max_score, min_correct_score')
+        .select('circle_radius_ratio, max_score, min_correct_score, special_round_type')
         .eq('id', gs.current_game_set_question_id)
-        .single<{ circle_radius_ratio: number; max_score: number; min_correct_score: number }>();
+        .single<{ circle_radius_ratio: number; max_score: number; min_correct_score: number; special_round_type: string }>();
 
       if (gqErr || !gsq) throw new Error('Failed to fetch game_set_question scoring config');
 
       circleRadiusRatio = gsq.circle_radius_ratio;
       maxScore = gsq.max_score;
       minCorrectScore = gsq.min_correct_score;
+      // Default to 'normal' if column missing (migration not yet applied in dev)
+      specialRoundType = gsq.special_round_type ?? 'normal';
     } else {
-      // Legacy fallback: read from questions table
+      // Legacy fallback: read from questions table (no special round type available)
       const { data: question, error: qErr } = await db
         .from('questions')
         .select('circle_radius_ratio, max_score, min_correct_score')
@@ -218,18 +222,35 @@ Deno.serve(async (req: Request): Promise<Response> => {
       maskRow.mask_height ?? undefined,
     );
 
-    // 11. Compute score from server time
+    // 11. Compute score from server time.
+    //     All time values come from server-side DB fields — never from client.
     const startedAt = gs.question_started_at ? new Date(gs.question_started_at) : serverNow;
     const totalMs = endsAt.getTime() - startedAt.getTime();
     const remainingMs = endsAt.getTime() - serverNow.getTime();
     const timeRemainingRatio = Math.max(0, Math.min(1, remainingMs / totalMs));
 
-    const score = isCorrect
-      ? Math.round(
-          minCorrectScore +
-          (maxScore - minCorrectScore) * timeRemainingRatio,
-        )
+    // Base score: same formula as normal round regardless of special_round_type.
+    // Wrong answers always score 0.
+    const baseScore = isCorrect
+      ? Math.round(minCorrectScore + (maxScore - minCorrectScore) * timeRemainingRatio)
       : 0;
+
+    // Special round multipliers/bonuses applied only to correct answers.
+    // double_score: multiply final computed score by 2.
+    // speed_bonus:  add up to 50% of baseScore proportional to time remaining.
+    // mystery_round: scoring identical to normal; display hides score until reveal.
+    let score = baseScore;
+    if (isCorrect) {
+      if (specialRoundType === 'double_score') {
+        // Double score: multiply entire earned score by 2.
+        score = baseScore * 2;
+      } else if (specialRoundType === 'speed_bonus') {
+        // Speed bonus: extra pts = 50% of base × how fast the player answered.
+        const bonus = Math.round(baseScore * 0.5 * timeRemainingRatio);
+        score = baseScore + bonus;
+      }
+      // 'normal' and 'mystery_round' use baseScore unchanged.
+    }
 
     // 12. Insert answer (service role bypasses RLS)
     const { error: insertErr } = await db.from('answers').insert({

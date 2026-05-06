@@ -176,6 +176,13 @@ export function QuestionScreen() {
       {/* Question text */}
       <div className="gr-qtext-wrap">
         <div className="gr-card gr-qtext-card">
+          {question.special_round_type && question.special_round_type !== 'normal' && (
+            <div className={`gr-special-round-badge gr-special-badge-${question.special_round_type}`}>
+              {question.special_round_type === 'double_score' ? '×2 Double Score' :
+               question.special_round_type === 'speed_bonus'  ? '⚡ Speed Bonus' :
+               '🎭 Mystery Round'}
+            </div>
+          )}
           <p className="gr-qtext">
             {question.text}
           </p>
