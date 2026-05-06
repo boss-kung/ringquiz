@@ -32,6 +32,7 @@ export function FeedbackFxLayer() {
   const reducedMotion = useReducedMotionPreference();
   const [flashMode, setFlashMode] = useState<string | null>(null);
   const [shakeMode, setShakeMode] = useState<string | null>(null);
+  const [specialCueMode, setSpecialCueMode] = useState<'double' | 'speed' | 'mystery' | null>(null);
   const [lockPulse, setLockPulse] = useState(false);
   const [ripples, setRipples] = useState<RippleFx[]>([]);
   const [bursts, setBursts] = useState<BurstFx[]>([]);
@@ -49,6 +50,13 @@ export function FeedbackFxLayer() {
         if (reducedMotion) return;
         setShakeMode(mode);
         window.setTimeout(() => setShakeMode((current) => (current === mode ? null : current)), durationMs);
+      };
+
+      const addSpecialCue = (mode: 'double' | 'speed' | 'mystery', durationMs = 980) => {
+        setSpecialCueMode(mode);
+        window.setTimeout(() => {
+          setSpecialCueMode((current) => (current === mode ? null : current));
+        }, durationMs);
       };
 
       const addRipple = () => {
@@ -82,6 +90,18 @@ export function FeedbackFxLayer() {
           break;
         case 'answerOpen':
           addFlash('fx-screen-flash fx-screen-flash-gold');
+          break;
+        case 'specialRoundDouble':
+          addFlash('fx-screen-flash fx-screen-flash-special-double', 520);
+          addSpecialCue('double');
+          break;
+        case 'specialRoundSpeed':
+          addFlash('fx-screen-flash fx-screen-flash-special-speed', 460);
+          addSpecialCue('speed', 860);
+          break;
+        case 'specialRoundMystery':
+          addFlash('fx-screen-flash fx-screen-flash-special-mystery', 620);
+          addSpecialCue('mystery', 1120);
           break;
         case 'answerTap':
           addRipple();
@@ -126,6 +146,7 @@ export function FeedbackFxLayer() {
   return (
     <div className={`fx-layer${shakeMode ? ` ${shakeMode}` : ''}`} aria-hidden>
       {flashMode && <div className={flashMode} />}
+      {specialCueMode && <div className={`fx-special-cue fx-special-cue-${specialCueMode}`} />}
 
       {lockPulse && <div className="fx-lock-pulse" />}
 

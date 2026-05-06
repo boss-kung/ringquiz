@@ -397,6 +397,46 @@ function SpecialRoundBadge({ type, large = false }: { type: SpecialRoundType; la
   );
 }
 
+function DisplaySpecialRoundFx({
+  type,
+  reducedMotion,
+}: {
+  type: SpecialRoundType;
+  reducedMotion: boolean;
+}) {
+  if (type === 'normal') return null;
+
+  return (
+    <div
+      className={`ds-special-round-fx ds-special-round-fx-${type}${reducedMotion ? ' ds-special-round-fx-reduced' : ''}`}
+      aria-hidden
+    >
+      {type === 'double_score' && (
+        <>
+          <span className="ds-special-fx-ring ds-special-fx-ring-a" />
+          <span className="ds-special-fx-ring ds-special-fx-ring-b" />
+          <span className="ds-special-fx-rays" />
+        </>
+      )}
+      {type === 'speed_bonus' && (
+        <>
+          <span className="ds-special-fx-streak ds-special-fx-streak-a" />
+          <span className="ds-special-fx-streak ds-special-fx-streak-b" />
+          <span className="ds-special-fx-streak ds-special-fx-streak-c" />
+        </>
+      )}
+      {type === 'mystery_round' && (
+        <>
+          <span className="ds-special-fx-veil ds-special-fx-veil-a" />
+          <span className="ds-special-fx-veil ds-special-fx-veil-b" />
+          <span className="ds-special-fx-orb ds-special-fx-orb-a" />
+          <span className="ds-special-fx-orb ds-special-fx-orb-b" />
+        </>
+      )}
+    </div>
+  );
+}
+
 // ── DisplayStageFxOverlay — host-triggered visual events ──────────────────────
 
 interface ActiveDisplayFx {
@@ -404,6 +444,98 @@ interface ActiveDisplayFx {
   id: string;
   startedAt: number;
   payload: Record<string, unknown>;
+}
+
+const DISPLAY_SOUND_STORAGE_KEY = 'displayStageFxSoundEnabled';
+let displayAudioContext: AudioContext | null = null;
+let displayAudioUnlocked = false;
+
+function isDisplaySoundEnabled() {
+  if (typeof window === 'undefined') return false;
+  try {
+    const raw = window.localStorage.getItem(DISPLAY_SOUND_STORAGE_KEY);
+    return raw === null ? true : raw === 'true';
+  } catch {
+    return true;
+  }
+}
+
+function getDisplayAudioContext(): AudioContext | null {
+  if (typeof window === 'undefined') return null;
+  if (displayAudioContext) return displayAudioContext;
+  const AudioCtx = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  if (!AudioCtx) return null;
+  displayAudioContext = new AudioCtx();
+  return displayAudioContext;
+}
+
+async function unlockDisplayAudio() {
+  displayAudioUnlocked = true;
+  const ctx = getDisplayAudioContext();
+  if (!ctx) return false;
+  if (ctx.state === 'suspended') {
+    try {
+      await ctx.resume();
+    } catch {
+      return false;
+    }
+  }
+  return ctx.state === 'running';
+}
+
+function playDisplayTone(
+  ctx: AudioContext,
+  startAt: number,
+  {
+    frequency,
+    durationMs,
+    gain = 0.045,
+    type = 'sine',
+  }: {
+    frequency: number;
+    durationMs: number;
+    gain?: number;
+    type?: OscillatorType;
+  },
+) {
+  const osc = ctx.createOscillator();
+  const amp = ctx.createGain();
+  osc.type = type;
+  osc.frequency.setValueAtTime(frequency, startAt);
+  amp.gain.setValueAtTime(0.0001, startAt);
+  amp.gain.exponentialRampToValueAtTime(gain, startAt + 0.01);
+  amp.gain.exponentialRampToValueAtTime(0.0001, startAt + durationMs / 1000);
+  osc.connect(amp);
+  amp.connect(ctx.destination);
+  osc.start(startAt);
+  osc.stop(startAt + durationMs / 1000 + 0.04);
+}
+
+function playDisplayFxSound(type: DisplayEventType) {
+  if (!displayAudioUnlocked || !isDisplaySoundEnabled()) return false;
+  const ctx = getDisplayAudioContext();
+  if (!ctx || ctx.state !== 'running') return false;
+
+  const now = ctx.currentTime;
+  if (type === 'hype_cheer') {
+    playDisplayTone(ctx, now, { frequency: 523.25, durationMs: 120, type: 'triangle' });
+    playDisplayTone(ctx, now + 0.11, { frequency: 659.25, durationMs: 140, type: 'triangle' });
+    playDisplayTone(ctx, now + 0.23, { frequency: 783.99, durationMs: 180, type: 'sine', gain: 0.055 });
+    return true;
+  }
+  if (type === 'final_drumroll') {
+    playDisplayTone(ctx, now, { frequency: 110, durationMs: 220, type: 'square', gain: 0.04 });
+    playDisplayTone(ctx, now + 0.16, { frequency: 123.47, durationMs: 220, type: 'square', gain: 0.042 });
+    playDisplayTone(ctx, now + 0.32, { frequency: 146.83, durationMs: 260, type: 'square', gain: 0.045 });
+    playDisplayTone(ctx, now + 0.54, { frequency: 196, durationMs: 420, type: 'triangle', gain: 0.05 });
+    return true;
+  }
+  if (type === 'spotlight_leaderboard') {
+    playDisplayTone(ctx, now, { frequency: 740, durationMs: 180, type: 'sine', gain: 0.04 });
+    playDisplayTone(ctx, now + 0.18, { frequency: 932.33, durationMs: 220, type: 'triangle', gain: 0.048 });
+    return true;
+  }
+  return false;
 }
 
 function DisplayStageFxOverlay({ fx }: { fx: ActiveDisplayFx | null }) {
@@ -493,6 +625,10 @@ export function DisplayPage() {
 
   const [activeDisplayFx, setActiveDisplayFx] = useState<ActiveDisplayFx | null>(null);
   const displayFxTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastDisplayFxEventIdRef = useRef<string | null>(null);
+  const [displayAudioReady, setDisplayAudioReady] = useState(false);
+  const pendingDisplayFxSoundRef = useRef<DisplayEventType | null>(null);
+  const pendingDisplayFxAtRef = useRef<number>(0);
 
   const getServerTime = useDisplayServerTime();
   const reducedMotion = useReducedMotion();
@@ -515,6 +651,57 @@ export function DisplayPage() {
       if (displayFxTimerRef.current) clearTimeout(displayFxTimerRef.current);
     };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const syncReady = () => {
+      if (!cancelled) {
+        const ctx = getDisplayAudioContext();
+        setDisplayAudioReady(Boolean(displayAudioUnlocked && ctx?.state === 'running'));
+      }
+    };
+
+    const handleUnlock = () => {
+      void unlockDisplayAudio().then((ok) => {
+        if (!ok || cancelled) {
+          syncReady();
+          return;
+        }
+        syncReady();
+        const pendingType = pendingDisplayFxSoundRef.current;
+        const pendingAt = pendingDisplayFxAtRef.current;
+        if (pendingType && Date.now() - pendingAt < 4000) {
+          playDisplayFxSound(pendingType);
+        }
+        pendingDisplayFxSoundRef.current = null;
+        pendingDisplayFxAtRef.current = 0;
+      });
+    };
+
+    syncReady();
+    window.addEventListener('pointerdown', handleUnlock, { passive: true });
+    window.addEventListener('keydown', handleUnlock);
+    window.addEventListener('touchstart', handleUnlock, { passive: true });
+    return () => {
+      cancelled = true;
+      window.removeEventListener('pointerdown', handleUnlock);
+      window.removeEventListener('keydown', handleUnlock);
+      window.removeEventListener('touchstart', handleUnlock);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!activeDisplayFx) return;
+    const played = playDisplayFxSound(activeDisplayFx.type);
+    if (!played) {
+      pendingDisplayFxSoundRef.current = activeDisplayFx.type;
+      pendingDisplayFxAtRef.current = Date.now();
+    } else {
+      pendingDisplayFxSoundRef.current = null;
+      pendingDisplayFxAtRef.current = 0;
+    }
+  }, [activeDisplayFx]);
 
   useEffect(() => {
     if ((gameState?.status ?? 'waiting') === 'waiting' && !gameState?.current_question_id) {
@@ -946,6 +1133,8 @@ export function DisplayPage() {
   const activateFx = useCallback((event: DisplayEvent) => {
     const ageMs = Date.now() - new Date(event.created_at).getTime();
     if (ageMs > 10_000) return; // ignore stale events on page load
+    if (lastDisplayFxEventIdRef.current === event.id) return;
+    lastDisplayFxEventIdRef.current = event.id;
 
     if (displayFxTimerRef.current) clearTimeout(displayFxTimerRef.current);
 
@@ -974,6 +1163,36 @@ export function DisplayPage() {
       })
       .subscribe();
     return () => { supabase.removeChannel(ch); };
+  }, [activateFx]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const fetchLatestDisplayFx = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('display_events')
+          .select('id, event_type, payload, created_at, created_by')
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (error || cancelled || !data) return;
+        activateFx(data as DisplayEvent);
+      } catch {
+        // best-effort fallback only
+      }
+    };
+
+    void fetchLatestDisplayFx();
+    const id = window.setInterval(() => {
+      void fetchLatestDisplayFx();
+    }, 1500);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
   }, [activateFx]);
 
   // ── 8. Leaderboard fetch + subscription ─────────────────────────────────────
@@ -1079,6 +1298,7 @@ export function DisplayPage() {
         totalQs={totalQs}
         getServerTime={getServerTime}
         statsFetchError={statsFetchError}
+        reducedMotion={reducedMotion}
       />
     );
     // Note: special_round_type is already in question object passed to DsReveal
@@ -1131,6 +1351,9 @@ export function DisplayPage() {
         {screen}
       </DisplayTransition>
       <DisplayStageFxOverlay fx={activeDisplayFx} />
+      {!displayAudioReady && isDisplaySoundEnabled() && (
+        <div className="ds-audio-unlock-badge">แตะหน้าจอ 1 ครั้งเพื่อเปิดเสียง Stage FX</div>
+      )}
     </div>
   );
 }
@@ -1332,53 +1555,55 @@ function DsCountdown({
 
   return (
     <DsShell centered>
-      <QPos question={question} totalQs={totalQs} />
+      <div className="ds-special-round-host">
+        {question && <DisplaySpecialRoundFx type={question.special_round_type} reducedMotion={reducedMotion} />}
+        <QPos question={question} totalQs={totalQs} />
 
-      {!showClue ? (
-        <div className="ds-countdown-stage">
-          <div className="ds-stage-kicker">Next Round</div>
-          <div className="ds-label" style={{ marginBottom: 8 }}>เตรียมพร้อม!</div>
-          <div className="ds-countdown-wrap">
-            <svg className="ds-ring-svg" viewBox="0 0 260 260" aria-hidden>
-              <defs>
-                <linearGradient id="dsRingGrad" x1="0" y1="0" x2="1" y2="1">
-                  <stop offset="0%" stopColor="#C49A1A" />
-                  <stop offset="100%" stopColor="#F5C74A" />
-                </linearGradient>
-              </defs>
-              <circle cx="130" cy="130" r="110" fill="none" stroke="rgba(255,255,255,.06)" strokeWidth="12" />
-              <circle cx="130" cy="130" r="110" fill="none" stroke="url(#dsRingGrad)" strokeWidth="12"
-                strokeLinecap="round" transform="rotate(-90 130 130)"
-                strokeDasharray={circ} strokeDashoffset={offset} style={{ transition: 'none' }} />
-            </svg>
-            <div className="ds-countdown-inner">
-              <div key={count} className="ds-big-num ds-big-num-pop">{count > 0 ? count : '●'}</div>
-            </div>
-            {/* Lightweight count-change particle burst — client-only, never written to Supabase */}
-            {!reducedMotion && count > 0 && (
-              <div key={`p-${count}`} className="ds-countdown-particles" aria-hidden>
-                {Array.from({ length: 10 }, (_, i) => (
-                  <span
-                    key={i}
-                    className="ds-countdown-pop-particle"
-                    style={{ '--ds-cd-angle': `${i * 36}deg` } as CSSProperties}
-                  />
-                ))}
+        {!showClue ? (
+          <div className="ds-countdown-stage">
+            <div className="ds-stage-kicker">Next Round</div>
+            <div className="ds-label" style={{ marginBottom: 8 }}>เตรียมพร้อม!</div>
+            <div className="ds-countdown-wrap">
+              <svg className="ds-ring-svg" viewBox="0 0 260 260" aria-hidden>
+                <defs>
+                  <linearGradient id="dsRingGrad" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stopColor="#C49A1A" />
+                    <stop offset="100%" stopColor="#F5C74A" />
+                  </linearGradient>
+                </defs>
+                <circle cx="130" cy="130" r="110" fill="none" stroke="rgba(255,255,255,.06)" strokeWidth="12" />
+                <circle cx="130" cy="130" r="110" fill="none" stroke="url(#dsRingGrad)" strokeWidth="12"
+                  strokeLinecap="round" transform="rotate(-90 130 130)"
+                  strokeDasharray={circ} strokeDashoffset={offset} style={{ transition: 'none' }} />
+              </svg>
+              <div className="ds-countdown-inner">
+                <div key={count} className="ds-big-num ds-big-num-pop">{count > 0 ? count : '●'}</div>
               </div>
+              {!reducedMotion && count > 0 && (
+                <div key={`p-${count}`} className="ds-countdown-particles" aria-hidden>
+                  {Array.from({ length: 10 }, (_, i) => (
+                    <span
+                      key={i}
+                      className="ds-countdown-pop-particle"
+                      style={{ '--ds-cd-angle': `${i * 36}deg` } as CSSProperties}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="ds-stage-caption">ภาพปริศนาจะขึ้นทันทีเมื่อ countdown จบ</div>
+          </div>
+        ) : (
+          <div className="ds-stage-card ds-stage-card-clue ds-clue-wrap ds-clue-enter">
+            {question && <SpecialRoundBadge type={question.special_round_type} large />}
+            {questionFetchError && !clueUrl ? (
+              <div className="ds-muted">ไม่สามารถโหลดภาพคำถามได้</div>
+            ) : (
+              <DisplayImageStage imageUrl={clueUrl} variant="clue" />
             )}
           </div>
-          <div className="ds-stage-caption">ภาพปริศนาจะขึ้นทันทีเมื่อ countdown จบ</div>
-        </div>
-      ) : (
-        <div className="ds-stage-card ds-stage-card-clue ds-clue-wrap ds-clue-enter">
-          {question && <SpecialRoundBadge type={question.special_round_type} large />}
-          {questionFetchError && !clueUrl ? (
-            <div className="ds-muted">ไม่สามารถโหลดภาพคำถามได้</div>
-          ) : (
-            <DisplayImageStage imageUrl={clueUrl} variant="clue" />
-          )}
-        </div>
-      )}
+        )}
+      </div>
     </DsShell>
   );
 }
@@ -1474,52 +1699,55 @@ function DsQuestion({
 
   return (
     <DsShell>
-      <div
-        className={[
-          'ds-q-root',
-          urgent ? 'ds-question-urgent' : '',
-          critical ? 'ds-question-critical' : '',
-        ].filter(Boolean).join(' ')}
-        style={{ position: 'relative' }}
-      >
-        {!reducedMotion && <div className="ds-q-shockwave" aria-hidden />}
-        {milestoneBanner && !reducedMotion && (
-          <div className="ds-answer-milestone" aria-live="polite">{milestoneBanner}</div>
-        )}
+      <div className="ds-special-round-host">
+        {question && <DisplaySpecialRoundFx type={question.special_round_type} reducedMotion={reducedMotion} />}
+        <div
+          className={[
+            'ds-q-root',
+            urgent ? 'ds-question-urgent' : '',
+            critical ? 'ds-question-critical' : '',
+          ].filter(Boolean).join(' ')}
+          style={{ position: 'relative' }}
+        >
+          {!reducedMotion && <div className="ds-q-shockwave" aria-hidden />}
+          {milestoneBanner && !reducedMotion && (
+            <div className="ds-answer-milestone" aria-live="polite">{milestoneBanner}</div>
+          )}
 
-        <div className="ds-q-bar" style={{fontSize: '1.45rem'}}>
-          <QPos question={question} totalQs={totalQs} small />
-          <div className="ds-q-meta" style={{fontSize: '1.45rem'}}>
-            {question && <SpecialRoundBadge type={question.special_round_type} />}
-            {submittedCount !== null && playerCount !== null ? (
-              <span className={`ds-stat-pill${statPulse && !reducedMotion ? ' is-pulsing' : ''}`}>
-                ตอบแล้ว {submittedCount} / {playerCount}
-              </span>
-            ) : null}
-          </div>
-        </div>
-
-        <div className="ds-q-body">
-          <div className="ds-stage-card ds-stage-card-soft ds-q-left">
-            {questionFetchError && !question ? (
-              <div className="ds-muted">ไม่สามารถโหลดคำถามได้</div>
-            ) : (
-              <div className="ds-q-text">{question?.text ?? 'กำลังโหลด...'}</div>
-            )}
-            <div className={`ds-big-timer ${urgent ? 'ds-timer-urgent' : ''}`}>
-              {timeLeft != null ? timeLeft.toFixed(1) : '—'}
-              <span className="ds-timer-unit">s</span>
-            </div>
-            <div className="ds-timer-bar-track">
-              <div
-                className={`ds-timer-bar-fill ${urgent ? 'ds-timer-bar-urgent' : ''}`}
-                style={{ width: `${ratio * 100}%` }}
-              />
+          <div className="ds-q-bar" style={{fontSize: '1.45rem'}}>
+            <QPos question={question} totalQs={totalQs} small />
+            <div className="ds-q-meta">
+              {question && <SpecialRoundBadge type={question.special_round_type} />}
+              {submittedCount !== null && playerCount !== null ? (
+                <span className={`ds-stat-pill${statPulse && !reducedMotion ? ' is-pulsing' : ''}`}>
+                  ตอบแล้ว {submittedCount} / {playerCount}
+                </span>
+              ) : null}
             </div>
           </div>
 
-          <div className="ds-stage-card ds-stage-card-visual ds-q-right">
-            <DisplayImageStage imageUrl={imgUrl} variant="question" />
+          <div className="ds-q-body">
+            <div className="ds-stage-card ds-stage-card-soft ds-q-left">
+              {questionFetchError && !question ? (
+                <div className="ds-muted">ไม่สามารถโหลดคำถามได้</div>
+              ) : (
+                <div className="ds-q-text">{question?.text ?? 'กำลังโหลด...'}</div>
+              )}
+              <div className={`ds-big-timer ${urgent ? 'ds-timer-urgent' : ''}`}>
+                {timeLeft != null ? timeLeft.toFixed(1) : '—'}
+                <span className="ds-timer-unit">s</span>
+              </div>
+              <div className="ds-timer-bar-track">
+                <div
+                  className={`ds-timer-bar-fill ${urgent ? 'ds-timer-bar-urgent' : ''}`}
+                  style={{ width: `${ratio * 100}%` }}
+                />
+              </div>
+            </div>
+
+            <div className="ds-stage-card ds-stage-card-visual ds-q-right">
+              <DisplayImageStage imageUrl={imgUrl} variant="question" />
+            </div>
           </div>
         </div>
       </div>
@@ -1560,7 +1788,7 @@ function DsClosed({
 
 function DsReveal({
   gameState, question, stats, totalQs, getServerTime,
-  statsFetchError,
+  statsFetchError, reducedMotion,
 }: {
   gameState: GameState;
   question: DisplayQuestion | null;
@@ -1568,6 +1796,7 @@ function DsReveal({
   totalQs: number;
   getServerTime: () => number;
   statsFetchError: boolean;
+  reducedMotion: boolean;
 }) {
   const [showReveal, setShowReveal] = useState(false);
   const [revealImageReady, setRevealImageReady] = useState(false);
@@ -1627,50 +1856,53 @@ function DsReveal({
 
   return (
     <DsShell>
-      <div className="ds-reveal-header">
-        <QPos question={question} totalQs={totalQs} small />
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          {question && <SpecialRoundBadge type={question.special_round_type} />}
-          <div className="ds-label ds-gold" >เฉลย</div>
-        </div>
-      </div>
-
-      <div className="ds-reveal-layout">
-        <div className="ds-stage-card ds-stage-card-soft ds-reveal-left">
-          <div className="ds-reveal-text" style={{fontSize:'2rem'}}>{question.text}</div>
-
-          {showReveal && submittedCount > 0 && (
-            <div className="ds-reveal-stats">
-              <div className="ds-reveal-stat-item">
-                <span className="ds-label">ตอบถูก</span>
-                <span className="ds-reveal-stat-val ds-gold">{correctCount} / {submittedCount}</span>
-              </div>
-              <div className="ds-reveal-stat-sep" />
-              <div className="ds-reveal-stat-item">
-                <span className="ds-label">สัดส่วนคนเก่ง</span>
-                <span className="ds-reveal-stat-val">{accuracy.toFixed(1)}%</span>
-              </div>
-            </div>
-          )}
-
-          {!showReveal && (
-            <div className="ds-muted">...กำลังประมวลผล...</div>
-          )}
-          {showReveal && submittedCount === 0 && !statsFetchError && (
-            <div className="ds-muted">ไม่มีผู้ที่ตอบในข้อนี้</div>
-          )}
+      <div className="ds-special-round-host">
+        <DisplaySpecialRoundFx type={question.special_round_type} reducedMotion={reducedMotion} />
+        <div className="ds-reveal-header">
+          <QPos question={question} totalQs={totalQs} small />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {question && <SpecialRoundBadge type={question.special_round_type} />}
+            <div className="ds-label ds-gold" >เฉลย</div>
+          </div>
         </div>
 
-        <div className="ds-stage-card ds-stage-card-visual ds-reveal-right">
-          <DisplayImageStage
-            imageUrl={baseImg}
-            maskUrl={maskUrl ?? undefined}
-            revealImageUrl={revealImg ?? baseImg}
-            showReveal={showReveal}
-            revealReady={revealImageReady}
-            fullWidth
-            variant="reveal"
-          />
+        <div className="ds-reveal-layout">
+          <div className="ds-stage-card ds-stage-card-soft ds-reveal-left">
+            <div className="ds-reveal-text" style={{fontSize:'2rem'}}>{question.text}</div>
+
+            {showReveal && submittedCount > 0 && (
+              <div className="ds-reveal-stats">
+                <div className="ds-reveal-stat-item">
+                  <span className="ds-label">ตอบถูก</span>
+                  <span className="ds-reveal-stat-val ds-gold">{correctCount} / {submittedCount}</span>
+                </div>
+                <div className="ds-reveal-stat-sep" />
+                <div className="ds-reveal-stat-item">
+                  <span className="ds-label">สัดส่วนคนเก่ง</span>
+                  <span className="ds-reveal-stat-val">{accuracy.toFixed(1)}%</span>
+                </div>
+              </div>
+            )}
+
+            {!showReveal && (
+              <div className="ds-muted">...กำลังประมวลผล...</div>
+            )}
+            {showReveal && submittedCount === 0 && !statsFetchError && (
+              <div className="ds-muted">ไม่มีผู้ที่ตอบในข้อนี้</div>
+            )}
+          </div>
+
+          <div className="ds-stage-card ds-stage-card-visual ds-reveal-right">
+            <DisplayImageStage
+              imageUrl={baseImg}
+              maskUrl={maskUrl ?? undefined}
+              revealImageUrl={revealImg ?? baseImg}
+              showReveal={showReveal}
+              revealReady={revealImageReady}
+              fullWidth
+              variant="reveal"
+            />
+          </div>
         </div>
       </div>
     </DsShell>

@@ -40,6 +40,7 @@ export function QuestionScreen() {
   const latestCirclePositionRef = useRef<CirclePosition | null>(null);
   // Track last whole-second bucket for timerTickUrgent haptic (one per second, not per frame)
   const lastUrgentBucketRef = useRef<number | null>(null);
+  const lastSpecialRoundFxKeyRef = useRef<string | null>(null);
 
   const endsAt = gameState?.question_ends_at ?? null;
   const displayOrder = question?.play_order ?? question?.order_index ?? gameState?.current_question_index ?? null;
@@ -121,6 +122,24 @@ export function QuestionScreen() {
   useEffect(() => {
     latestCirclePositionRef.current = circlePosition;
   }, [circlePosition]);
+
+  useEffect(() => {
+    if (!question?.id || gameState?.status !== 'question_open') return;
+    const specialType = question.special_round_type ?? 'normal';
+    if (specialType === 'normal') return;
+
+    const fxKey = `${gameState.status}:${question.id}:${specialType}`;
+    if (lastSpecialRoundFxKeyRef.current === fxKey) return;
+    lastSpecialRoundFxKeyRef.current = fxKey;
+
+    if (specialType === 'double_score') {
+      triggerFeedbackFx('specialRoundDouble');
+    } else if (specialType === 'speed_bonus') {
+      triggerFeedbackFx('specialRoundSpeed');
+    } else if (specialType === 'mystery_round') {
+      triggerFeedbackFx('specialRoundMystery');
+    }
+  }, [gameState?.status, question?.id, question?.special_round_type]);
 
   if (!question) {
     return (

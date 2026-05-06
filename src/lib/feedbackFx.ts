@@ -2,6 +2,9 @@ export type FeedbackFxEventName =
   | 'joinSuccess'
   | 'countdownStart'
   | 'answerOpen'
+  | 'specialRoundDouble'
+  | 'specialRoundSpeed'
+  | 'specialRoundMystery'
   | 'answerTap'
   | 'answerLocked'
   | 'answerCorrect'
@@ -24,6 +27,9 @@ const vibratePatterns: Partial<Record<FeedbackFxEventName, number | number[]>> =
   joinSuccess: [18],
   countdownStart: [20, 40, 20],
   answerOpen: [12],
+  specialRoundDouble: [18, 34, 20, 52, 22],
+  specialRoundSpeed: [10, 24, 12, 24, 16],
+  specialRoundMystery: [28, 40, 16],
   answerTap: [8],
   answerLocked: [14, 30, 14],
   answerCorrect: [24, 40, 24, 60, 30],
@@ -36,6 +42,9 @@ const vibratePatterns: Partial<Record<FeedbackFxEventName, number | number[]>> =
 
 const audioProfiles: Partial<Record<FeedbackFxEventName, { frequency: number; durationMs: number; type?: OscillatorType }>> = {
   joinSuccess: { frequency: 660, durationMs: 90, type: 'sine' },
+  specialRoundDouble: { frequency: 520, durationMs: 160, type: 'triangle' },
+  specialRoundSpeed: { frequency: 960, durationMs: 120, type: 'square' },
+  specialRoundMystery: { frequency: 300, durationMs: 180, type: 'sine' },
   answerLocked: { frequency: 420, durationMs: 80, type: 'triangle' },
   answerCorrect: { frequency: 880, durationMs: 140, type: 'sine' },
   answerWrong: { frequency: 220, durationMs: 120, type: 'sawtooth' },
