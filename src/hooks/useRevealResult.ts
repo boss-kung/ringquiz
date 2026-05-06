@@ -43,10 +43,8 @@ export function useRevealResult() {
               selected_x_ratio: fallbackX,
               selected_y_ratio: fallbackY,
             });
-          } else if (!circlePosition) {
-            setRevealNoAnswer(true);
           } else {
-            setRevealNoAnswer(false);
+            setRevealNoAnswer(true);
           }
           return;
         }

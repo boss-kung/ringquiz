@@ -214,12 +214,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
     if (insertErr) throw new Error(`Answer insert failed: ${insertErr.message}`);
 
-    // 13. Atomically add this answer's score to the player's running total.
-    const { error: rpcErr } = await db.rpc('increment_player_score', {
-      p_player_id: user.id,
-      p_amount: score,
-    });
-    if (rpcErr) throw new Error(`increment_player_score failed: ${rpcErr.message}`);
+    // 13. Increment the player's convenience running total.
+    // Authoritative exports/leaderboards still come from answers.score.
+    await incrementPlayerScore(db, user.id, score);
 
     // 14. Return result — never includes mask path or mask data
     const responseBody: SubmitAnswerResponse = {
@@ -238,4 +235,42 @@ Deno.serve(async (req: Request): Promise<Response> => {
 function err(status: number, code: string, field?: string): Response {
   const body: ErrorResponse = { error: code, ...(field ? { field } : {}) };
   return Response.json(body, { status, headers: corsHeaders });
+}
+
+async function syncPlayerTotalScore(
+  db: ReturnType<typeof getSupabaseAdmin>,
+  playerId: string,
+): Promise<void> {
+  const { data: answers, error: answersErr } = await db
+    .from('answers')
+    .select('score')
+    .eq('player_id', playerId);
+
+  if (answersErr) throw new Error(`Failed to read player answers: ${answersErr.message}`);
+
+  const totalScore = (answers ?? []).reduce((sum, row) => sum + (row.score ?? 0), 0);
+  const { error: updateErr } = await db
+    .from('players')
+    .update({ total_score: totalScore })
+    .eq('id', playerId);
+
+  if (updateErr) throw new Error(`Failed to sync player total score: ${updateErr.message}`);
+}
+
+async function incrementPlayerScore(
+  db: ReturnType<typeof getSupabaseAdmin>,
+  playerId: string,
+  score: number,
+): Promise<void> {
+  if (!Number.isFinite(score) || score <= 0) return;
+
+  const { error } = await db.rpc('increment_player_score', {
+    p_player_id: playerId,
+    p_amount: score,
+  });
+
+  if (!error) return;
+
+  // Fallback only if the lightweight increment path fails unexpectedly.
+  await syncPlayerTotalScore(db, playerId);
 }

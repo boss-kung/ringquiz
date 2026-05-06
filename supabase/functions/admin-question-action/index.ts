@@ -207,20 +207,18 @@ async function handleAssetUpload(
   if (imageWidth !== maskWidth || imageHeight !== maskHeight)
     return error(400, 'dimension_mismatch', 'Image and mask dimensions must match.');
 
-  const [actualMaskWidth, actualMaskHeight] = await getPngDimensions(maskFile);
+  const [actualMaskWidth, actualMaskHeight] = await getImageDimensions(maskFile);
   if (actualMaskWidth !== maskWidth || actualMaskHeight !== maskHeight) {
     return error(400, 'dimension_mismatch', 'Mask file dimensions do not match the submitted dimensions.');
   }
 
-  if (imageFile.type === 'image/png') {
-    const [actualImageWidth, actualImageHeight] = await getPngDimensions(imageFile);
-    if (actualImageWidth !== imageWidth || actualImageHeight !== imageHeight) {
-      return error(400, 'dimension_mismatch', 'Image file dimensions do not match the submitted dimensions.');
-    }
+  const [actualImageWidth, actualImageHeight] = await getImageDimensions(imageFile);
+  if (actualImageWidth !== imageWidth || actualImageHeight !== imageHeight) {
+    return error(400, 'dimension_mismatch', 'Image file dimensions do not match the submitted dimensions.');
   }
 
-  if (revealFile instanceof File && revealFile.type === 'image/png') {
-    const [actualRevealWidth, actualRevealHeight] = await getPngDimensions(revealFile);
+  if (revealFile instanceof File) {
+    const [actualRevealWidth, actualRevealHeight] = await getImageDimensions(revealFile);
     if (actualRevealWidth !== imageWidth || actualRevealHeight !== imageHeight) {
       return error(400, 'dimension_mismatch', 'Reveal file dimensions must match the question image.');
     }
@@ -722,6 +720,7 @@ async function setActiveGameSet(
   // Update game_state
   await db.from('game_state')
     .update({
+      status: 'waiting',
       active_game_set_id: gameSetId,
       current_question_id: null,
       current_question_index: null,
@@ -831,7 +830,16 @@ async function addQuestionToGameSet(
   if (bankQuestionError) throw new Error(`Failed to verify bank question: ${bankQuestionError.message}`);
   if (!bankQuestion) return error(404, 'not_found', 'Question not found in bank');
 
-  const insertedIds = await insertQuestionsIntoGameSet(gameSetId, [questionId], db);
+  let insertedIds: string[];
+  try {
+    insertedIds = await insertQuestionsIntoGameSet(gameSetId, [questionId], db);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Failed to add question to game set';
+    if (message.includes('more than once')) {
+      return error(409, 'duplicate_question_in_game_set', message);
+    }
+    throw err;
+  }
   return await fetchGameSetQuestion('add_question_to_game_set', insertedIds[0], db);
 }
 
@@ -863,7 +871,19 @@ async function bulkAddQuestionsToGameSet(
     return error(404, 'not_found', 'One or more questions were not found in the bank');
   }
 
-  const insertedIds = await insertQuestionsIntoGameSet(gameSetId, questionIds, db);
+  let insertedIds: string[];
+  try {
+    insertedIds = await insertQuestionsIntoGameSet(gameSetId, questionIds, db);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Failed to add questions to game set';
+    if (message.includes('same request')) {
+      return error(400, 'duplicate_question_in_request', message);
+    }
+    if (message.includes('more than once')) {
+      return error(409, 'duplicate_question_in_game_set', message);
+    }
+    throw err;
+  }
   return ok({
     ok: true,
     action: 'bulk_add_questions_to_game_set',
@@ -880,6 +900,23 @@ async function insertQuestionsIntoGameSet(
   if (sanitizedIds.length === 0) throw new Error('No question ids to add');
 
   const uniqueIds = [...new Set(sanitizedIds)];
+  if (uniqueIds.length !== sanitizedIds.length) {
+    throw new Error('Duplicate questions were selected in the same request.');
+  }
+
+  const { data: existingRows, error: existingRowsErr } = await db
+    .from('game_set_questions')
+    .select('question_id')
+    .eq('game_set_id', gameSetId);
+
+  if (existingRowsErr) throw new Error(`Failed to inspect existing game set questions: ${existingRowsErr.message}`);
+
+  const existingQuestionIds = new Set((existingRows ?? []).map((row) => row.question_id));
+  const duplicatesInSet = uniqueIds.filter((questionId) => existingQuestionIds.has(questionId));
+  if (duplicatesInSet.length > 0) {
+    throw new Error('A game set cannot contain the same question more than once.');
+  }
+
   const { data: bankQuestions, error: bankQErr } = await db
     .from('questions')
     .select('id, time_limit_seconds, max_score, min_correct_score, circle_radius_ratio')
@@ -1425,8 +1462,17 @@ function getFileExtension(fileName: string, fallback: string): string {
   return match ? `.${match[1].toLowerCase()}` : fallback;
 }
 
-async function getPngDimensions(file: File): Promise<[number, number]> {
+async function getImageDimensions(file: File): Promise<[number, number]> {
   const bytes = new Uint8Array(await file.arrayBuffer());
+
+  if (file.type === 'image/png') return getPngDimensions(bytes);
+  if (file.type === 'image/jpeg') return getJpegDimensions(bytes);
+  if (file.type === 'image/webp') return getWebpDimensions(bytes);
+
+  throw new Error(`Unsupported image type: ${file.type}`);
+}
+
+function getPngDimensions(bytes: Uint8Array): [number, number] {
   const signature = [137, 80, 78, 71, 13, 10, 26, 10];
   const hasPngSignature = signature.every((value, index) => bytes[index] === value);
   if (!hasPngSignature) throw new Error('Invalid PNG signature.');
@@ -1439,6 +1485,91 @@ async function getPngDimensions(file: File): Promise<[number, number]> {
 
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   return [view.getUint32(16), view.getUint32(20)];
+}
+
+function getJpegDimensions(bytes: Uint8Array): [number, number] {
+  if (bytes.length < 4 || bytes[0] !== 0xff || bytes[1] !== 0xd8) {
+    throw new Error('Invalid JPEG signature.');
+  }
+
+  const sofMarkers = new Set([
+    0xc0, 0xc1, 0xc2, 0xc3,
+    0xc5, 0xc6, 0xc7,
+    0xc9, 0xca, 0xcb,
+    0xcd, 0xce, 0xcf,
+  ]);
+
+  let offset = 2;
+  while (offset + 9 < bytes.length) {
+    if (bytes[offset] !== 0xff) {
+      offset += 1;
+      continue;
+    }
+
+    while (offset < bytes.length && bytes[offset] === 0xff) offset += 1;
+    if (offset >= bytes.length) break;
+
+    const marker = bytes[offset];
+    offset += 1;
+
+    if (marker === 0xd8 || marker === 0xd9) continue;
+    if (offset + 1 >= bytes.length) break;
+
+    const segmentLength = (bytes[offset] << 8) | bytes[offset + 1];
+    if (segmentLength < 2 || offset + segmentLength > bytes.length) {
+      throw new Error('JPEG segment is truncated.');
+    }
+
+    if (sofMarkers.has(marker)) {
+      if (segmentLength < 7) throw new Error('JPEG SOF segment is truncated.');
+      const height = (bytes[offset + 3] << 8) | bytes[offset + 4];
+      const width = (bytes[offset + 5] << 8) | bytes[offset + 6];
+      return [width, height];
+    }
+
+    offset += segmentLength;
+  }
+
+  throw new Error('JPEG dimensions could not be determined.');
+}
+
+function getWebpDimensions(bytes: Uint8Array): [number, number] {
+  if (
+    bytes.length < 30 ||
+    String.fromCharCode(...bytes.slice(0, 4)) !== 'RIFF' ||
+    String.fromCharCode(...bytes.slice(8, 12)) !== 'WEBP'
+  ) {
+    throw new Error('Invalid WebP signature.');
+  }
+
+  const chunkType = String.fromCharCode(...bytes.slice(12, 16));
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+
+  if (chunkType === 'VP8X') {
+    const width = 1 + bytes[24] + (bytes[25] << 8) + (bytes[26] << 16);
+    const height = 1 + bytes[27] + (bytes[28] << 8) + (bytes[29] << 16);
+    return [width, height];
+  }
+
+  if (chunkType === 'VP8 ') {
+    if (bytes.length < 30) throw new Error('WebP VP8 header is truncated.');
+    const width = view.getUint16(26, true) & 0x3fff;
+    const height = view.getUint16(28, true) & 0x3fff;
+    return [width, height];
+  }
+
+  if (chunkType === 'VP8L') {
+    if (bytes.length < 25 || bytes[20] !== 0x2f) throw new Error('Invalid WebP VP8L header.');
+    const b0 = bytes[21];
+    const b1 = bytes[22];
+    const b2 = bytes[23];
+    const b3 = bytes[24];
+    const width = 1 + (((b1 & 0x3f) << 8) | b0);
+    const height = 1 + (((b3 & 0x0f) << 10) | (b2 << 2) | ((b1 & 0xc0) >> 6));
+    return [width, height];
+  }
+
+  throw new Error(`Unsupported WebP chunk type: ${chunkType}`);
 }
 
 function sleep(ms: number): Promise<void> {

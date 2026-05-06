@@ -26,6 +26,7 @@ export function useQuestion() {
     }
 
     let cancelled = false;
+    let retryTimer: number | null = null;
 
     const fetchAll = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -41,6 +42,7 @@ export function useQuestion() {
           if (!cancelled) {
             console.error('[useQuestion] auth:', signInErr.message);
             setQuestion(null);
+            retryTimer = window.setTimeout(() => { void fetchAll(); }, 1500);
           }
           return;
         }
@@ -62,6 +64,9 @@ export function useQuestion() {
       if (qErr || !questionData) {
         console.error('[useQuestion] fetch:', qErr?.message);
         setQuestion(null);
+        if (!cancelled) {
+          retryTimer = window.setTimeout(() => { void fetchAll(); }, 1500);
+        }
         return;
       }
 
@@ -74,11 +79,17 @@ export function useQuestion() {
       // This ensures circle_radius_ratio and timing shown to the player match
       // what the server will use for correctness evaluation.
       if (gsqId) {
-        const { data: gsqData } = await supabase
+        const { data: gsqData, error: gsqErr } = await supabase
           .from('game_set_questions')
           .select('play_order, time_limit_seconds, max_score, min_correct_score, circle_radius_ratio')
           .eq('id', gsqId)
           .single<Pick<Question, 'play_order' | 'time_limit_seconds' | 'max_score' | 'min_correct_score' | 'circle_radius_ratio'>>();
+
+        if (!cancelled && gsqErr) {
+          console.error('[useQuestion] game_set overlay fetch:', gsqErr.message);
+          retryTimer = window.setTimeout(() => { void fetchAll(); }, 1500);
+          return;
+        }
 
         if (!cancelled && gsqData) {
           merged = {
@@ -97,6 +108,9 @@ export function useQuestion() {
 
     void fetchAll();
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      if (retryTimer !== null) window.clearTimeout(retryTimer);
+    };
   }, [questionId, gsqId, currentIndex, setQuestion]);
 }

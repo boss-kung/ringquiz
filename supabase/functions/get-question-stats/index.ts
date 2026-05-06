@@ -3,7 +3,7 @@
 //
 // Game-set-aware (Phase 2+):
 //   - total_questions counts enabled questions in the active game set.
-//   - question_index returns the play_order of the current game-set question.
+//   - question_index returns the enabled-position of the current game-set question.
 //   - Falls back to legacy questions.is_published / order_index if no game set.
 //
 // Safety: returns ONLY aggregate counts. Never raw answer rows, coordinates,
@@ -11,9 +11,9 @@
 import { corsHeaders, handleCors } from '../_shared/cors.ts';
 import { getSupabaseAdmin } from '../_shared/supabase-admin.ts';
 import type {
+  ErrorResponse,
   GameState,
   QuestionStatsResponse,
-  ErrorResponse,
 } from '../_shared/types.ts';
 
 Deno.serve(async (req: Request): Promise<Response> => {
@@ -35,16 +35,26 @@ Deno.serve(async (req: Request): Promise<Response> => {
   const db = getSupabaseAdmin();
 
   try {
-    // Fetch current game state (includes new game-set columns)
+    // Fetch current game state (includes new game-set columns).
     const { data: gs, error: gsErr } = await db
       .from('game_state')
       .select('status, current_question_id, current_question_index, question_ends_at, active_game_set_id, current_game_set_question_id')
       .eq('id', '00000000-0000-0000-0000-000000000001')
-      .single<Pick<GameState, 'status' | 'current_question_id' | 'current_question_index' | 'question_ends_at' | 'active_game_set_id' | 'current_game_set_question_id'>>();
+      .single<
+        Pick<
+          GameState,
+          | 'status'
+          | 'current_question_id'
+          | 'current_question_index'
+          | 'question_ends_at'
+          | 'active_game_set_id'
+          | 'current_game_set_question_id'
+        >
+      >();
 
     if (gsErr || !gs) throw new Error('Failed to read game_state');
 
-    // Count submitted answers and total joined players in parallel
+    // Count submitted answers and total joined players in parallel.
     const [answersResult, playersResult] = await Promise.all([
       gs.current_question_id
         ? db.from('answers').select('id', { count: 'exact', head: true }).eq('question_id', gs.current_question_id)
@@ -56,42 +66,62 @@ Deno.serve(async (req: Request): Promise<Response> => {
     if (playersResult.error) throw new Error(`Player count failed: ${playersResult.error.message}`);
 
     const submittedCount = answersResult.count ?? 0;
-    const playerCount    = playersResult.count ?? 0;
+    const playerCount = playersResult.count ?? 0;
 
-    // Determine total questions and current position
+    // Determine total questions and current position.
     let totalQuestions = 0;
     let questionPosition: number | null = null;
     let activeGameSetName: string | null = null;
 
     if (gs.active_game_set_id) {
-      // Game-set-aware: count enabled questions, fetch position and name in parallel
+      // Game-set-aware: count enabled questions, fetch current GSQ and set name in parallel.
       const [gsqCountResult, gsqRowResult, gsRowResult] = await Promise.all([
         db.from('game_set_questions')
           .select('id', { count: 'exact', head: true })
           .eq('game_set_id', gs.active_game_set_id)
           .eq('is_enabled', true),
         gs.current_game_set_question_id
-          ? db.from('game_set_questions').select('play_order').eq('id', gs.current_game_set_question_id).single<{ play_order: number }>()
+          ? db.from('game_set_questions')
+              .select('play_order')
+              .eq('id', gs.current_game_set_question_id)
+              .single<{ play_order: number }>()
           : Promise.resolve({ data: null, error: null }),
-        db.from('game_sets').select('name').eq('id', gs.active_game_set_id).single<{ name: string }>(),
+        db.from('game_sets')
+          .select('name')
+          .eq('id', gs.active_game_set_id)
+          .single<{ name: string }>(),
       ]);
 
       if (gsqCountResult.error) throw new Error(`GSQ count failed: ${gsqCountResult.error.message}`);
       totalQuestions = gsqCountResult.count ?? 0;
-      if (gsqRowResult.data) questionPosition = gsqRowResult.data.play_order;
-      if (gsRowResult.data)  activeGameSetName = gsRowResult.data.name;
+      if (gsRowResult.data) activeGameSetName = gsRowResult.data.name;
+
+      if (gsqRowResult.data) {
+        const { count: enabledPositionCount, error: enabledPositionErr } = await db
+          .from('game_set_questions')
+          .select('id', { count: 'exact', head: true })
+          .eq('game_set_id', gs.active_game_set_id)
+          .eq('is_enabled', true)
+          .lte('play_order', gsqRowResult.data.play_order);
+
+        if (enabledPositionErr) throw new Error(`GSQ position failed: ${enabledPositionErr.message}`);
+        questionPosition = enabledPositionCount ?? null;
+      }
     } else {
-      // Legacy fallback: count published questions and position in parallel
+      // Legacy fallback: count published questions and position in parallel.
       const [pubCountResult, positionResult] = await Promise.all([
         db.from('questions').select('id', { count: 'exact', head: true }).eq('is_published', true),
         gs.current_question_index != null
-          ? db.from('questions').select('id', { count: 'exact', head: true }).eq('is_published', true).lte('order_index', gs.current_question_index)
+          ? db.from('questions')
+              .select('id', { count: 'exact', head: true })
+              .eq('is_published', true)
+              .lte('order_index', gs.current_question_index)
           : Promise.resolve({ count: null, error: null }),
       ]);
 
       if (pubCountResult.error) throw new Error(`Question count failed: ${pubCountResult.error.message}`);
       if (positionResult.error) throw new Error(`Question position failed: ${positionResult.error.message}`);
-      totalQuestions  = pubCountResult.count ?? 0;
+      totalQuestions = pubCountResult.count ?? 0;
       questionPosition = positionResult.count ?? null;
     }
 
@@ -107,7 +137,6 @@ Deno.serve(async (req: Request): Promise<Response> => {
       active_game_set_name: activeGameSetName,
     };
     return Response.json(body, { headers: corsHeaders });
-
   } catch (e) {
     console.error('[get-question-stats]', e);
     const body: ErrorResponse = { error: 'internal', detail: String(e) };
