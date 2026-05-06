@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useGameStore } from '../store/gameStore';
 import { useAnswerSubmit } from '../hooks/useAnswerSubmit';
 import { useGetServerTime } from '../hooks/useServerTime';
@@ -7,6 +7,7 @@ import { Timer } from '../components/Timer';
 import { resolveQuestionImageUrl } from '../lib/questionAssets';
 import type { CirclePosition } from '../lib/types';
 import { triggerFeedbackFx, unlockFeedbackAudio } from '../lib/feedbackFx';
+import { FUNCTIONS_URL, supabase } from '../lib/supabase';
 
 export function QuestionScreen() {
   const question = useGameStore((s) => s.question);
@@ -19,6 +20,8 @@ export function QuestionScreen() {
   const { submit, submitting } = useAnswerSubmit();
   const getServerTime = useGetServerTime();
   const [remainingMs, setRemainingMs] = useState<number | null>(null);
+  const [buttonPressed, setButtonPressed] = useState(false);
+  const warmedQuestionIdRef = useRef<string | null>(null);
 
   const endsAt = gameState?.question_ends_at ?? null;
   const displayOrder = question?.play_order ?? question?.order_index ?? gameState?.current_question_index ?? null;
@@ -53,6 +56,34 @@ export function QuestionScreen() {
     }
   }, [timeExpired, submitted]);
 
+  useEffect(() => {
+    if (!question?.id) return;
+    if (warmedQuestionIdRef.current === question.id) return;
+    warmedQuestionIdRef.current = question.id;
+
+    let cancelled = false;
+    const warm = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session || cancelled) return;
+
+      try {
+        await fetch(`${FUNCTIONS_URL}/submit-answer?question_id=${encodeURIComponent(question.id)}`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+        });
+      } catch {
+        // Best-effort warm-up only; ignore failures.
+      }
+    };
+
+    void warm();
+    return () => {
+      cancelled = true;
+    };
+  }, [question?.id]);
+
   if (!question) {
     return (
       <div style={{ display: 'flex', minHeight: '100%', alignItems: 'center', justifyContent: 'center', background: 'var(--navy)' }}>
@@ -72,6 +103,12 @@ export function QuestionScreen() {
   const handleInteractionStart = (clientX: number, clientY: number) => {
     void unlockFeedbackAudio();
     triggerFeedbackFx('answerTap', { clientX, clientY });
+  };
+
+  const handleSubmitPress = () => {
+    if (!canSubmit) return;
+    setButtonPressed(true);
+    void submit();
   };
 
   return (
@@ -130,9 +167,15 @@ export function QuestionScreen() {
         </div>
 
         <button
-          onClick={submit}
+          onClick={handleSubmitPress}
+          onPointerDown={() => {
+            if (canSubmit) setButtonPressed(true);
+          }}
+          onPointerUp={() => setButtonPressed(false)}
+          onPointerCancel={() => setButtonPressed(false)}
+          onBlur={() => setButtonPressed(false)}
           disabled={!canSubmit}
-          className={`gr-btn ${submitted ? 'gr-btn-submit-done' : 'gr-btn-gold'}`}
+          className={`gr-btn ${submitted ? 'gr-btn-submit-done' : 'gr-btn-gold'}${buttonPressed ? ' gr-btn-is-pressing' : ''}`}
           style={{ marginTop: 0 }}
         >
           {submitting ? 'กำลังส่ง...' : submitted ? '✓ ส่งแล้ว' : circlePosition ? 'ส่งคำตอบ' : 'แตะที่ภาพเพื่อตอบ'}

@@ -52,6 +52,34 @@ export function getCachedMask(cacheKey: string): DecodedMask | undefined {
   return maskCache.get(cacheKey);
 }
 
+export async function warmMaskCache(
+  maskBuffer: ArrayBuffer,
+  cacheKey: string,
+  expectedWidth?: number,
+  expectedHeight?: number,
+): Promise<DecodedMask> {
+  const cached = maskCache.get(cacheKey);
+  if (cached) return cached;
+
+  const decoded = await decodeMaskBuffer(maskBuffer);
+
+  if (expectedWidth !== undefined && decoded.width !== expectedWidth) {
+    throw new Error(
+      `Mask width mismatch: decoded=${decoded.width}, expected=${expectedWidth}. ` +
+      `Ensure mask and question image have identical pixel dimensions.`,
+    );
+  }
+  if (expectedHeight !== undefined && decoded.height !== expectedHeight) {
+    throw new Error(
+      `Mask height mismatch: decoded=${decoded.height}, expected=${expectedHeight}. ` +
+      `Ensure mask and question image have identical pixel dimensions.`,
+    );
+  }
+
+  maskCache.set(cacheKey, decoded);
+  return decoded;
+}
+
 export function evictMaskCache(cacheKey: string): void {
   maskCache.delete(cacheKey);
 }

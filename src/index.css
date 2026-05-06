@@ -153,8 +153,15 @@ body.host-route {
   transition: transform .1s, box-shadow .2s;
   position: relative;
   overflow: hidden;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
 }
 .gr-btn:active { transform: scale(.97); }
+.gr-btn.gr-btn-is-pressing {
+  transform: scale(.975);
+  box-shadow: 0 2px 12px rgba(245,199,74,.22);
+}
 .gr-btn:disabled { opacity: .3; cursor: not-allowed; }
 
 .gr-btn-gold {

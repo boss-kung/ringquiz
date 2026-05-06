@@ -12,7 +12,7 @@
 //   - Wrong-state submissions (status !== question_open) are rejected with 400.
 import { corsHeaders, handleCors } from '../_shared/cors.ts';
 import { getSupabaseAdmin } from '../_shared/supabase-admin.ts';
-import { checkCircleOverlapsMask, getCachedMask } from './mask-check.ts';
+import { checkCircleOverlapsMask, getCachedMask, warmMaskCache } from './mask-check.ts';
 import type {
   GameState,
   QuestionMask,
@@ -33,6 +33,56 @@ Deno.serve(async (req: Request): Promise<Response> => {
   const db = getSupabaseAdmin();
   const { data: { user }, error: authErr } = await db.auth.getUser(token);
   if (authErr || !user) return err(401, 'unauthorized');
+
+  if (req.method === 'GET') {
+    const url = new URL(req.url);
+    const questionId = url.searchParams.get('question_id')?.trim();
+    if (!questionId) return err(400, 'missing_field', 'question_id');
+
+    try {
+      const { data: gs, error: gsErr } = await db
+        .from('game_state')
+        .select('current_question_id')
+        .eq('id', '00000000-0000-0000-0000-000000000001')
+        .single<Pick<GameState, 'current_question_id'>>();
+
+      if (gsErr || !gs) throw new Error('Failed to read game_state');
+      if (gs.current_question_id !== questionId) return err(400, 'wrong_question');
+
+      const { data: maskRow, error: maskErr } = await db
+        .from('question_masks')
+        .select('mask_storage_path, mask_width, mask_height')
+        .eq('question_id', questionId)
+        .single<Pick<QuestionMask, 'mask_storage_path' | 'mask_width' | 'mask_height'>>();
+
+      if (maskErr || !maskRow) throw new Error(`Mask not found for question ${questionId}`);
+
+      const cacheKey = maskRow.mask_storage_path;
+      if (!getCachedMask(cacheKey)) {
+        const { data: maskFile, error: downloadErr } = await db.storage
+          .from('question-masks')
+          .download(maskRow.mask_storage_path);
+
+        if (downloadErr || !maskFile) {
+          throw new Error(`Mask download failed: ${downloadErr?.message}`);
+        }
+
+        await warmMaskCache(
+          await maskFile.arrayBuffer(),
+          cacheKey,
+          maskRow.mask_width ?? undefined,
+          maskRow.mask_height ?? undefined,
+        );
+      }
+
+      return Response.json({ ok: true, warmed: true }, { headers: corsHeaders });
+    } catch (e) {
+      console.error('[submit-answer warm]', e);
+      return err(500, 'internal');
+    }
+  }
+
+  if (req.method !== 'POST') return err(405, 'method_not_allowed');
 
   // 2. Parse and validate body
   let body: SubmitAnswerRequest;
