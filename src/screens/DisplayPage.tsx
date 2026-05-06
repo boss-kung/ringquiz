@@ -212,6 +212,7 @@ function DisplayImageStage({
   maskUrl,
   revealImageUrl,
   showReveal = false,
+  revealReady = true,
   fullWidth = false,
   variant = 'question',
 }: {
@@ -219,6 +220,7 @@ function DisplayImageStage({
   maskUrl?: string | null;
   revealImageUrl?: string | null;
   showReveal?: boolean;
+  revealReady?: boolean;
   fullWidth?: boolean;
   variant?: 'clue' | 'question' | 'reveal';
 }) {
@@ -227,8 +229,8 @@ function DisplayImageStage({
     variant === 'reveal' ? 'quiz-image-shell--display-reveal' :
     'quiz-image-shell--display-question';
 
-  const displayImageUrl = showReveal ? (revealImageUrl ?? imageUrl) : imageUrl;
-  const shellClassName = `ds-display-shell ${shellVariant}${fullWidth ? ' ds-display-shell-full' : ''}`;
+  const displayImageUrl = showReveal && revealReady ? (revealImageUrl ?? imageUrl) : imageUrl;
+  const shellClassName = `ds-display-shell ${shellVariant}${fullWidth ? ' ds-display-shell-full' : ''}${showReveal && revealReady ? ' quiz-image-shell--reveal-active' : ''}`;
 
   return (
     <div className="ds-display-image-wrap">
@@ -1266,6 +1268,15 @@ function DsReveal({
   statsFetchError: boolean;
 }) {
   const [showReveal, setShowReveal] = useState(false);
+  const [revealImageReady, setRevealImageReady] = useState(false);
+
+  const baseImg = question ? resolveQuestionImageUrl(question.image_url) : null;
+  const revealImg = question ? (resolveRevealImageUrl(question.reveal_image_url) ?? baseImg) : null;
+  const maskUrl = question
+    ? `${FUNCTIONS_URL}/get-reveal-mask?questionId=${encodeURIComponent(question.id)}&updatedAt=${encodeURIComponent(gameState.updated_at ?? '')}`
+    : null;
+
+  usePreloadImages(maskUrl, revealImg);
 
   useEffect(() => {
     setShowReveal(false);
@@ -1278,6 +1289,28 @@ function DsReveal({
     return () => clearInterval(id);
   }, [gameState.updated_at, question?.id, getServerTime]);
 
+  useEffect(() => {
+    if (!revealImg || revealImg === baseImg) {
+      setRevealImageReady(true);
+      return;
+    }
+
+    setRevealImageReady(false);
+    let cancelled = false;
+    const img = new Image();
+    img.onload = () => {
+      if (!cancelled) setRevealImageReady(true);
+    };
+    img.onerror = () => {
+      if (!cancelled) setRevealImageReady(true);
+    };
+    img.src = revealImg;
+
+    return () => {
+      cancelled = true;
+    };
+  }, [baseImg, revealImg]);
+
   if (!question) {
     return (
       <DsShell centered>
@@ -1285,12 +1318,6 @@ function DsReveal({
       </DsShell>
     );
   }
-
-  const baseImg = resolveQuestionImageUrl(question.image_url);
-  const revealImg = resolveRevealImageUrl(question.reveal_image_url);
-  const maskUrl = `${FUNCTIONS_URL}/get-reveal-mask?questionId=${encodeURIComponent(question.id)}&updatedAt=${encodeURIComponent(gameState.updated_at ?? '')}`;
-  // P0.6 — preload mask early so it's cached before the reveal moment
-  usePreloadImages(maskUrl);
 
   const submittedCount = stats?.submitted_count ?? 0;
   const correctCount = stats?.correct_count ?? 0;
@@ -1332,9 +1359,10 @@ function DsReveal({
         <div className="ds-stage-card ds-stage-card-visual ds-reveal-right">
           <DisplayImageStage
             imageUrl={baseImg}
-            maskUrl={maskUrl}
+            maskUrl={maskUrl ?? undefined}
             revealImageUrl={revealImg ?? baseImg}
             showReveal={showReveal}
+            revealReady={revealImageReady}
             fullWidth
             variant="reveal"
           />
@@ -1364,6 +1392,19 @@ function DsLeaderboard({
   const top = leaderboard.slice(0, 10);
   const MEDALS = ['🥇', '🥈', '🥉'];
   const podiumSlots = [1, 0, 2].filter((i) => top[i]);
+  const podiumMaxScore = podiumSlots.length > 0
+    ? Math.max(...podiumSlots.map((i) => top[i].cumulative_score))
+    : 0;
+  const podiumMinScore = podiumSlots.length > 0
+    ? Math.min(...podiumSlots.map((i) => top[i].cumulative_score))
+    : 0;
+
+  const podiumBarHeight = useCallback((score: number) => {
+    if (podiumMaxScore <= 0) return 112;
+    if (podiumMaxScore === podiumMinScore) return 120;
+    const normalized = (score - podiumMinScore) / (podiumMaxScore - podiumMinScore);
+    return Math.round(86 + normalized * 64);
+  }, [podiumMaxScore, podiumMinScore]);
 
   useLayoutEffect(() => {
     const nextTops = new Map<string, number>();
@@ -1470,7 +1511,10 @@ function DsLeaderboard({
               {i === 0 && <div className="ds-pod-crown">👑</div>}
               <div className="ds-pod-av" style={{ background: avGrad(i) }}>{initials(top[i].display_name)}</div>
               <div className="ds-pod-name">{top[i].display_name}</div>
-              <div className={`ds-pod-bar ds-pod-bar-${i}`}>
+              <div
+                className={`ds-pod-bar ds-pod-bar-${i}`}
+                style={{ height: `${podiumBarHeight(top[i].cumulative_score)}px` }}
+              >
                 <span className="ds-mono ds-pod-score">
                   <AnimatedScore
                     value={top[i].cumulative_score}

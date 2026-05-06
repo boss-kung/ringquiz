@@ -55,19 +55,12 @@ export function RevealScreen() {
     triggerFeedbackFx(effectiveRevealResult.is_correct ? 'answerCorrect' : 'answerWrong');
   }, [effectiveRevealResult?.is_correct, effectiveRevealResult?.score]);
 
-  if (!question) {
-    return (
-      <div style={{ display: 'flex', minHeight: '100%', alignItems: 'center', justifyContent: 'center', background: 'var(--navy)' }}>
-        <p style={{ color: 'var(--text-2)' }}>กำลังโหลดข้อมูล...</p>
-      </div>
-    );
-  }
-
-  const isCorrect = effectiveRevealResult?.is_correct ?? false;
-  const originalQuestionImage = resolveQuestionImageUrl(question.image_url);
-  const revealBaseImage =
-    resolveRevealImageUrl(question.reveal_image_url) ??
-    originalQuestionImage;
+  const originalQuestionImage = question
+    ? resolveQuestionImageUrl(question.image_url)
+    : null;
+  const revealBaseImage = question
+    ? (resolveRevealImageUrl(question.reveal_image_url) ?? originalQuestionImage)
+    : null;
 
   useEffect(() => {
     if (!revealBaseImage || revealBaseImage === originalQuestionImage) {
@@ -90,10 +83,21 @@ export function RevealScreen() {
       cancelled = true;
     };
   }, [originalQuestionImage, revealBaseImage]);
+
+  if (!question) {
+    return (
+      <div style={{ display: 'flex', minHeight: '100%', alignItems: 'center', justifyContent: 'center', background: 'var(--navy)' }}>
+        <p style={{ color: 'var(--text-2)' }}>กำลังโหลดข้อมูล...</p>
+      </div>
+    );
+  }
+
+  const isCorrect = effectiveRevealResult?.is_correct ?? false;
   const revealCircle =
     effectiveRevealResult?.selected_x_ratio != null && effectiveRevealResult?.selected_y_ratio != null
       ? { xRatio: effectiveRevealResult.selected_x_ratio, yRatio: effectiveRevealResult.selected_y_ratio }
       : null;
+  const persistentCircle = circlePosition ?? revealCircle;
   const isResolvingResult = !effectiveRevealResult && !revealNoAnswer;
 
   /* Banner variant */
@@ -165,14 +169,14 @@ export function RevealScreen() {
           <QuestionImage
             imageUrl={showRevealImage && revealImageReady ? revealBaseImage : originalQuestionImage}
             circleRadiusRatio={question.circle_radius_ratio}
-            circle={revealCircle ?? circlePosition}
+            circle={persistentCircle}
             onCircleChange={() => {}}
             locked
             maskOverlayClassName={!showRevealImage ? 'reveal-mask-static' : undefined}
             maskOverlayUrl={!showRevealImage ? `${FUNCTIONS_URL}/get-reveal-mask?questionId=${encodeURIComponent(
               question.id
             )}&updatedAt=${encodeURIComponent(gameState?.updated_at ?? '')}` : undefined}
-            shellClassName="quiz-image-shell--reveal"
+            shellClassName={`quiz-image-shell--reveal${showRevealImage && revealImageReady ? ' quiz-image-shell--reveal-active' : ''}`}
           />
         </div>
       </div>

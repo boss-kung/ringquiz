@@ -591,6 +591,11 @@ body.host-route {
 @keyframes revealMaskPulse { 0%,100%{opacity:.1}50%{opacity:1} }
 .reveal-mask-pulse { animation: revealMaskPulse 1s ease-in-out infinite; transform-origin: center; }
 .reveal-mask-static { opacity: .92; transform-origin: center; }
+@keyframes revealImageBloom {
+  0% { opacity: 0; transform: scale(1.045) translateY(10px); filter: blur(10px) saturate(.88); }
+  58% { opacity: 1; transform: scale(1.012) translateY(0); filter: blur(0) saturate(1.08); }
+  100% { opacity: 1; transform: scale(1) translateY(0); filter: blur(0) saturate(1); }
+}
 
 /* ── QUIZ IMAGE STAGE ───────────────────────────────────────────────────────── */
 .quiz-image-stage {
@@ -709,6 +714,10 @@ body.host-route {
   border-radius: 50%;
   user-select: none;
   -webkit-user-drag: none;
+}
+.quiz-image-shell--reveal-active .quiz-image-media {
+  animation: revealImageBloom .9s cubic-bezier(.2,.9,.2,1) both;
+  will-change: transform, opacity, filter;
 }
 
 .quiz-image-shell--question {
@@ -1267,9 +1276,9 @@ body.host-route {
   display: flex; align-items: flex-end; justify-content: center;
   padding-bottom: 8px;
 }
-.ds-pod-bar-0 { height: clamp(60px,9vh,110px); background: linear-gradient(180deg,rgba(180,190,200,.45),rgba(140,155,170,.28)); border: 1px solid rgba(255,255,255,.08); }
-.ds-pod-bar-1 { height: clamp(80px,13vh,150px); background: linear-gradient(180deg,rgba(245,199,74,.55),rgba(180,140,10,.38)); border: 1px solid rgba(245,199,74,.2); }
-.ds-pod-bar-2 { height: clamp(48px,7vh,90px); background: linear-gradient(180deg,rgba(195,140,70,.45),rgba(145,95,35,.28)); border: 1px solid rgba(195,140,70,.15); }
+.ds-pod-bar-0 { background: linear-gradient(180deg,rgba(180,190,200,.45),rgba(140,155,170,.28)); border: 1px solid rgba(255,255,255,.08); }
+.ds-pod-bar-1 { background: linear-gradient(180deg,rgba(245,199,74,.55),rgba(180,140,10,.38)); border: 1px solid rgba(245,199,74,.2); }
+.ds-pod-bar-2 { background: linear-gradient(180deg,rgba(195,140,70,.45),rgba(145,95,35,.28)); border: 1px solid rgba(195,140,70,.15); }
 .ds-pod-score { font-size: clamp(11px,1.2vw,15px); font-weight: 800; }
 .ds-lb-list {
   flex: 1;
