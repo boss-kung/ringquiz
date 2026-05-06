@@ -161,8 +161,12 @@ function usePreloadImages(...urls: (string | null | undefined)[]) {
     if (!urlKey) return;
     const imgs = urlKey.split('\0').map((url) => {
       const img = new Image();
+      img.onerror = () => {
+        if (DISPLAY_RT_DEBUG) {
+          console.warn('[Display] preload failed:', url.split('?')[0]);
+        }
+      };
       img.src = url;
-      img.onerror = () => console.warn('[Display] preload failed:', url.split('?')[0]);
       return img;
     });
     return () => { imgs.forEach((img) => { img.src = ''; }); };
@@ -1546,12 +1550,6 @@ function DsCountdown({
   const circ = 2 * Math.PI * 110;
   const offset = progress >= 1 ? 0 : circ * (1 - progress);
   const clueUrl = question ? resolveQuestionImageUrl(question.image_url) : null;
-
-  // P0.6 — preload mask at reveal-phase ahead of time
-  const maskUrl = question
-    ? `${FUNCTIONS_URL}/get-reveal-mask?questionId=${encodeURIComponent(question.id)}&updatedAt=${encodeURIComponent(gameState.updated_at ?? '')}`
-    : null;
-  usePreloadImages(maskUrl);
 
   return (
     <DsShell centered>
