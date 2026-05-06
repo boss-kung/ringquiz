@@ -19,7 +19,6 @@ export function Timer({ remainingMs, totalMs, active = true }: Props) {
   return (
     <div className={`gr-timer ${urgent ? 'gr-timer-urgent' : ''}${critical ? ' gr-timer-critical' : ''}`}>
       <div className="gr-timer-topline">
-        <span className="gr-timer-label">QUESTION</span>
         <span
           className="gr-mono gr-timer-value timer-digit"
           style={{ minWidth: '4.5ch', textAlign: 'right' }}

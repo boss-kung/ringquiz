@@ -17,12 +17,12 @@ export function LeaderboardScreen() {
       {/* Header */}
       <div className="gr-header" style={{ borderBottom: '1px solid var(--border)', padding: '14px 20px 12px' }}>
         <div>
-          <div className="gr-label-xs" style={{ marginBottom: 4 }}>
+          <div className="gr-label-xs" style={{ marginBottom: 4 , fontSize: 16}}>
             {displayOrder != null ? `หลังจบ Question ${displayOrder}` : 'ผู้นำในเกมนี้'}
           </div>
-          <h2 style={{ fontSize: 18, fontWeight: 900, color: 'var(--text)' }}>Leaderboard</h2>
+          <h2 style={{ fontSize: 24, fontWeight: 900, color: 'var(--text)' }}>Leaderboard</h2>
         </div>
-        <div className="gr-badge gr-badge-gold">
+        <div className="gr-badge gr-badge-gold" style={{ fontSize: 16, fontWeight: 700 }}>
           Top {leaderboard.length || '—'}
         </div>
       </div>
@@ -33,7 +33,7 @@ export function LeaderboardScreen() {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
             <div style={{ textAlign: 'center' }}>
               <div style={{ fontSize: 30, marginBottom: 8, animation: 'grFloat 3.5s ease-in-out infinite' }}>⏳</div>
-              <p style={{ fontSize: 13, color: 'var(--text-2)' }}>กำลังโหลดตารางคะแนน...</p>
+              <p style={{ fontSize: 18, color: 'var(--text-2)' }}>กำลังโหลดตารางคะแนน...</p>
             </div>
           </div>
         ) : (

@@ -88,26 +88,11 @@ function logDisplayRt(channel: string, status: string) {
 function getSpecialRoundIntro(type: SpecialRoundType) {
   switch (type) {
     case 'double_score':
-      return {
-        kicker: 'Special Round',
-        title: 'Double Score Round',
-        subtitle: 'ข้อนี้ตอบถูกแล้วได้คะแนนคูณ 2',
-        badge: 'DOUBLE SCORE ×2',
-      };
+      return { badge: 'DOUBLE SCORE ×2' };
     case 'speed_bonus':
-      return {
-        kicker: 'Special Round',
-        title: 'Speed Bonus Round',
-        subtitle: 'ยิ่งตอบเร็ว ยิ่งได้โบนัสเพิ่ม',
-        badge: 'SPEED BONUS ⚡',
-      };
+      return { badge: 'SPEED BONUS ⚡' };
     case 'mystery_round':
-      return {
-        kicker: 'Special Round',
-        title: 'Mystery Round',
-        subtitle: 'รอบพิเศษที่มีเซอร์ไพรส์รออยู่',
-        badge: 'MYSTERY ROUND 🎭',
-      };
+      return { badge: 'MYSTERY ROUND 🎭' };
     default:
       return null;
   }
@@ -412,21 +397,6 @@ function SpecialRoundBadge({ type, large = false }: { type: SpecialRoundType; la
   );
 }
 
-function SpecialRoundIntroBanner({ type }: { type: SpecialRoundType }) {
-  const intro = getSpecialRoundIntro(type);
-  if (!intro) return null;
-
-  return (
-    <div className="ds-special-round-intro" aria-live="polite">
-      <div className={`ds-special-round-intro-card ds-special-round-intro-${type}`}>
-        <div className="ds-special-round-intro-kicker">{intro.kicker}</div>
-        <div className="ds-special-round-intro-title">{intro.title}</div>
-        <div className="ds-special-round-intro-subtitle">{intro.subtitle}</div>
-      </div>
-    </div>
-  );
-}
-
 // ── DisplayStageFxOverlay — host-triggered visual events ──────────────────────
 
 interface ActiveDisplayFx {
@@ -522,10 +492,7 @@ export function DisplayPage() {
   const lastGameStateErrLogRef = useRef(0);
 
   const [activeDisplayFx, setActiveDisplayFx] = useState<ActiveDisplayFx | null>(null);
-  const [specialRoundIntroType, setSpecialRoundIntroType] = useState<SpecialRoundType | null>(null);
   const displayFxTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const specialRoundIntroTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const specialRoundIntroQuestionIdRef = useRef<string | null>(null);
 
   const getServerTime = useDisplayServerTime();
   const reducedMotion = useReducedMotion();
@@ -546,7 +513,6 @@ export function DisplayPage() {
       if (leaderboardStageTimerRef.current) clearTimeout(leaderboardStageTimerRef.current);
       if (leaderboardSettleTimerRef.current) clearTimeout(leaderboardSettleTimerRef.current);
       if (displayFxTimerRef.current) clearTimeout(displayFxTimerRef.current);
-      if (specialRoundIntroTimerRef.current) clearTimeout(specialRoundIntroTimerRef.current);
     };
   }, []);
 
@@ -558,28 +524,8 @@ export function DisplayPage() {
       setLeaderboardFx({});
       setLeaderChange(null);
       setLeaderboardAnimationStage('steady');
-      setSpecialRoundIntroType(null);
-      specialRoundIntroQuestionIdRef.current = null;
     }
   }, [gameState?.current_question_id, gameState?.status]);
-
-  useEffect(() => {
-    const status = gameState?.status;
-    const questionId = question?.id ?? null;
-    const specialType = question?.special_round_type ?? 'normal';
-    const shouldShowForPhase = status === 'countdown' || status === 'question_open';
-
-    if (!shouldShowForPhase || !questionId || specialType === 'normal') return;
-    if (specialRoundIntroQuestionIdRef.current === questionId) return;
-
-    specialRoundIntroQuestionIdRef.current = questionId;
-    setSpecialRoundIntroType(specialType);
-    if (specialRoundIntroTimerRef.current) clearTimeout(specialRoundIntroTimerRef.current);
-    specialRoundIntroTimerRef.current = setTimeout(() => {
-      setSpecialRoundIntroType(null);
-      specialRoundIntroTimerRef.current = null;
-    }, 2600);
-  }, [gameState?.status, question?.id, question?.special_round_type]);
 
   // ── P0.2 — unified highlight helper ─────────────────────────────────────────
   // Called from both realtime INSERT callback and polling reconcile.
@@ -1184,7 +1130,6 @@ export function DisplayPage() {
       <DisplayTransition phase={status} reducedMotion={reducedMotion}>
         {screen}
       </DisplayTransition>
-      {specialRoundIntroType && <SpecialRoundIntroBanner type={specialRoundIntroType} />}
       <DisplayStageFxOverlay fx={activeDisplayFx} />
     </div>
   );

@@ -21,8 +21,8 @@ function initials(name: string) {
 }
 
 const PODIUM_GRADS = [
-  'linear-gradient(180deg,rgba(180,190,200,.45),rgba(140,155,170,.28))',
   'linear-gradient(180deg,rgba(245,199,74,.55),rgba(180,140,10,.38))',
+    'linear-gradient(180deg,rgba(180,190,200,.45),rgba(140,155,170,.28))',
   'linear-gradient(180deg,rgba(195,140,70,.45),rgba(145,95,35,.28))',
 ];
 const PODIUM_H  = [78, 108, 62];
@@ -60,7 +60,9 @@ export function LeaderboardTable({
       {/* Podium */}
       {showPodium && podiumEntries.length > 0 && (
         <div className="gr-card" style={{ padding: '16px 12px 14px', textAlign: 'center' }}>
-          <div className="gr-label-xs" style={{ marginBottom: 14 }}>Top 3</div>
+          <div className="gr-label-xs" style={{ marginBottom: 14 , fontSize: 22 }}>
+            Top 3
+          </div>
           <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: 8 }}>
             {podiumOrder
               .filter((idx) => podiumEntries[idx])
@@ -107,7 +109,7 @@ export function LeaderboardTable({
                         border: isMe ? '1px solid rgba(245,199,74,.25)' : '1px solid rgba(255,255,255,.07)',
                       }}
                     >
-                      <span className="gr-mono" style={{ fontSize: 12, fontWeight: 800, color: idx === 1 ? '#0C1228' : 'var(--text)' }}>
+                      <span className="gr-mono" style={{ fontSize: 16, fontWeight: 800, color: idx === 1 ? '#0C1228' : 'var(--text)' }}>
                         {entry.cumulative_score.toLocaleString()}
                       </span>
                     </div>
@@ -134,16 +136,16 @@ export function LeaderboardTable({
               </div>
               <span
                 className="gr-mono"
-                style={{ width: 28, textAlign: 'center', fontSize: 12, fontWeight: 700, color: 'var(--text-3)', flexShrink: 0 }}
+                style={{ width: 28, textAlign: 'center', fontSize: 18, fontWeight: 700, color: 'var(--text-3)', flexShrink: 0 }}
               >
                 #{entry.rank}
               </span>
-              <span style={{ flex: 1, fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text)' }}>
+              <span style={{ flex: 1, fontSize: 18, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text)' }}>
                 {entry.display_name}
-                {isMe && <span style={{ marginLeft: 6, fontSize: 10, color: 'var(--gold)' }}>(you)</span>}
+                {isMe && <span style={{ marginLeft: 6, fontSize: 12, color: 'var(--gold)' }}>(you)</span>}
               </span>
               <div style={{ textAlign: 'right' }}>
-                <div className="gr-mono" style={{ fontSize: 14, fontWeight: 800, color: isMe ? 'var(--gold)' : 'var(--text)' }}>
+                <div className="gr-mono" style={{ fontSize: 18, fontWeight: 800, color: isMe ? 'var(--gold)' : 'var(--text)' }}>
                   {entry.cumulative_score.toLocaleString()}
                 </div>
                 <div className="gr-label-xs" style={{ marginTop: 2 }}>คะแนน</div>
@@ -161,15 +163,15 @@ export function LeaderboardTable({
             <div className="gr-lb-avatar" style={{ background: avGrad(0) }}>
               {initials(playerEntry.display_name)}
             </div>
-            <span className="gr-mono" style={{ width: 28, textAlign: 'center', fontSize: 12, fontWeight: 700, color: 'var(--text-3)', flexShrink: 0 }}>
+            <span className="gr-mono" style={{ width: 28, textAlign: 'center', fontSize: 18, fontWeight: 700, color: 'var(--text-3)', flexShrink: 0 }}>
               #{playerEntry.rank}
             </span>
-            <span style={{ flex: 1, fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text)' }}>
+            <span style={{ flex: 1, fontSize: 18, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text)' }}>
               {playerEntry.display_name}
-              <span style={{ marginLeft: 6, fontSize: 10, color: 'var(--gold)' }}>(you)</span>
+              <span style={{ marginLeft: 6, fontSize: 12, color: 'var(--gold)' }}>(you)</span>
             </span>
             <div style={{ textAlign: 'right' }}>
-              <div className="gr-mono" style={{ fontSize: 14, fontWeight: 800, color: 'var(--gold)' }}>
+              <div className="gr-mono" style={{ fontSize: 18, fontWeight: 800, color: 'var(--gold)' }}>
                 {playerEntry.cumulative_score.toLocaleString()}
               </div>
               <div className="gr-label-xs" style={{ marginTop: 2 }}>คะแนน</div>

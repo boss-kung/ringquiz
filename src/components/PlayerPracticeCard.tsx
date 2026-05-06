@@ -37,7 +37,7 @@ const PRACTICE_MASK_ALPHA_THRESHOLD = 10;
 // Multiplier for "close" check — expand search radius without counting as correct
 const CLOSE_RADIUS_MULTIPLIER = 1.9;
 // Number of local confetti particles on correct
-const CONFETTI_COUNT = 24;
+const CONFETTI_COUNT = 100;
 
 function withBaseUrl(path: string): string {
   const base = import.meta.env.BASE_URL || '/';
@@ -47,9 +47,9 @@ function withBaseUrl(path: string): string {
 
 const PRACTICE_QUESTION: PracticeQuestionConfig = {
   id: 'local-practice-1',
-  title: 'ซ้อมก่อนเริ่ม',
+  title: 'มาซ้อมก่อนเริ่มเกมกันเถอะ!',
   prompt: 'ซ้อมก่อนเริ่ม',
-  instruction: 'วางวงกลม → ส่ง • ไม่คิดคะแนน',
+  instruction: 'วิธีเล่น: วางวงกลมที่คิดว่าเป็นคำตอบ → กดปุ่มยืนยันคำตอบ (ตอนนี้ยังไม่คิดคะแนน)',
   imageUrl: withBaseUrl('practice/practice-demo-image.svg'),
   maskUrl: withBaseUrl('practice/practice-demo-mask.svg'),
   revealOverlayUrl: withBaseUrl('practice/practice-demo-reveal.svg'),
@@ -437,7 +437,7 @@ export function PlayerPracticeCard() {
 
       <div className="pw-practice-actions">
         <button type="button" className="pw-submit-btn" onClick={handleSubmit} disabled={submitted || !answer}>
-          {submitted ? 'ส่งแล้ว' : 'ส่ง'}
+          {submitted ? 'ส่งแล้ว' : 'ยืนยันคำตอบ'}
         </button>
         <button type="button" className="pw-reset-btn" onClick={resetPractice}>
           {submitted ? 'ลองใหม่' : 'เริ่มใหม่'}

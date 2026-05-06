@@ -214,13 +214,13 @@ export function RevealScreen() {
       {/* Result banner */}
       <div className={bannerClass} style={{ position: 'relative', zIndex: 1 }}>
         {isResolvingResult ? (
-          <p style={{ fontSize: 13, color: 'var(--text-2)' }}>กำลังดึงผลลัพธ์...</p>
+          <p style={{ fontSize: 18, color: 'var(--text-2)' }}>กำลังดึงผลลัพธ์...</p>
         ) : (
           <>
             <div style={{ fontSize: 26, marginBottom: 6 }}>{resultIcon}</div>
             <div
               style={{
-                fontSize: 19, fontWeight: 900,
+                fontSize: 30, fontWeight: 900,
                 color: revealNoAnswer ? 'var(--text-2)' : isCorrect ? 'var(--emerald)' : 'var(--rose)',
               }}
             >
@@ -230,7 +230,7 @@ export function RevealScreen() {
               <div
                 className="gr-mono"
                 style={{
-                  fontSize: effectiveRevealResult && isCorrect ? 18 : 11,
+                  fontSize: effectiveRevealResult && isCorrect ? 30 : 26,
                   fontWeight: 900,
                   color: effectiveRevealResult && isCorrect ? 'var(--gold)' : 'var(--text-2)',
                   marginTop: 4,

@@ -59,21 +59,21 @@ export function LockedScreen() {
           </div>
         </div>
 
-        <div className="gr-label-sm gr-gold" style={{ marginBottom: 9 }}>
-          {hasAnswered ? 'ส่งคำตอบแล้ว' : 'รอผู้เล่น'}
+        <div className="gr-label-sm gr-gold" style={{ marginBottom: 9 , fontSize: 18 }}>
+          {hasAnswered ? 'ส่งคำตอบแล้ว' : 'คุณตอบไม่ทันเวลา'}
         </div>
 
         <h2 style={{ fontSize: 24, fontWeight: 900, marginBottom: 11, color: 'var(--text)' }}>
-          {hasAnswered ? 'รอเฉลยคำตอบ…' : 'กำลังรอ…'}
+          {hasAnswered ? 'รอเฉลยคำตอบ…' : 'รอเฉลยคำตอบ…'}
         </h2>
 
-        <p style={{ fontSize: 13, color: 'var(--text-2)', lineHeight: 1.6 }}>
+        <p style={{ fontSize: 18, color: 'var(--text-2)', lineHeight: 1.6 }}>
           {hasAnswered
             ? submitPending
               ? 'รับคำตอบแล้ว — กำลังบันทึกคำตอบของคุณ...'
               : 'คำตอบถูกบันทึกแล้ว — รอดูว่าถูกหรือผิด!'
             : question
-            ? 'การตอบคำถามถูกล็อคแล้ว รอให้พิธีกรเฉลยคำตอบ'
+            ? 'การตอบคำถามข้อนี้จบแล้ว รอให้พิธีกรเฉลยคำตอบ'
             : 'กำลังรอพิธีกรเปิดคำถาม...'}
         </p>
 

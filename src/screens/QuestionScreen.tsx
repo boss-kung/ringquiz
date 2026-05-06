@@ -14,11 +14,11 @@ import { FUNCTIONS_URL, supabase } from '../lib/supabase';
 function getSpecialRoundIntro(type: string) {
   switch (type) {
     case 'double_score':
-      return { title: 'Double Score Round', subtitle: 'ข้อนี้ตอบถูกแล้วได้คะแนนคูณ 2', badge: '×2 Double Score' };
+      return { badge: '×2 Double Score' };
     case 'speed_bonus':
-      return { title: 'Speed Bonus Round', subtitle: 'ยิ่งตอบเร็ว ยิ่งได้โบนัสเพิ่ม', badge: '⚡ Speed Bonus' };
+      return { badge: '⚡ Speed Bonus' };
     case 'mystery_round':
-      return { title: 'Mystery Round', subtitle: 'ข้อนี้มีบรรยากาศพิเศษ จับตาให้ดี', badge: '🎭 Mystery Round' };
+      return { badge: '🎭 Mystery Round' };
     default:
       return null;
   }
@@ -36,14 +36,13 @@ export function QuestionScreen() {
   const getServerTime = useGetServerTime();
   const [remainingMs, setRemainingMs] = useState<number | null>(null);
   const [buttonPressed, setButtonPressed] = useState(false);
-  const [showSpecialIntro, setShowSpecialIntro] = useState(false);
   const warmedQuestionIdRef = useRef<string | null>(null);
-  const specialIntroQuestionIdRef = useRef<string | null>(null);
   const latestCirclePositionRef = useRef<CirclePosition | null>(null);
   // Track last whole-second bucket for timerTickUrgent haptic (one per second, not per frame)
   const lastUrgentBucketRef = useRef<number | null>(null);
 
   const endsAt = gameState?.question_ends_at ?? null;
+  const displayOrder = question?.play_order ?? question?.order_index ?? gameState?.current_question_index ?? null;
   const durationMs = (question?.time_limit_seconds ?? 0) * 1000;
 
   useEffect(() => {
@@ -120,20 +119,6 @@ export function QuestionScreen() {
   }, [question?.id]);
 
   useEffect(() => {
-    const intro = getSpecialRoundIntro(question?.special_round_type ?? 'normal');
-    if (!question?.id || !intro) {
-      setShowSpecialIntro(false);
-      return;
-    }
-    if (specialIntroQuestionIdRef.current === question.id) return;
-
-    specialIntroQuestionIdRef.current = question.id;
-    setShowSpecialIntro(true);
-    const timer = setTimeout(() => setShowSpecialIntro(false), 2400);
-    return () => clearTimeout(timer);
-  }, [question?.id, question?.special_round_type]);
-
-  useEffect(() => {
     latestCirclePositionRef.current = circlePosition;
   }, [circlePosition]);
 
@@ -204,18 +189,9 @@ export function QuestionScreen() {
       className={rootClasses}
       style={{ display: 'flex', minHeight: '100%', flexDirection: 'column', background: 'var(--navy)', position: 'relative' }}
     >
-      {showSpecialIntro && specialRoundIntro && (
-        <div className="gr-special-round-intro" aria-live="polite">
-          <div className={`gr-special-round-intro-card gr-special-badge-${question.special_round_type}`}>
-            <div className="gr-special-round-intro-kicker">Special Round</div>
-            <div className="gr-special-round-intro-title">{specialRoundIntro.title}</div>
-            <div className="gr-special-round-intro-subtitle">{specialRoundIntro.subtitle}</div>
-          </div>
-        </div>
-      )}
-
       {/* Header */}
       <div className="gr-qhud-wrap">
+        <div className="gr-qhud-order">Question {displayOrder ?? '—'}</div>
         <Timer
           remainingMs={remainingMs}
           totalMs={durationMs}
@@ -258,15 +234,15 @@ export function QuestionScreen() {
       <div className="gr-qsubmit">
         <div style={{ marginBottom: submitted || timeExpired || submitError ? 8 : 0 }}>
           {timeExpired && !submitted && !submitting && (
-            <p style={{ textAlign: 'center', fontSize: 12, fontWeight: 600, color: 'var(--rose)', marginBottom: 6 }}>
+            <p style={{ textAlign: 'center', fontSize: 18, fontWeight: 600, color: 'var(--rose)', marginBottom: 6 }}>
               หมดเวลา — คำตอบไม่ได้รับการบันทึก
             </p>
           )}
           {submitError && (
-            <p style={{ textAlign: 'center', fontSize: 12, color: 'var(--rose)', marginBottom: 6 }}>{submitError}</p>
+            <p style={{ textAlign: 'center', fontSize: 18, color: 'var(--rose)', marginBottom: 6 }}>{submitError}</p>
           )}
           {submitted && submitResult && (
-            <p style={{ textAlign: 'center', fontSize: 12, fontWeight: 600, color: 'var(--emerald)', marginBottom: 6 }}>
+            <p style={{ textAlign: 'center', fontSize: 18, fontWeight: 600, color: 'var(--emerald)', marginBottom: 6 }}>
               ✓ คำตอบถูกส่งแล้ว — กำลังรอผลลัพธ์
             </p>
           )}

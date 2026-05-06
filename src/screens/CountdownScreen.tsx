@@ -91,7 +91,7 @@ export function CountdownScreen() {
 
       <div style={{ position: 'relative', zIndex: 1, width: '100%', maxWidth: cluePhase ? 480 : 320 }}>
         {question && (
-          <div className="gr-label-sm gr-gold" style={{ marginBottom: 10, letterSpacing: '.18em' }}>
+          <div className="gr-label-sm gr-gold" style={{ marginBottom: 10, letterSpacing: '.18em', fontSize: 24 }}>
             Question {displayOrder ?? '—'}
           </div>
         )}
@@ -158,7 +158,6 @@ export function CountdownScreen() {
             </>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center' }}>
-              <div className="gr-label-sm gr-gold" style={{ letterSpacing: '.14em' }}>ภาพปริศนา</div>
               {clueImageUrl ? (
                 <div className="quiz-image-shell quiz-image-shell--clue">
                   <div className="quiz-image-circle">
@@ -175,7 +174,6 @@ export function CountdownScreen() {
                   ไม่มีภาพปริศนาสำหรับคำถามนี้
                 </div>
               )}
-              <p style={{ fontSize: 12, color: 'var(--text-2)' }}>ดูภาพให้ดีก่อนตอบ</p>
             </div>
           )}
         </div>

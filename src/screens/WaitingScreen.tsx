@@ -39,7 +39,9 @@ export function WaitingScreen() {
       <div className="gr-header pw-header">
         <div className="pw-header-copy">
           <div className="gr-label-xs">Golden Ring · Lobby</div>
-          <div className="pw-header-title">รอเริ่มเกม</div>
+          <div className="pw-header-title" style={{ fontSize: 24, fontWeight: 800 }}>
+            รอเริ่มเกม
+          </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <SoundFxToggle />
@@ -49,9 +51,9 @@ export function WaitingScreen() {
 
       <div className="pw-body">
         <div className="gr-card-gold pw-status-bar">
-          <div className="pw-status-line">
+          <div className="pw-status-line" style={{fontSize:28}}>
             <span className="pw-status-dot" />
-            <strong>{displayName}</strong> พร้อมแล้ว
+            ยินดีต้อนรับ!<strong>{displayName}</strong> พร้อมเล่นเกมแล้ว~
           </div>
         </div>
 
