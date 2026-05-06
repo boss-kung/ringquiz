@@ -65,6 +65,8 @@ interface RealtimeStatus {
   leaderboard: ChannelStatus;
 }
 
+let gameSetSpecialRoundTypeSupported: boolean | null = null;
+
 function toChannelStatus(supabaseStatus: string): ChannelStatus {
   switch (supabaseStatus) {
     case 'SUBSCRIBED':    return 'subscribed';
@@ -860,17 +862,38 @@ export function DisplayPage() {
         };
 
         if (gsqId) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const { data: gsqData } = await (supabase as any)
+          const { data: gsqData } = await supabase
             .from('game_set_questions')
-            .select('play_order, time_limit_seconds, max_score, min_correct_score, circle_radius_ratio, special_round_type')
+            .select('play_order, time_limit_seconds, max_score, min_correct_score, circle_radius_ratio')
             .eq('id', gsqId)
-            .single() as { data: { play_order: number; time_limit_seconds: number; max_score: number; min_correct_score: number; circle_radius_ratio: number; special_round_type?: string } | null };
+            .single() as { data: { play_order: number; time_limit_seconds: number; max_score: number; min_correct_score: number; circle_radius_ratio: number } | null };
           if (gsqData) {
             dq = { ...dq, play_order: gsqData.play_order, time_limit_seconds: gsqData.time_limit_seconds,
               max_score: gsqData.max_score, min_correct_score: gsqData.min_correct_score,
               circle_radius_ratio: gsqData.circle_radius_ratio,
-              special_round_type: (gsqData.special_round_type as SpecialRoundType) ?? 'normal' };
+              special_round_type: 'normal' };
+          }
+
+          if (gameSetSpecialRoundTypeSupported !== false) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const { data: srtData, error: srtErr } = await (supabase as any)
+              .from('game_set_questions')
+              .select('special_round_type')
+              .eq('id', gsqId)
+              .single() as {
+                data: { special_round_type?: string } | null;
+                error: { message?: string } | null;
+              };
+
+            if (srtErr && (srtErr.message ?? '').includes('does not exist')) {
+              gameSetSpecialRoundTypeSupported = false;
+            } else if (!srtErr) {
+              gameSetSpecialRoundTypeSupported = true;
+            }
+
+            if (srtData?.special_round_type) {
+              dq = { ...dq, special_round_type: srtData.special_round_type as SpecialRoundType };
+            }
           }
         }
 
@@ -1118,7 +1141,7 @@ function QPos({ question, totalQs, small }: { question: DisplayQuestion | null; 
   const pos = `Question ${question.play_order}${totalQs > 0 ? ` / ${totalQs}` : ''}`;
   return small
     ? <div className="ds-q-pos-sm">{pos}</div>
-    : <div className="ds-q-pos">{pos}</div>;
+    : <div className="ds-q-pos" style={{ fontSize: '1.25rem' }}>{pos}</div>;
 }
 
 // ── 1. LOBBY ──────────────────────────────────────────────────────────────────
@@ -1335,14 +1358,13 @@ function DsCountdown({
         </div>
       ) : (
         <div className="ds-stage-card ds-stage-card-clue ds-clue-wrap ds-clue-enter">
-          <div className="ds-label ds-gold" style={{ marginBottom: 16, letterSpacing: '.2em' }}>ภาพปริศนา</div>
+          <div className="ds-label ds-gold" style={{ marginBottom: 16, fontSize: '1.25rem' }}>ภาพปริศนา</div>
           {question && <SpecialRoundBadge type={question.special_round_type} large />}
           {questionFetchError && !clueUrl ? (
             <div className="ds-muted">ไม่สามารถโหลดภาพคำถามได้</div>
           ) : (
             <DisplayImageStage imageUrl={clueUrl} variant="clue" />
           )}
-          <div className="ds-muted" style={{ marginTop: 16 }}>ดูภาพให้ดีก่อนตอบ</div>
         </div>
       )}
     </DsShell>
@@ -1472,12 +1494,6 @@ function DsQuestion({
             ) : (
               <div className="ds-q-text">{question?.text ?? 'กำลังโหลด...'}</div>
             )}
-            <div className="ds-q-progress-meta">
-              <div className="ds-stage-kicker">Live Question</div>
-              {submittedCount !== null && playerCount !== null ? (
-                <div className="ds-stage-pill">{submittedCount} / {playerCount} answered</div>
-              ) : null}
-            </div>
             <div className={`ds-big-timer ${urgent ? 'ds-timer-urgent' : ''}`}>
               {timeLeft != null ? timeLeft.toFixed(1) : '—'}
               <span className="ds-timer-unit">s</span>
@@ -1488,7 +1504,6 @@ function DsQuestion({
                 style={{ width: `${ratio * 100}%` }}
               />
             </div>
-            <div className="ds-muted" style={{ marginTop: 8 }}>กำลังรับคำตอบ...</div>
           </div>
 
           <div className="ds-stage-card ds-stage-card-visual ds-q-right">
@@ -1520,7 +1535,7 @@ function DsClosed({
         <div className="ds-huge-text">หมดเวลา!</div>
       </div>
       {submittedCount !== null && playerCount !== null && (
-        <div className="ds-stat-line">
+        <div className="ds-stat-line" style={{fontSize:'1.25rem'}}>
           ตอบแล้ว <strong>{submittedCount}</strong> / {playerCount} คน
         </div>
       )}
@@ -1627,10 +1642,10 @@ function DsReveal({
           )}
 
           {!showReveal && (
-            <div className="ds-muted">กำลังส่องวงเฉลย...</div>
+            <div className="ds-muted">...กำลังประมวลผล...</div>
           )}
           {showReveal && submittedCount === 0 && !statsFetchError && (
-            <div className="ds-muted">ยังไม่มีคำตอบในข้อนี้</div>
+            <div className="ds-muted">ไม่มีผู้ที่ตอบในข้อนี้</div>
           )}
         </div>
 

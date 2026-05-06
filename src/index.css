@@ -847,7 +847,15 @@ body.host-route {
   color: var(--text-3);
 }
 .ds-gold { color: var(--gold); }
-.ds-muted { color: var(--text-2); font-size: clamp(12px,1.4vw,16px); }
+.ds-muted {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  text-align: center;
+  color: var(--text-2);
+  font-size: clamp(12px,1.4vw,16px);
+}
 .ds-mono { font-family: var(--font-mono); }
 .ds-title {
   font-size: clamp(28px,4vw,56px);
@@ -1192,6 +1200,12 @@ body.host-route {
   flex-shrink: 0;
   padding-bottom: 1.5vh;
   border-bottom: 1px solid var(--border);
+}
+.ds-reveal-header .ds-q-pos-sm {
+  font-size: clamp(18px, 2vw, 28px);
+}
+.ds-reveal-header .ds-label {
+  font-size: clamp(14px, 1.6vw, 20px);
 }
 .ds-reveal-body {
   flex: 1;
@@ -2771,6 +2785,7 @@ body.host-route {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  isolation: isolate;
 }
 @keyframes dsQrRingSpin {
   to { transform: rotate(360deg); }
@@ -2790,6 +2805,7 @@ body.host-route {
     conic-gradient(from 0deg, #F5C74A, transparent 60%, #F5C74A) border-box;
   animation: dsQrRingSpin 4s linear infinite;
   pointer-events: none;
+  z-index: -1;
 }
 .ds-qr-wrap::after {
   content: '';
@@ -2799,6 +2815,7 @@ body.host-route {
   background: radial-gradient(ellipse at center, rgba(245,199,74,.15) 0%, transparent 70%);
   animation: dsQrPulse 3s ease-in-out infinite;
   pointer-events: none;
+  z-index: -1;
 }
 
 /* ── Hype meter ─────────────────────────────────────────────────────────────── */

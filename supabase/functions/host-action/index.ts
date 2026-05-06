@@ -26,6 +26,14 @@ import type {
 
 const GAME_STATE_ID = '00000000-0000-0000-0000-000000000001';
 
+const ACTION_ALIASES: Record<string, HostActionName> = {
+  hype_cheer: 'trigger_hype_cheer',
+  spotlight_leaderboard: 'trigger_spotlight_leaderboard',
+  final_drumroll: 'trigger_final_drumroll',
+  display_theme: 'set_display_theme',
+  set_theme: 'set_display_theme',
+};
+
 // ---------------------------------------------------------------------------
 // Valid from-states per action.
 // ---------------------------------------------------------------------------
@@ -88,7 +96,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
   if (!body?.action) return error(400, 'missing_action');
 
-  const action = body.action as HostActionName;
+  const action = normalizeAction(body.action);
   if (!VALID_FROM[action]) return error(400, 'unknown_action');
 
   const db = getSupabaseAdmin();
@@ -572,4 +580,9 @@ function error(
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function normalizeAction(action: unknown): HostActionName {
+  if (typeof action !== 'string') return '' as HostActionName;
+  return (ACTION_ALIASES[action] ?? action) as HostActionName;
 }

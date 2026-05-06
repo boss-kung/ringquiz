@@ -7,7 +7,6 @@ import { AdminQuestionManager } from './AdminQuestionManager';
 import { GameSetManager } from './GameSetManager';
 import type {
   HostActionName,
-  HostActionRequest,
   HostActionResponse,
   QuestionStatsResponse,
   EdgeFunctionError,
@@ -32,6 +31,13 @@ const UTILITY_ACTIONS: { action: HostActionName; label: string; danger?: boolean
   { action: 'soft_reset_game',      label: 'Soft Reset Round',  danger: true },
   { action: 'hard_reset_game',      label: 'Hard Reset Game',   danger: true },
 ];
+
+const HOST_ACTION_FALLBACKS: Partial<Record<HostActionName, string[]>> = {
+  trigger_hype_cheer: ['hype_cheer'],
+  trigger_spotlight_leaderboard: ['spotlight_leaderboard'],
+  trigger_final_drumroll: ['final_drumroll'],
+  set_display_theme: ['display_theme', 'set_theme'],
+};
 
 export function HostPage() {
   const [secret, setSecret] = useState(() => sessionStorage.getItem(SESSION_KEY) ?? '');
@@ -153,6 +159,17 @@ function HostDashboard({ secret, onLogout }: { secret: string; onLogout: () => v
   const confirmButtonRef = useRef<HTMLButtonElement | null>(null);
   const lastFocusedRef = useRef<HTMLElement | null>(null);
 
+  const postHostAction = useCallback(async (action: string, payload?: Record<string, unknown>) => {
+    const body = { action, ...(payload ? { payload } : {}) };
+    const res = await fetch(`${FUNCTIONS_URL}/host-action`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPABASE_ANON_KEY}`, 'X-Host-Secret': secret },
+      body: JSON.stringify(body),
+    });
+    const json = await res.json();
+    return { res, json };
+  }, [secret]);
+
   const fetchStats = useCallback(async () => {
     try {
       const res = await fetch(`${FUNCTIONS_URL}/get-question-stats`, {
@@ -261,13 +278,7 @@ function HostDashboard({ secret, onLogout }: { secret: string; onLogout: () => v
     setActionError('');
     setActionSuccess('');
     try {
-      const body: HostActionRequest = { action, ...(payload ? { payload } : {}) };
-      const res = await fetch(`${FUNCTIONS_URL}/host-action`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPABASE_ANON_KEY}`, 'X-Host-Secret': secret },
-        body: JSON.stringify(body),
-      });
-      const json = await res.json();
+      const { res, json } = await postHostAction(action, payload);
       if (!res.ok) {
         setActionError((json as EdgeFunctionError).error ?? 'Unknown error');
       } else {
@@ -287,15 +298,26 @@ function HostDashboard({ secret, onLogout }: { secret: string; onLogout: () => v
     setActionError('');
     setActionSuccess('');
     try {
-      const body: HostActionRequest = { action, ...(payload ? { payload } : {}) };
-      const res = await fetch(`${FUNCTIONS_URL}/host-action`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPABASE_ANON_KEY}`, 'X-Host-Secret': secret },
-        body: JSON.stringify(body),
-      });
-      const json = await res.json();
+      let { res, json } = await postHostAction(action, payload);
+
+      if (!res.ok && (json as EdgeFunctionError).error === 'unknown_action') {
+        for (const fallback of HOST_ACTION_FALLBACKS[action] ?? []) {
+          const fallbackResult = await postHostAction(fallback, payload);
+          res = fallbackResult.res;
+          json = fallbackResult.json;
+          if (res.ok || (json as EdgeFunctionError).error !== 'unknown_action') {
+            break;
+          }
+        }
+      }
+
       if (!res.ok) {
-        setActionError((json as EdgeFunctionError).error ?? 'Unknown error');
+        const err = json as EdgeFunctionError;
+        setActionError(
+          err.error === 'unknown_action'
+            ? 'Stage FX/Theme is not supported by the deployed host-action function yet.'
+            : err.error ?? 'Unknown error',
+        );
       } else {
         setActionSuccess(`✓ ${action} sent`);
       }
