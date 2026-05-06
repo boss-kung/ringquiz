@@ -2061,7 +2061,6 @@ body.host-route {
   --quiz-image-max-height: calc(100dvh - 10rem);
 }
 .ds-display-shell-full { --quiz-image-size: clamp(520px, 84vmin, 1060px); }
-.ds-display-mask { opacity: .96 !important; }
 
 /* Targeted display tweaks for projection readability */
 .ds-stage-card-clue {

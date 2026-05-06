@@ -244,7 +244,7 @@ function DisplayImageStage({
         onCircleChange={() => {}}
         locked
         maskOverlayUrl={maskUrl ?? undefined}
-        maskOverlayClassName="reveal-mask-pulse ds-display-mask"
+        maskOverlayClassName="reveal-mask-pulse"
         shellClassName={shellClassName}
       />
     </div>
