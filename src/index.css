@@ -590,6 +590,7 @@ body.host-route {
 /* ── REVEAL MASK ────────────────────────────────────────────────────────────── */
 @keyframes revealMaskPulse { 0%,100%{opacity:.1}50%{opacity:1} }
 .reveal-mask-pulse { animation: revealMaskPulse 1s ease-in-out infinite; transform-origin: center; }
+.reveal-mask-static { opacity: .92; transform-origin: center; }
 
 /* ── QUIZ IMAGE STAGE ───────────────────────────────────────────────────────── */
 .quiz-image-stage {

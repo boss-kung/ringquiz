@@ -118,6 +118,7 @@ export function QuestionImage({
 }: Props) {
   const imgRef = useRef<HTMLImageElement>(null);
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
+  const [stableNaturalSize, setStableNaturalSize] = useState({ width: 0, height: 0 });
   const [loadFailed, setLoadFailed] = useState(false);
   const isDragging = useRef(false);
 
@@ -128,7 +129,6 @@ export function QuestionImage({
   useEffect(() => {
     const img = imgRef.current;
     if (!img || !imageUrl || loadFailed) {
-      setContainerSize({ width: 0, height: 0 });
       return;
     }
 
@@ -202,8 +202,8 @@ export function QuestionImage({
   const containedRect = getContainedImageRect(
     containerSize.width,
     containerSize.height,
-    imgRef.current?.naturalWidth ?? 0,
-    imgRef.current?.naturalHeight ?? 0,
+    imgRef.current?.naturalWidth || stableNaturalSize.width,
+    imgRef.current?.naturalHeight || stableNaturalSize.height,
   );
   const circlePx = containedRect.renderedWidth * circleRadiusRatio;
   const canRenderImage = Boolean(imageUrl) && !loadFailed;
@@ -244,12 +244,15 @@ export function QuestionImage({
             onLoad={() => {
               if (imgRef.current) {
                 const rect = imgRef.current.getBoundingClientRect();
+                setStableNaturalSize({
+                  width: imgRef.current.naturalWidth,
+                  height: imgRef.current.naturalHeight,
+                });
                 setContainerSize({ width: rect.width, height: rect.height });
               }
             }}
             onError={() => {
               setLoadFailed(true);
-              setContainerSize({ width: 0, height: 0 });
             }}
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}

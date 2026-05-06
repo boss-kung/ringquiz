@@ -18,6 +18,7 @@ export function RevealScreen() {
   const gameState = useGameStore((s) => s.gameState);
   const getServerTime = useGetServerTime();
   const [showRevealImage, setShowRevealImage] = useState(false);
+  const [revealImageReady, setRevealImageReady] = useState(false);
   const revealStartedAt = gameState?.updated_at ?? null;
   const feedbackFiredRef = useRef(false);
 
@@ -67,6 +68,28 @@ export function RevealScreen() {
   const revealBaseImage =
     resolveRevealImageUrl(question.reveal_image_url) ??
     originalQuestionImage;
+
+  useEffect(() => {
+    if (!revealBaseImage || revealBaseImage === originalQuestionImage) {
+      setRevealImageReady(true);
+      return;
+    }
+
+    setRevealImageReady(false);
+    let cancelled = false;
+    const img = new Image();
+    img.onload = () => {
+      if (!cancelled) setRevealImageReady(true);
+    };
+    img.onerror = () => {
+      if (!cancelled) setRevealImageReady(true);
+    };
+    img.src = revealBaseImage;
+
+    return () => {
+      cancelled = true;
+    };
+  }, [originalQuestionImage, revealBaseImage]);
   const revealCircle =
     effectiveRevealResult?.selected_x_ratio != null && effectiveRevealResult?.selected_y_ratio != null
       ? { xRatio: effectiveRevealResult.selected_x_ratio, yRatio: effectiveRevealResult.selected_y_ratio }
@@ -140,15 +163,15 @@ export function RevealScreen() {
       <div style={{ flex: 1, minHeight: 0, padding: '8px 16px', position: 'relative', zIndex: 1 }}>
         <div className="quiz-image-stage">
           <QuestionImage
-            imageUrl={showRevealImage ? revealBaseImage : originalQuestionImage}
+            imageUrl={showRevealImage && revealImageReady ? revealBaseImage : originalQuestionImage}
             circleRadiusRatio={question.circle_radius_ratio}
             circle={revealCircle ?? circlePosition}
             onCircleChange={() => {}}
             locked
-            maskOverlayClassName="reveal-mask-pulse"
-            maskOverlayUrl={`${FUNCTIONS_URL}/get-reveal-mask?questionId=${encodeURIComponent(
+            maskOverlayClassName={!showRevealImage ? 'reveal-mask-static' : undefined}
+            maskOverlayUrl={!showRevealImage ? `${FUNCTIONS_URL}/get-reveal-mask?questionId=${encodeURIComponent(
               question.id
-            )}&updatedAt=${encodeURIComponent(gameState?.updated_at ?? '')}`}
+            )}&updatedAt=${encodeURIComponent(gameState?.updated_at ?? '')}` : undefined}
             shellClassName="quiz-image-shell--reveal"
           />
         </div>
