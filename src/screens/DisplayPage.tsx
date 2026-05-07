@@ -20,9 +20,11 @@ import { supabase, GAME_STATE_ID, FUNCTIONS_URL, SUPABASE_ANON_KEY } from '../li
 import { resolveQuestionImageUrl, resolveRevealImageUrl } from '../lib/questionAssets';
 import { COUNTDOWN_DISPLAY_SECONDS, SERVER_TIME_RESYNC_INTERVAL_MS } from '../lib/constants';
 import type { GameState, Player, LeaderboardEntry, DisplayStatsResponse, DisplayEvent, DisplayEventType, DisplayTheme, SpecialRuleType, SpecialRuleConfig } from '../lib/types';
+import { DisplayAudioControls } from '../components/DisplayAudioControls';
 import { QuestionImage } from '../components/QuestionImage';
 import { AutoFitText } from '../components/AutoFitText';
 import { useImagePreloadStatus, usePrimeImages } from '../hooks/useImagePreload';
+import { useDisplayAudioController } from '../lib/displayAudio';
 import { getSpecialRulePresentation, normalizeSpecialRuleConfig } from '../lib/specialRules';
 
 // ── Local types ───────────────────────────────────────────────────────────────
@@ -377,42 +379,6 @@ function AnimatedScore({
   return <>{displayValue.toLocaleString()}</>;
 }
 
-// ── ConfettiBurst (Phase 2 — audience-safe, CSS-only, max 32 particles) ──────
-
-const CONFETTI_COLORS_DS = ['#F5C74A','#FFF8E7','#34D399','#818CF8','#FB7185','#FBBF24'];
-
-function ConfettiBurst({
-  active,
-  mode = 'gold',
-  count = 28,
-}: {
-  active: boolean;
-  mode?: 'gold' | 'success';
-  count?: number;
-}) {
-  if (!active) return null;
-  const colors = mode === 'success'
-    ? ['#34D399','#6EE7B7','#F5C74A','#818CF8','#FFF8E7']
-    : CONFETTI_COLORS_DS;
-  return (
-    <div className="ds-confetti-burst" aria-hidden>
-      {Array.from({ length: Math.min(count, 32) }, (_, i) => (
-        <span
-          key={i}
-          className="ds-confetti-piece"
-          style={{
-            '--x': `${(Math.random() * 2 - 1) * 120}px`,
-            '--delay': `${(i / count) * 0.6}s`,
-            '--rot': `${Math.random() * 720 - 360}deg`,
-            '--dur': `${0.9 + Math.random() * 0.7}s`,
-            background: colors[i % colors.length],
-          } as CSSProperties}
-        />
-      ))}
-    </div>
-  );
-}
-
 // ── Special round badge (shared across question phases) ───────────────────────
 
 function SpecialRoundBadge({
@@ -485,98 +451,6 @@ interface ActiveDisplayFx {
   id: string;
   startedAt: number;
   payload: Record<string, unknown>;
-}
-
-const DISPLAY_SOUND_STORAGE_KEY = 'displayStageFxSoundEnabled';
-let displayAudioContext: AudioContext | null = null;
-let displayAudioUnlocked = false;
-
-function isDisplaySoundEnabled() {
-  if (typeof window === 'undefined') return false;
-  try {
-    const raw = window.localStorage.getItem(DISPLAY_SOUND_STORAGE_KEY);
-    return raw === null ? true : raw === 'true';
-  } catch {
-    return true;
-  }
-}
-
-function getDisplayAudioContext(): AudioContext | null {
-  if (typeof window === 'undefined') return null;
-  if (displayAudioContext) return displayAudioContext;
-  const AudioCtx = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-  if (!AudioCtx) return null;
-  displayAudioContext = new AudioCtx();
-  return displayAudioContext;
-}
-
-async function unlockDisplayAudio() {
-  displayAudioUnlocked = true;
-  const ctx = getDisplayAudioContext();
-  if (!ctx) return false;
-  if (ctx.state === 'suspended') {
-    try {
-      await ctx.resume();
-    } catch {
-      return false;
-    }
-  }
-  return ctx.state === 'running';
-}
-
-function playDisplayTone(
-  ctx: AudioContext,
-  startAt: number,
-  {
-    frequency,
-    durationMs,
-    gain = 0.045,
-    type = 'sine',
-  }: {
-    frequency: number;
-    durationMs: number;
-    gain?: number;
-    type?: OscillatorType;
-  },
-) {
-  const osc = ctx.createOscillator();
-  const amp = ctx.createGain();
-  osc.type = type;
-  osc.frequency.setValueAtTime(frequency, startAt);
-  amp.gain.setValueAtTime(0.0001, startAt);
-  amp.gain.exponentialRampToValueAtTime(gain, startAt + 0.01);
-  amp.gain.exponentialRampToValueAtTime(0.0001, startAt + durationMs / 1000);
-  osc.connect(amp);
-  amp.connect(ctx.destination);
-  osc.start(startAt);
-  osc.stop(startAt + durationMs / 1000 + 0.04);
-}
-
-function playDisplayFxSound(type: DisplayEventType) {
-  if (!displayAudioUnlocked || !isDisplaySoundEnabled()) return false;
-  const ctx = getDisplayAudioContext();
-  if (!ctx || ctx.state !== 'running') return false;
-
-  const now = ctx.currentTime;
-  if (type === 'hype_cheer') {
-    playDisplayTone(ctx, now, { frequency: 523.25, durationMs: 120, type: 'triangle' });
-    playDisplayTone(ctx, now + 0.11, { frequency: 659.25, durationMs: 140, type: 'triangle' });
-    playDisplayTone(ctx, now + 0.23, { frequency: 783.99, durationMs: 180, type: 'sine', gain: 0.055 });
-    return true;
-  }
-  if (type === 'final_drumroll') {
-    playDisplayTone(ctx, now, { frequency: 110, durationMs: 220, type: 'square', gain: 0.04 });
-    playDisplayTone(ctx, now + 0.16, { frequency: 123.47, durationMs: 220, type: 'square', gain: 0.042 });
-    playDisplayTone(ctx, now + 0.32, { frequency: 146.83, durationMs: 260, type: 'square', gain: 0.045 });
-    playDisplayTone(ctx, now + 0.54, { frequency: 196, durationMs: 420, type: 'triangle', gain: 0.05 });
-    return true;
-  }
-  if (type === 'spotlight_leaderboard') {
-    playDisplayTone(ctx, now, { frequency: 740, durationMs: 180, type: 'sine', gain: 0.04 });
-    playDisplayTone(ctx, now + 0.18, { frequency: 932.33, durationMs: 220, type: 'triangle', gain: 0.048 });
-    return true;
-  }
-  return false;
 }
 
 function DisplayStageFxOverlay({ fx }: { fx: ActiveDisplayFx | null }) {
@@ -667,12 +541,11 @@ export function DisplayPage() {
   const [activeDisplayFx, setActiveDisplayFx] = useState<ActiveDisplayFx | null>(null);
   const displayFxTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastDisplayFxEventIdRef = useRef<string | null>(null);
-  const [displayAudioReady, setDisplayAudioReady] = useState(false);
-  const pendingDisplayFxSoundRef = useRef<DisplayEventType | null>(null);
-  const pendingDisplayFxAtRef = useRef<number>(0);
-
   const getServerTime = useDisplayServerTime();
   const reducedMotion = useReducedMotion();
+  const audio = useDisplayAudioController();
+  const audioEnabled = audio.isEnabled();
+  const audioMuted = audio.isMuted();
   const prevQuestionKeyRef = useRef<string | null>(null);
   const previousLeaderboardRef = useRef<Map<string, LeaderboardEntry>>(new Map());
   const previousLeaderIdRef = useRef<string | null>(null);
@@ -680,6 +553,13 @@ export function DisplayPage() {
   const leaderboardStageTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const leaderboardSettleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const leaderboardSignatureRef = useRef<string | null>(null);
+  const previousStatusRef = useRef<GameState['status'] | null>(null);
+  const countdownVisibleRef = useRef<number | null>(null);
+  const countdownFinalKeyRef = useRef<string | null>(null);
+  const questionTickSecondRef = useRef<number | null>(null);
+  const playerJoinSoundKeyRef = useRef<string | null>(null);
+  const rankMoveKeyRef = useRef<string | null>(null);
+  const newLeaderAtRef = useRef<number | null>(null);
 
   // Clean up all timers on unmount
   useEffect(() => {
@@ -694,57 +574,6 @@ export function DisplayPage() {
   }, []);
 
   useEffect(() => {
-    let cancelled = false;
-
-    const syncReady = () => {
-      if (!cancelled) {
-        const ctx = getDisplayAudioContext();
-        setDisplayAudioReady(Boolean(displayAudioUnlocked && ctx?.state === 'running'));
-      }
-    };
-
-    const handleUnlock = () => {
-      void unlockDisplayAudio().then((ok) => {
-        if (!ok || cancelled) {
-          syncReady();
-          return;
-        }
-        syncReady();
-        const pendingType = pendingDisplayFxSoundRef.current;
-        const pendingAt = pendingDisplayFxAtRef.current;
-        if (pendingType && Date.now() - pendingAt < 4000) {
-          playDisplayFxSound(pendingType);
-        }
-        pendingDisplayFxSoundRef.current = null;
-        pendingDisplayFxAtRef.current = 0;
-      });
-    };
-
-    syncReady();
-    window.addEventListener('pointerdown', handleUnlock, { passive: true });
-    window.addEventListener('keydown', handleUnlock);
-    window.addEventListener('touchstart', handleUnlock, { passive: true });
-    return () => {
-      cancelled = true;
-      window.removeEventListener('pointerdown', handleUnlock);
-      window.removeEventListener('keydown', handleUnlock);
-      window.removeEventListener('touchstart', handleUnlock);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!activeDisplayFx) return;
-    const played = playDisplayFxSound(activeDisplayFx.type);
-    if (!played) {
-      pendingDisplayFxSoundRef.current = activeDisplayFx.type;
-      pendingDisplayFxAtRef.current = Date.now();
-    } else {
-      pendingDisplayFxSoundRef.current = null;
-      pendingDisplayFxAtRef.current = 0;
-    }
-  }, [activeDisplayFx]);
-
-  useEffect(() => {
     if ((gameState?.status ?? 'waiting') === 'waiting' && !gameState?.current_question_id) {
       previousLeaderboardRef.current = new Map();
       previousLeaderIdRef.current = null;
@@ -754,6 +583,155 @@ export function DisplayPage() {
       setLeaderboardAnimationStage('steady');
     }
   }, [gameState?.current_question_id, gameState?.status]);
+
+  useEffect(() => {
+    const status = gameState?.status ?? 'waiting';
+    if (status === 'waiting' && audioEnabled && !audioMuted) {
+      audio.startLoop('lobbyLoop', { volume: 0.22 });
+      return;
+    }
+    audio.stopLoop('lobbyLoop');
+  }, [audio, audioEnabled, audioMuted, gameState?.status]);
+
+  useEffect(() => {
+    const status = gameState?.status ?? 'waiting';
+    const previousStatus = previousStatusRef.current;
+    previousStatusRef.current = status;
+
+    if (previousStatus === status || !audioEnabled || audioMuted) return;
+
+    if (status === 'question_open') {
+      audio.play('questionOpen', { restart: true });
+      return;
+    }
+    if (status === 'question_closed') {
+      audio.play('answerLocked', { restart: true });
+      return;
+    }
+    if (status === 'leaderboard') {
+      audio.play('leaderboardIntro', { restart: true });
+      return;
+    }
+    if (status === 'ended') {
+      audio.play('finalIntro', { restart: true, volume: 0.6 });
+    }
+  }, [audio, audioEnabled, audioMuted, gameState?.status]);
+
+  useEffect(() => {
+    if ((gameState?.status ?? 'waiting') !== 'waiting' || !latestJoined) return;
+    const joinKey = `${latestJoined.id}:${latestJoined.joined_at}`;
+    if (playerJoinSoundKeyRef.current === joinKey) return;
+    playerJoinSoundKeyRef.current = joinKey;
+    if (!audioEnabled || audioMuted) return;
+    audio.play('playerJoin');
+  }, [audio, audioEnabled, audioMuted, gameState?.status, latestJoined]);
+
+  useEffect(() => {
+    const status = gameState?.status ?? 'waiting';
+    if (status !== 'countdown' || !gameState?.updated_at) {
+      countdownVisibleRef.current = null;
+      countdownFinalKeyRef.current = null;
+      return;
+    }
+
+    const countdownKey = `${gameState.updated_at}:${question?.id ?? 'none'}`;
+    const totalMs = COUNTDOWN_DISPLAY_SECONDS * 1000;
+
+    const syncCountdownAudio = () => {
+      const startMs = new Date(gameState.updated_at).getTime();
+      const remainingMs = Math.max(0, totalMs - (getServerTime() - startMs));
+      const visibleCount = Math.ceil(remainingMs / 1000);
+
+      if (
+        audioEnabled &&
+        !audioMuted &&
+        visibleCount > 0 &&
+        countdownVisibleRef.current !== visibleCount
+      ) {
+        audio.play('countdownTick', { restart: true });
+      }
+      countdownVisibleRef.current = visibleCount;
+
+      if (remainingMs <= 0 && countdownFinalKeyRef.current !== countdownKey) {
+        countdownFinalKeyRef.current = countdownKey;
+        if (audioEnabled && !audioMuted) {
+          audio.play('countdownFinalHit', { restart: true, volume: 0.58 });
+        }
+      }
+    };
+
+    syncCountdownAudio();
+    const intervalId = window.setInterval(syncCountdownAudio, 120);
+    return () => window.clearInterval(intervalId);
+  }, [audio, audioEnabled, audioMuted, gameState?.status, gameState?.updated_at, getServerTime, question?.id]);
+
+  useEffect(() => {
+    const status = gameState?.status ?? 'waiting';
+    if (status !== 'question_open' || !gameState?.question_ends_at) {
+      questionTickSecondRef.current = null;
+      return;
+    }
+
+    const endMs = new Date(gameState.question_ends_at).getTime();
+    const syncUrgentTick = () => {
+      const secondsLeft = Math.ceil(Math.max(0, endMs - getServerTime()) / 1000);
+      if (
+        audioEnabled &&
+        !audioMuted &&
+        secondsLeft >= 1 &&
+        secondsLeft <= 5 &&
+        questionTickSecondRef.current !== secondsLeft
+      ) {
+        audio.play('timerTickFast', { restart: true, volume: 0.35 });
+      }
+      questionTickSecondRef.current = secondsLeft;
+    };
+
+    syncUrgentTick();
+    const intervalId = window.setInterval(syncUrgentTick, 120);
+    return () => window.clearInterval(intervalId);
+  }, [audio, audioEnabled, audioMuted, gameState?.status, gameState?.question_ends_at, getServerTime]);
+
+  useEffect(() => {
+    const status = gameState?.status ?? 'waiting';
+    if (status !== 'reveal' || !gameState?.updated_at) return;
+
+    if (audioEnabled && !audioMuted) {
+      audio.play('drumroll', { restart: true, volume: 0.52 });
+    }
+
+    const revealAtMs = new Date(gameState.updated_at).getTime() + 5000;
+    const delayMs = Math.max(0, revealAtMs - getServerTime());
+    const timeoutId = window.setTimeout(() => {
+      if (!audio.isEnabled() || audio.isMuted()) return;
+      audio.play('revealHit', { restart: true, volume: 0.56 });
+    }, delayMs);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [audio, audioEnabled, audioMuted, gameState?.status, gameState?.updated_at, getServerTime]);
+
+  useEffect(() => {
+    if ((gameState?.status ?? 'waiting') !== 'leaderboard') return;
+    if (leaderboardAnimationStage !== 'reordering') return;
+
+    const key = `${gameState?.current_question_id ?? 'none'}:${leaderboard.map((entry) => `${entry.player_id}:${entry.rank}`).join('|')}`;
+    if (rankMoveKeyRef.current === key) return;
+    rankMoveKeyRef.current = key;
+
+    if (audioEnabled && !audioMuted) {
+      audio.play('rankMove', { restart: true, volume: 0.42 });
+    }
+  }, [audio, audioEnabled, audioMuted, gameState?.current_question_id, gameState?.status, leaderboard, leaderboardAnimationStage]);
+
+  useEffect(() => {
+    if (!leaderChange) return;
+    if (newLeaderAtRef.current === leaderChange.at) return;
+    newLeaderAtRef.current = leaderChange.at;
+
+    if (audioEnabled && !audioMuted) {
+      audio.play('newLeader', { restart: true, volume: 0.54 });
+    }
+  }, [audio, audioEnabled, audioMuted, leaderChange]);
 
   // ── P0.2 — unified highlight helper ─────────────────────────────────────────
   // Called from both realtime INSERT callback and polling reconcile.
@@ -1401,10 +1379,8 @@ export function DisplayPage() {
       <DisplayTransition phase={status} reducedMotion={reducedMotion}>
         {screen}
       </DisplayTransition>
+      <DisplayAudioControls />
       <DisplayStageFxOverlay fx={activeDisplayFx} />
-      {!displayAudioReady && isDisplaySoundEnabled() && (
-        <div className="ds-audio-unlock-badge">แตะหน้าจอ 1 ครั้งเพื่อเปิดเสียง Stage FX</div>
-      )}
     </div>
   );
 }
@@ -2037,15 +2013,33 @@ function DsLeaderboard({
 }) {
   const rowRefs = useRef(new Map<string, HTMLDivElement>());
   const rowTopsRef = useRef(new Map<string, number>());
+  const finalAudio = useDisplayAudioController();
   const sortedLeaderboard = useMemo(() => sortLeaderboardEntries(leaderboard), [leaderboard]);
   const winner = sortedLeaderboard[0];
   const top = sortedLeaderboard.slice(0, 10);
   const MEDALS = ['🥇', '🥈', '🥉'];
+  const rank1Entry = top.find((candidate) => candidate.rank === 1) ?? null;
+  const rank2Entry = top.find((candidate) => candidate.rank === 2) ?? null;
+  const rank3Entry = top.find((candidate) => candidate.rank === 3) ?? null;
   const podiumEntries = [
-    { slot: 'left', visualOrder: 0, medal: MEDALS[1], entry: top.find((candidate) => candidate.rank === 2) ?? null },
-    { slot: 'center', visualOrder: 1, medal: MEDALS[0], entry: top.find((candidate) => candidate.rank === 1) ?? null },
-    { slot: 'right', visualOrder: 2, medal: MEDALS[2], entry: top.find((candidate) => candidate.rank === 3) ?? null },
-  ].filter((item) => item.entry);
+    { rank: 2 as const, medal: MEDALS[1], entry: rank2Entry },
+    { rank: 1 as const, medal: MEDALS[0], entry: rank1Entry },
+    { rank: 3 as const, medal: MEDALS[2], entry: rank3Entry },
+  ].filter((item): item is { rank: 1 | 2 | 3; medal: string; entry: LeaderboardEntry } => Boolean(item.entry));
+  const finalKey = `${winner?.player_id ?? 'none'}:${podiumEntries.map((item) => `${item.entry.player_id}:${item.entry.cumulative_score}`).join('|')}`;
+  const [finalStep, setFinalStep] = useState(0);
+  const [finalConfettiActive, setFinalConfettiActive] = useState(false);
+  const confettiPieces = useMemo(() => {
+    return Array.from({ length: 30 }, (_, index) => ({
+      id: index,
+      left: `${4 + (index % 10) * 9.2}%`,
+      delay: `${(index % 6) * 0.08}s`,
+      duration: `${2.7 + (index % 5) * 0.18}s`,
+      drift: `${(index % 2 === 0 ? 1 : -1) * (28 + (index % 7) * 6)}px`,
+      rotate: `${(index % 2 === 0 ? 1 : -1) * (140 + index * 11)}deg`,
+      color: ['#F5C74A', '#FFF8E7', '#FBBF24', '#34D399', '#818CF8', '#FB7185'][index % 6],
+    }));
+  }, []);
 
   // Biggest climber: highest positive rankDelta ≥ 2
   const climber = top.reduce<LeaderboardEntry | null>((best, entry) => {
@@ -2076,6 +2070,46 @@ function DsLeaderboard({
   const leaderboardRulePresentation = question
     ? getSpecialRulePresentation(question.special_rule_type, question.special_rule_config, 'leaderboard')
     : null;
+  const isPhotoMoment = reducedMotion || finalStep >= 4;
+  const showRank3 = reducedMotion || finalStep >= 1;
+  const showRank2 = reducedMotion || finalStep >= 2;
+  const showRank1 = reducedMotion || finalStep >= 3;
+
+  useEffect(() => {
+    if (!isFinal || !winner) {
+      setFinalStep(0);
+      setFinalConfettiActive(false);
+      return;
+    }
+
+    if (reducedMotion) {
+      setFinalStep(4);
+      setFinalConfettiActive(false);
+      return;
+    }
+
+    setFinalStep(0);
+    setFinalConfettiActive(false);
+
+    const timers = [
+      window.setTimeout(() => setFinalStep(1), 200),
+      window.setTimeout(() => setFinalStep(2), 800),
+      window.setTimeout(() => setFinalStep(3), 1600),
+      window.setTimeout(() => {
+        setFinalConfettiActive(true);
+        if (finalAudio.isEnabled() && !finalAudio.isMuted()) {
+          finalAudio.play('winnerFanfare', { restart: true, volume: 0.6 });
+          finalAudio.play('confettiPop', { restart: true, volume: 0.5 });
+        }
+      }, 3000),
+      window.setTimeout(() => setFinalStep(4), 4000),
+      window.setTimeout(() => setFinalConfettiActive(false), 6200),
+    ];
+
+    return () => {
+      timers.forEach((timer) => window.clearTimeout(timer));
+    };
+  }, [finalAudio, finalKey, isFinal, reducedMotion, winner]);
 
   useLayoutEffect(() => {
     const nextTops = new Map<string, number>();
@@ -2127,35 +2161,8 @@ function DsLeaderboard({
       <div className="ds-lb-header">
         {isFinal ? (
           <>
-            <div className="ds-label ds-gold" style={{ letterSpacing: '.2em' }}>Final Leaderboard</div>
-            <div className="ds-title" style={{ fontSize: 36 }}>จบเกม! 🏆</div>
-            {winner && (
-              <div className={`ds-stage-card ds-winner-card${leaderChange?.playerId === winner.player_id ? ' ds-winner-card-leader' : ''}`}>
-                <div className="ds-label ds-gold">Champion</div>
-                <div className="ds-winner-crown">👑</div>
-                <div className="ds-winner-name">{winner.display_name}</div>
-                <div className="ds-winner-line">
-                  <span className="ds-mono ds-gold">
-                    <AnimatedScore
-                      value={winner.cumulative_score}
-                      from={leaderboardFx[winner.player_id]?.previousScore ?? winner.cumulative_score}
-                      durationMs={LEADERBOARD_SCORE_ANIMATION_MS}
-                      reducedMotion={reducedMotion}
-                    /> คะแนน
-                  </span>
-                </div>
-                {!reducedMotion && (
-                  <>
-                    <div className="ds-final-burst" aria-hidden>
-                      {Array.from({ length: 12 }, (_, i) => (
-                        <span key={i} className="ds-final-burst-particle" style={{ '--ds-angle': `${i * 30}deg` } as CSSProperties} />
-                      ))}
-                    </div>
-                    <ConfettiBurst active mode="gold" count={28} />
-                  </>
-                )}
-              </div>
-            )}
+            <div className="ds-label ds-gold" style={{ letterSpacing: '.2em' }}>Golden Ring Grand Final</div>
+            <div className="ds-title" style={{ fontSize: 36 }}>Winner Ceremony</div>
           </>
         ) : (
           <>
@@ -2193,36 +2200,111 @@ function DsLeaderboard({
       </div>
 
       {isFinal && top.length > 0 && (
-        <div className="ds-podium">
-          {podiumEntries.map(({ entry, medal, slot, visualOrder }) => (
-            <div
-              key={entry!.player_id}
-              className={`ds-podium-slot${entry!.rank === 1 ? ' ds-podium-slot-leader' : ''}`}
-              style={{
-                order: visualOrder,
-                animationDelay: entry!.rank === 1 ? '1.8s' : entry!.rank === 2 ? '1.0s' : '.2s',
-              }}
-            >
-              <div className="ds-pod-rank">#{entry!.rank}</div>
-              <div className="ds-pod-medal">{medal}</div>
-              {entry!.rank === 1 && <div className="ds-pod-crown">👑</div>}
-              <div className="ds-pod-av" style={{ background: avGrad(entry!.rank - 1) }}>{initials(entry!.display_name)}</div>
-              <div className="ds-pod-name">{entry!.display_name}</div>
-              <div
-                className={`ds-pod-bar ds-pod-bar-${entry!.rank - 1} ds-pod-bar-slot-${slot}`}
-                style={{ height: `${podiumBarHeight(entry!.cumulative_score)}px` }}
-              >
-                <span className="ds-mono ds-pod-score">
-                  <AnimatedScore
-                    value={entry!.cumulative_score}
-                    from={leaderboardFx[entry!.player_id]?.previousScore ?? entry!.cumulative_score}
-                    durationMs={LEADERBOARD_SCORE_ANIMATION_MS}
-                    reducedMotion={reducedMotion}
-                  />
-                </span>
-              </div>
+        <div className={`ds-final-ceremony${isPhotoMoment ? ' ds-final-photo-moment' : ''}`}>
+          <div className="ds-final-stage">
+            <div className="ds-final-title">
+              <span className="ds-label ds-gold">Final Podium</span>
+              <strong>3 → 2 → 1</strong>
+              <small>{isPhotoMoment ? 'Photo Moment' : 'Final reveal in progress'}</small>
             </div>
-          ))}
+
+            {!reducedMotion && finalConfettiActive && (
+              <div className="ds-confetti" aria-hidden>
+                {confettiPieces.map((piece) => (
+                  <span
+                    key={piece.id}
+                    className="ds-confetti-piece"
+                    style={{
+                      left: piece.left,
+                      '--ds-confetti-delay': piece.delay,
+                      '--ds-confetti-duration': piece.duration,
+                      '--ds-confetti-drift': piece.drift,
+                      '--ds-confetti-rotate': piece.rotate,
+                      background: piece.color,
+                    } as CSSProperties}
+                  />
+                ))}
+              </div>
+            )}
+
+            <div className="ds-final-podium">
+              {rank2Entry && (
+                <div className={`ds-final-podium-card ds-final-podium-card--rank2${showRank2 ? ' is-revealed' : ''}`}>
+                  <div className="ds-pod-rank">#2</div>
+                  <div className="ds-pod-medal">{MEDALS[1]}</div>
+                  <div className="ds-pod-av" style={{ background: avGrad(1) }}>{initials(rank2Entry.display_name)}</div>
+                  <div className="ds-pod-name">{rank2Entry.display_name}</div>
+                  <div className="ds-pod-bar" style={{ height: `${podiumBarHeight(rank2Entry.cumulative_score)}px` }}>
+                    <span className="ds-mono ds-pod-score">
+                      <AnimatedScore
+                        value={rank2Entry.cumulative_score}
+                        from={leaderboardFx[rank2Entry.player_id]?.previousScore ?? rank2Entry.cumulative_score}
+                        durationMs={LEADERBOARD_SCORE_ANIMATION_MS}
+                        reducedMotion={reducedMotion}
+                      />
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {rank1Entry && (
+                <div className={`ds-final-podium-card ds-final-podium-card--rank1${showRank1 ? ' is-revealed' : ''}`}>
+                  <div className="ds-final-winner-crown" aria-hidden>👑</div>
+                  <div className="ds-pod-rank">#1</div>
+                  <div className="ds-pod-medal">{MEDALS[0]}</div>
+                  <div className="ds-pod-av" style={{ background: avGrad(0) }}>{initials(rank1Entry.display_name)}</div>
+                  <div className="ds-pod-name">{rank1Entry.display_name}</div>
+                  <div className="ds-pod-bar" style={{ height: `${podiumBarHeight(rank1Entry.cumulative_score) + 56}px` }}>
+                    <span className="ds-mono ds-pod-score">
+                      <AnimatedScore
+                        value={rank1Entry.cumulative_score}
+                        from={leaderboardFx[rank1Entry.player_id]?.previousScore ?? rank1Entry.cumulative_score}
+                        durationMs={LEADERBOARD_SCORE_ANIMATION_MS}
+                        reducedMotion={reducedMotion}
+                      />
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {rank3Entry && (
+                <div className={`ds-final-podium-card ds-final-podium-card--rank3${showRank3 ? ' is-revealed' : ''}`}>
+                  <div className="ds-pod-rank">#3</div>
+                  <div className="ds-pod-medal">{MEDALS[2]}</div>
+                  <div className="ds-pod-av" style={{ background: avGrad(2) }}>{initials(rank3Entry.display_name)}</div>
+                  <div className="ds-pod-name">{rank3Entry.display_name}</div>
+                  <div className="ds-pod-bar" style={{ height: `${podiumBarHeight(rank3Entry.cumulative_score)}px` }}>
+                    <span className="ds-mono ds-pod-score">
+                      <AnimatedScore
+                        value={rank3Entry.cumulative_score}
+                        from={leaderboardFx[rank3Entry.player_id]?.previousScore ?? rank3Entry.cumulative_score}
+                        durationMs={LEADERBOARD_SCORE_ANIMATION_MS}
+                        reducedMotion={reducedMotion}
+                      />
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {winner && (
+              <div className="ds-stage-card ds-stage-card-soft ds-winner-card">
+                <div className="ds-label ds-gold">Champion</div>
+                <div className="ds-winner-name">{winner.display_name}</div>
+                <div className="ds-winner-line">
+                  <span className="ds-mono ds-gold">
+                    <AnimatedScore
+                      value={winner.cumulative_score}
+                      from={leaderboardFx[winner.player_id]?.previousScore ?? winner.cumulative_score}
+                      durationMs={LEADERBOARD_SCORE_ANIMATION_MS}
+                      reducedMotion={reducedMotion}
+                    /> คะแนน
+                  </span>
+                </div>
+                <div className="ds-sub-text">Golden Ring Photo Moment</div>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
