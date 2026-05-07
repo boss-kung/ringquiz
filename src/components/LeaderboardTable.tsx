@@ -21,12 +21,12 @@ function initials(name: string) {
 }
 
 const PODIUM_GRADS = [
-    'linear-gradient(180deg,rgba(180,190,200,.45),rgba(140,155,170,.28))',
-      'linear-gradient(180deg,rgba(245,199,74,.55),rgba(180,140,10,.38))',
+  'linear-gradient(180deg,rgba(245,199,74,.55),rgba(180,140,10,.38))',
+  'linear-gradient(180deg,rgba(180,190,200,.45),rgba(140,155,170,.28))',
   'linear-gradient(180deg,rgba(195,140,70,.45),rgba(145,95,35,.28))',
 ];
-const PODIUM_H  = [86, 108, 70];
-const MEDALS    = ['🥈', '🥇', '🥉'];
+const PODIUM_H  = [108, 86, 70];
+const MEDALS    = ['🥇', '🥈', '🥉'];
 const PODIUM_ORDER_3 = [1, 0, 2]; // 2nd, 1st, 3rd visual order
 
 export function LeaderboardTable({
@@ -109,7 +109,7 @@ export function LeaderboardTable({
                         border: isMe ? '1px solid rgba(245,199,74,.25)' : '1px solid rgba(255,255,255,.07)',
                       }}
                     >
-                      <span className="gr-mono" style={{ fontSize: 16, fontWeight: 800, color: idx === 1 ? '#0C1228' : 'var(--text)' }}>
+                      <span className="gr-mono" style={{ fontSize: 16, fontWeight: 800, color: idx === 0 ? '#0C1228' : 'var(--text)' }}>
                         {entry.cumulative_score.toLocaleString()}
                       </span>
                     </div>

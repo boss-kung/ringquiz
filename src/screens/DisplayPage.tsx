@@ -2203,8 +2203,6 @@ function DsLeaderboard({
           <div className="ds-final-stage">
             <div className="ds-final-title">
               <span className="ds-label ds-gold">Final Podium</span>
-              <strong>3 → 2 → 1</strong>
-              <small>{isPhotoMoment ? 'Photo Moment' : 'Final reveal in progress'}</small>
             </div>
 
             {!reducedMotion && finalConfettiActive && (
@@ -2300,7 +2298,6 @@ function DsLeaderboard({
                     /> คะแนน
                   </span>
                 </div>
-                <div className="ds-sub-text">Golden Ring Photo Moment</div>
               </div>
             )}
           </div>

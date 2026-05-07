@@ -27,8 +27,9 @@ export function CountdownScreen() {
     setShowClue(false);
     if (!countdownStartedAt) return;
 
+    const VISUAL_DELAY_MS = 1000;
     const startMs = new Date(countdownStartedAt).getTime();
-    const elapsedMs = Math.max(0, getServerTime() - startMs);
+    const elapsedMs = Math.max(0, getServerTime() - startMs - VISUAL_DELAY_MS);
     const initialRemainingMs = Math.max(0, totalCountdownMs - elapsedMs);
     setRemainingMs(initialRemainingMs);
     setCount(initialRemainingMs > 0 ? Math.ceil(initialRemainingMs / 1000) : 0);
