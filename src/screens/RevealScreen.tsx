@@ -7,7 +7,6 @@ import { QuestionImage } from '../components/QuestionImage';
 import { FUNCTIONS_URL } from '../lib/supabase';
 import { resolveQuestionImageUrl, resolveRevealImageUrl } from '../lib/questionAssets';
 import { triggerFeedbackFx } from '../lib/feedbackFx';
-import { formatScoreBreakdown, getSpecialRulePresentation } from '../lib/specialRules';
 
 // ── Streak helpers (localStorage, local-only, never written to Supabase) ─────
 
@@ -199,10 +198,6 @@ export function RevealScreen() {
       : null;
   const persistentCircle = circlePosition ?? revealCircle;
   const isResolvingResult = !effectiveRevealResult && !revealNoAnswer;
-  const specialRuleType = effectiveRevealResult?.special_rule_type ?? question.special_rule_type ?? 'normal';
-  const specialRuleConfig = effectiveRevealResult?.special_rule_config_snapshot ?? question.special_rule_config ?? {};
-  const specialRulePresentation = getSpecialRulePresentation(specialRuleType, specialRuleConfig, 'reveal');
-  const scoreBreakdown = formatScoreBreakdown(effectiveRevealResult?.score_breakdown);
 
   /* Banner variant */
   let bannerClass = 'gr-reveal-banner gr-reveal-banner-neutral';
