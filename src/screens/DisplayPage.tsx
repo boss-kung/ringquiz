@@ -1543,8 +1543,9 @@ function DsCountdown({
 
   useEffect(() => {
     setShowClue(false);
+    const VISUAL_DELAY_MS = 1000;
     const startMs = new Date(startedAt).getTime();
-    const alreadyElapsedMs = Math.max(0, getServerTime() - startMs);
+    const alreadyElapsedMs = Math.max(0, getServerTime() - startMs - VISUAL_DELAY_MS);
     const initialRemaining = Math.max(0, totalMs - alreadyElapsedMs);
 
     if (initialRemaining === 0) { setShowClue(true); return; }
