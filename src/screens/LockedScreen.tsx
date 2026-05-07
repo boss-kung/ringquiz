@@ -9,6 +9,7 @@ export function LockedScreen() {
 
   return (
     <div
+      className="gr-locked-screen"
       style={{
         position: 'relative',
         display: 'flex',
@@ -22,10 +23,6 @@ export function LockedScreen() {
         textAlign: 'center',
       }}
     >
-      {/* Background glows */}
-      <div className="gr-glow gr-glow-a" />
-      <div className="gr-glow gr-glow-b" />
-
       {/* Concentric decorative rings */}
       {[190, 250, 310].map((s, i) => (
         <div

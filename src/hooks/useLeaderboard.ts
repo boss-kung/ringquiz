@@ -34,7 +34,13 @@ export function useLeaderboard() {
             console.error('[useLeaderboard] fetch:', error.message);
             return;
           }
-          const entries = (data ?? []) as LeaderboardEntry[];
+          const entries = [...((data ?? []) as LeaderboardEntry[])].sort((a, b) => {
+            if (a.cumulative_score !== b.cumulative_score) return b.cumulative_score - a.cumulative_score;
+            if (a.rank !== b.rank) return a.rank - b.rank;
+            const nameCompare = a.display_name.localeCompare(b.display_name, undefined, { sensitivity: 'base' });
+            if (nameCompare !== 0) return nameCompare;
+            return a.player_id.localeCompare(b.player_id);
+          });
           setLeaderboard(entries, playerId);
 
           // If player is not in top results, fetch their specific entry

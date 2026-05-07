@@ -3,6 +3,7 @@ import type { CSSProperties } from 'react';
 import { useGameStore } from '../store/gameStore';
 import { useRevealResult } from '../hooks/useRevealResult';
 import { useGetServerTime } from '../hooks/useServerTime';
+import { AutoFitText } from '../components/AutoFitText';
 import { QuestionImage } from '../components/QuestionImage';
 import { FUNCTIONS_URL } from '../lib/supabase';
 import { resolveQuestionImageUrl, resolveRevealImageUrl } from '../lib/questionAssets';
@@ -51,7 +52,7 @@ function makeRevealConfetti(): RevealConfettiParticle[] {
   return Array.from({ length: 18 }, (_, i) => ({
     id: i,
     left: `${4 + i * 5.3}%`,
-    delay: `-${0.18 + (i % 6) * 0.28}s`,
+    delay: `${(i % 6) * 0.12}s`,
     duration: `${2.6 + (i % 5) * 0.28}s`,
     drift: `${((i % 2 === 0 ? 1 : -1) * (18 + (i % 4) * 8))}px`,
     rotate: `${(i % 2 === 0 ? 1 : -1) * (110 + (i % 5) * 28)}deg`,
@@ -78,7 +79,8 @@ export function RevealScreen() {
 
   // Local-only visual streak
   const [visualStreak, setVisualStreak] = useState(0);
-  const revealConfetti = useMemo(() => makeRevealConfetti(), []);
+  const revealReplayKey = `${question?.id ?? 'no-question'}:${revealStartedAt ?? 'no-reveal'}`;
+  const revealConfetti = useMemo(() => makeRevealConfetti(), [revealReplayKey]);
 
   useEffect(() => {
     if (!question || !revealStartedAt) {
@@ -248,10 +250,10 @@ export function RevealScreen() {
       <div className="gr-glow gr-glow-b" style={{ opacity: .6 }} />
 
       {isCorrect && effectiveRevealResult && (
-        <div className="gr-reveal-confetti" aria-hidden>
+        <div key={revealReplayKey} className="gr-reveal-confetti" aria-hidden>
           {revealConfetti.map((particle) => (
             <span
-              key={particle.id}
+              key={`${revealReplayKey}:${particle.id}`}
               className="gr-reveal-confetti-piece"
               style={{
                 left: particle.left,
@@ -260,6 +262,7 @@ export function RevealScreen() {
                 '--gr-confetti-drift': particle.drift,
                 '--gr-confetti-rotate': particle.rotate,
                 background: particle.color,
+                willChange: 'transform, opacity',
               } as CSSProperties}
             />
           ))}
@@ -329,6 +332,13 @@ export function RevealScreen() {
       {/* Footer */}
       <div className="gr-reveal-footer">
         <p className="gr-label-xs">กำลังรอตารางคะแนน…</p>
+        <AutoFitText
+          text={question.text}
+          maxFontSize={13}
+          minFontSize={11}
+          maxHeight={40}
+          style={{ color: 'var(--text-2)', lineHeight: 1.45, marginTop: 6 }}
+        />
       </div>
     </div>
   );

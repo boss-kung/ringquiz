@@ -2,7 +2,21 @@ import { useEffect, useMemo, useState } from 'react';
 import { useGameStore } from '../store/gameStore';
 import { COUNTDOWN_DISPLAY_SECONDS } from '../lib/constants';
 import { useGetServerTime } from '../hooks/useServerTime';
-import { resolveQuestionImageUrl } from '../lib/questionAssets';
+import { useImagePreloadStatus, usePrimeImages } from '../hooks/useImagePreload';
+import { resolveQuestionImageUrl, resolveRevealImageUrl } from '../lib/questionAssets';
+
+function getSpecialRoundPreview(type: string, label?: string | null) {
+  switch (type) {
+    case 'double_score':
+      return { badge: 'SPECIAL MODE', title: label?.trim() || 'Double Score', description: 'รอบนี้มีกติกาพิเศษ อ่านก่อนตอบ' };
+    case 'speed_bonus':
+      return { badge: 'SPECIAL MODE', title: label?.trim() || 'Speed Bonus', description: 'ยิ่งตอบเร็ว ยิ่งได้โบนัสเพิ่ม' };
+    case 'mystery_round':
+      return { badge: 'SPECIAL MODE', title: label?.trim() || 'Mystery Round', description: 'รอบนี้มีกติกาพิเศษ อ่านก่อนตอบ' };
+    default:
+      return null;
+  }
+}
 
 export function CountdownScreen() {
   const question = useGameStore((s) => s.question);
@@ -69,6 +83,12 @@ export function CountdownScreen() {
   const clueImageUrl = useMemo(() => {
     return question ? resolveQuestionImageUrl(question.image_url) : null;
   }, [question]);
+  const revealImageUrl = useMemo(() => {
+    return question ? resolveRevealImageUrl(question.reveal_image_url) : null;
+  }, [question]);
+  usePrimeImages([clueImageUrl, revealImageUrl], 6500);
+  const clueImageStatus = useImagePreloadStatus(clueImageUrl, 6500);
+  const specialRoundPreview = getSpecialRoundPreview(question?.special_round_type ?? 'normal', question?.special_round_label);
 
   return (
     <div
@@ -93,6 +113,14 @@ export function CountdownScreen() {
         {displayOrder !== null && (
           <div className="gr-label-sm gr-gold" style={{ marginBottom: 10, letterSpacing: '.18em', fontSize: 24 }}>
             Question {displayOrder ?? '—'}
+          </div>
+        )}
+
+        {specialRoundPreview && (
+          <div className="gr-special-round-card" style={{ marginBottom: 12 }}>
+            <div className="gr-special-round-card-badge">{specialRoundPreview.badge}</div>
+            <div className="gr-special-round-card-title">{specialRoundPreview.title}</div>
+            <div className="gr-special-round-card-copy">{specialRoundPreview.description}</div>
           </div>
         )}
 
@@ -158,7 +186,7 @@ export function CountdownScreen() {
             </>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center' }}>
-              {clueImageUrl ? (
+              {clueImageUrl && clueImageStatus === 'loaded' ? (
                 <div className="quiz-image-shell quiz-image-shell--clue">
                   <div className="quiz-image-circle">
                     <img
@@ -168,6 +196,16 @@ export function CountdownScreen() {
                       draggable={false}
                     />
                   </div>
+                </div>
+              ) : clueImageUrl && clueImageStatus === 'loading' ? (
+                <div className="gr-image-loading-card">
+                  <div className="gr-image-loading-spinner" aria-hidden />
+                  <div>กำลังเตรียมภาพปริศนา...</div>
+                </div>
+              ) : clueImageUrl && clueImageStatus === 'error' ? (
+                <div className="gr-image-loading-card">
+                  <div>โหลดภาพไม่สำเร็จ</div>
+                  <div className="gr-image-loading-subtle">คำถามจะยังดำเนินต่อได้ตามปกติ</div>
                 </div>
               ) : (
                 <div className="gr-card" style={{ padding: '16px 18px', color: 'var(--text-2)', fontSize: 18 }}>

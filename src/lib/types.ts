@@ -80,6 +80,7 @@ export interface Question {
   image_width: number | null;
   image_height: number | null;
   reveal_image_url: string | null;     // null in V1; optional host-prepared overlay
+  special_round_label?: string | null;
   is_published: boolean;
   created_at: string;
   special_round_type?: SpecialRoundType; // populated when game-set-aware question fetch includes gsq override

@@ -115,15 +115,15 @@ export function useQuestion() {
             special_round_type: 'normal',
           };
 
-          // Fetch special_round_type separately — column may not exist until migration is applied.
+          // Fetch special-round fields separately — columns may not exist until migration is applied.
           if (gameSetSpecialRoundTypeSupported !== false) {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const { data: srtData, error: srtErr } = await (supabase as any)
               .from('game_set_questions')
-              .select('special_round_type')
+              .select('special_round_type, special_round_label')
               .eq('id', gsqId)
               .single() as {
-                data: { special_round_type?: string } | null;
+                data: { special_round_type?: string; special_round_label?: string | null } | null;
                 error: { message?: string } | null;
               };
 
@@ -134,7 +134,11 @@ export function useQuestion() {
             }
 
             if (!cancelled && srtData?.special_round_type) {
-              merged = { ...merged, special_round_type: (srtData.special_round_type as import('../lib/types').SpecialRoundType) };
+              merged = {
+                ...merged,
+                special_round_type: (srtData.special_round_type as import('../lib/types').SpecialRoundType),
+                special_round_label: srtData.special_round_label ?? null,
+              };
             }
           }
         }

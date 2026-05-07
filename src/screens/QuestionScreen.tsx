@@ -3,10 +3,12 @@ import { flushSync } from 'react-dom';
 import { useGameStore } from '../store/gameStore';
 import { useAnswerSubmit } from '../hooks/useAnswerSubmit';
 import { useGetServerTime } from '../hooks/useServerTime';
+import { usePrimeImages } from '../hooks/useImagePreload';
+import { AutoFitText } from '../components/AutoFitText';
 import { QuestionImage } from '../components/QuestionImage';
 import { Timer } from '../components/Timer';
 import { SoundFxToggle } from '../components/SoundFxToggle';
-import { resolveQuestionImageUrl } from '../lib/questionAssets';
+import { resolveQuestionImageUrl, resolveRevealImageUrl } from '../lib/questionAssets';
 import type { CirclePosition } from '../lib/types';
 import { triggerFeedbackFx, unlockFeedbackAudio } from '../lib/feedbackFx';
 import { FUNCTIONS_URL, supabase } from '../lib/supabase';
@@ -14,11 +16,11 @@ import { FUNCTIONS_URL, supabase } from '../lib/supabase';
 function getSpecialRoundIntro(type: string) {
   switch (type) {
     case 'double_score':
-      return { badge: '×2 Double Score' };
+      return { badge: '×2 Double Score', title: 'Double Score', description: 'คำตอบที่ถูกต้องได้คะแนน x2' };
     case 'speed_bonus':
-      return { badge: '⚡ Speed Bonus' };
+      return { badge: '⚡ Speed Bonus', title: 'Speed Bonus', description: 'ยิ่งตอบเร็ว ยิ่งได้โบนัสเพิ่ม' };
     case 'mystery_round':
-      return { badge: '🎭 Mystery Round' };
+      return { badge: '🎭 Mystery Round', title: 'Mystery Round', description: 'มีกติกาพิเศษในข้อนี้ โปรดอ่านก่อนตอบ' };
     default:
       return null;
   }
@@ -141,6 +143,10 @@ export function QuestionScreen() {
     }
   }, [gameState?.status, question?.id, question?.special_round_type]);
 
+  const questionImageUrl = question ? resolveQuestionImageUrl(question.image_url) : null;
+  const revealImageUrl = question ? resolveRevealImageUrl(question.reveal_image_url) : null;
+  usePrimeImages([questionImageUrl, revealImageUrl], 6500);
+
   if (!question) {
     return (
       <div style={{ display: 'flex', minHeight: '100%', alignItems: 'center', justifyContent: 'center', background: 'var(--navy)' }}>
@@ -151,7 +157,6 @@ export function QuestionScreen() {
 
   const hasSelection = Boolean(circlePosition ?? latestCirclePositionRef.current);
   const canSubmit = hasSelection && !isLocked && !timeExpired;
-  const questionImageUrl = resolveQuestionImageUrl(question.image_url);
   const specialRoundIntro = getSpecialRoundIntro(question.special_round_type ?? 'normal');
 
   // Urgency state for vignette overlay
@@ -178,8 +183,11 @@ export function QuestionScreen() {
     void unlockFeedbackAudio();
     setButtonPressed(true);
     void submit(selectedPosition);
-    setButtonPressed(false);
   };
+
+  useEffect(() => {
+    if (!submitting && !submitted) setButtonPressed(false);
+  }, [submitted, submitting]);
 
   // Circle class: locked visual when submitted/submitting
   const circleClass = isLocked ? 'quiz-answer-circle-locked' : '';
@@ -223,13 +231,22 @@ export function QuestionScreen() {
       <div className="gr-qtext-wrap">
         <div className="gr-card gr-qtext-card" style={{ marginBottom: 20 }}>
           {question.special_round_type && question.special_round_type !== 'normal' && (
-            <div className={`gr-special-round-badge gr-special-badge-${question.special_round_type}`}>
-              {specialRoundIntro?.badge ?? 'Special Round'}
-            </div>
+            <>
+              <div className={`gr-special-round-badge gr-special-badge-${question.special_round_type}`}>
+                {specialRoundIntro?.badge ?? 'Special Round'}
+              </div>
+              <div className="gr-special-round-reminder">
+                {question.special_round_label?.trim() || specialRoundIntro?.description || specialRoundIntro?.title || 'Special mode active'}
+              </div>
+            </>
           )}
-          <p className="gr-qtext" style={{ fontSize:24 }}>
-            {question.text}
-          </p>
+          <AutoFitText
+            text={question.text}
+            className="gr-qtext"
+            maxFontSize={24}
+            minFontSize={16}
+            maxHeight="22vh"
+          />
         </div>
       </div>
 
@@ -268,6 +285,7 @@ export function QuestionScreen() {
         </div>
 
         <button
+          type="button"
           onClick={handleSubmitClick}
           onPointerDown={() => {
             if (canSubmit) setButtonPressed(true);
@@ -276,6 +294,7 @@ export function QuestionScreen() {
           onPointerCancel={() => setButtonPressed(false)}
           onBlur={() => setButtonPressed(false)}
           disabled={!canSubmit}
+          aria-disabled={!canSubmit}
           className={`gr-btn ${submitted ? 'gr-btn-submit-done gr-btn-submit-locked' : 'gr-btn-gold'}${buttonPressed ? ' gr-btn-is-pressing' : ''}`}
           style={{ marginTop: 0 }}
         >

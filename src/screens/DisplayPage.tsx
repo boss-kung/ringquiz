@@ -14,13 +14,15 @@
  * - Images are preloaded when the current question is known.
  * - All image/mask layers use object-fit:cover (same as player view).
  */
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { supabase, GAME_STATE_ID, FUNCTIONS_URL, SUPABASE_ANON_KEY } from '../lib/supabase';
 import { resolveQuestionImageUrl, resolveRevealImageUrl } from '../lib/questionAssets';
 import { COUNTDOWN_DISPLAY_SECONDS, SERVER_TIME_RESYNC_INTERVAL_MS } from '../lib/constants';
 import type { GameState, Player, LeaderboardEntry, DisplayStatsResponse, DisplayEvent, DisplayEventType, DisplayTheme, SpecialRoundType } from '../lib/types';
 import { QuestionImage } from '../components/QuestionImage';
+import { AutoFitText } from '../components/AutoFitText';
+import { useImagePreloadStatus, usePrimeImages } from '../hooks/useImagePreload';
 
 // ── Local types ───────────────────────────────────────────────────────────────
 
@@ -38,6 +40,7 @@ interface DisplayQuestion {
   circle_radius_ratio: number;
   play_order: number;
   special_round_type: SpecialRoundType;
+  special_round_label?: string | null;
 }
 
 interface LeaderboardFxMeta {
@@ -88,14 +91,24 @@ function logDisplayRt(channel: string, status: string) {
 function getSpecialRoundIntro(type: SpecialRoundType) {
   switch (type) {
     case 'double_score':
-      return { badge: 'DOUBLE SCORE ×2' };
+      return { badge: 'DOUBLE SCORE ×2', description: 'รอบนี้คำตอบที่ถูกต้องได้คะแนน x2' };
     case 'speed_bonus':
-      return { badge: 'SPEED BONUS ⚡' };
+      return { badge: 'SPEED BONUS ⚡', description: 'ตอบเร็วขึ้นเพื่อรับโบนัสเพิ่ม' };
     case 'mystery_round':
-      return { badge: 'MYSTERY ROUND 🎭' };
+      return { badge: 'MYSTERY ROUND 🎭', description: 'รอบนี้มีกติกาพิเศษ อ่านก่อนตอบ' };
     default:
       return null;
   }
+}
+
+function sortLeaderboardEntries(entries: LeaderboardEntry[]) {
+  return [...entries].sort((a, b) => {
+    if (a.cumulative_score !== b.cumulative_score) return b.cumulative_score - a.cumulative_score;
+    if (a.rank !== b.rank) return a.rank - b.rank;
+    const nameCompare = a.display_name.localeCompare(b.display_name, undefined, { sensitivity: 'base' });
+    if (nameCompare !== 0) return nameCompare;
+    return a.player_id.localeCompare(b.player_id);
+  });
 }
 
 function useReducedMotion() {
@@ -244,13 +257,38 @@ function DisplayImageStage({
   fullWidth?: boolean;
   variant?: 'clue' | 'question' | 'reveal';
 }) {
+  const imageStatus = useImagePreloadStatus(imageUrl, 6500);
+  const revealStatus = useImagePreloadStatus(revealImageUrl ?? null, 6500);
+  const canShowReveal = showReveal && revealReady && revealStatus !== 'loading';
   const shellVariant =
     variant === 'clue' ? 'quiz-image-shell--display-clue' :
     variant === 'reveal' ? 'quiz-image-shell--display-reveal' :
     'quiz-image-shell--display-question';
 
-  const displayImageUrl = showReveal && revealReady ? (revealImageUrl ?? imageUrl) : imageUrl;
-  const shellClassName = `ds-display-shell ${shellVariant}${fullWidth ? ' ds-display-shell-full' : ''}${showReveal && revealReady ? ' quiz-image-shell--reveal-active' : ''}`;
+  const displayImageUrl = canShowReveal ? (revealImageUrl ?? imageUrl) : imageUrl;
+  const shellClassName = `ds-display-shell ${shellVariant}${fullWidth ? ' ds-display-shell-full' : ''}${canShowReveal ? ' quiz-image-shell--reveal-active' : ''}`;
+
+  if (imageUrl && imageStatus === 'loading' && !canShowReveal) {
+    return (
+      <div className="ds-display-image-wrap">
+        <div className="ds-image-loading-card">
+          <div className="gr-image-loading-spinner" aria-hidden />
+          <div>กำลังเตรียมภาพ...</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (imageUrl && imageStatus === 'error') {
+    return (
+      <div className="ds-display-image-wrap">
+        <div className="ds-image-loading-card">
+          <div>โหลดภาพไม่สำเร็จ</div>
+          <div className="gr-image-loading-subtle">ระบบจะแสดงคำถามต่อได้ตามปกติ</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="ds-display-image-wrap">
@@ -804,7 +842,8 @@ export function DisplayPage() {
   }, [reconcilePlayers]);
 
   const applyLeaderboardSnapshot = useCallback((entries: LeaderboardEntry[]) => {
-    const signature = entries
+    const sortedEntries = sortLeaderboardEntries(entries);
+    const signature = sortedEntries
       .map((entry) => `${entry.question_id}:${entry.player_id}:${entry.rank}:${entry.cumulative_score}:${entry.question_score}`)
       .join('|');
     if (signature === leaderboardSignatureRef.current) return;
@@ -822,7 +861,7 @@ export function DisplayPage() {
     const prevMap = previousLeaderboardRef.current;
     const nextMeta: Record<string, LeaderboardFxMeta> = {};
 
-    for (const entry of entries) {
+    for (const entry of sortedEntries) {
       const prev = prevMap.get(entry.player_id);
       nextMeta[entry.player_id] = {
         previousRank: prev?.rank ?? null,
@@ -833,7 +872,7 @@ export function DisplayPage() {
       };
     }
 
-    const nextLeader = entries[0] ?? null;
+    const nextLeader = sortedEntries[0] ?? null;
     const triggerLeaderChange = () => {
       if (!nextLeader || !previousLeaderIdRef.current || previousLeaderIdRef.current === nextLeader.player_id) return;
       setLeaderChange({
@@ -848,7 +887,7 @@ export function DisplayPage() {
       }, LEADERBOARD_LEADER_BANNER_MS);
     };
 
-    previousLeaderboardRef.current = new Map(entries.map((entry) => [entry.player_id, entry]));
+    previousLeaderboardRef.current = new Map(sortedEntries.map((entry) => [entry.player_id, entry]));
     previousLeaderIdRef.current = nextLeader?.player_id ?? null;
     setLeaderboardFx(nextMeta);
 
@@ -859,13 +898,13 @@ export function DisplayPage() {
       hasPreviousBoard;
 
     if (!shouldStageAnimation) {
-      setLeaderboard(entries);
+      setLeaderboard(sortedEntries);
       setLeaderboardAnimationStage('steady');
       triggerLeaderChange();
       return;
     }
 
-    const stagedEntries = [...entries].sort((a, b) => {
+    const stagedEntries = [...sortedEntries].sort((a, b) => {
       const prevA = prevMap.get(a.player_id)?.rank ?? 999 + a.rank;
       const prevB = prevMap.get(b.player_id)?.rank ?? 999 + b.rank;
       if (prevA !== prevB) return prevA - prevB;
@@ -877,7 +916,7 @@ export function DisplayPage() {
       setLeaderboardAnimationStage('counting');
 
       leaderboardSettleTimerRef.current = setTimeout(() => {
-        setLeaderboard(entries);
+        setLeaderboard(sortedEntries);
         setLeaderboardAnimationStage('reordering');
         triggerLeaderChange();
 
@@ -1065,6 +1104,7 @@ export function DisplayPage() {
           circle_radius_ratio: qData.circle_radius_ratio,
           play_order: qData.order_index,
           special_round_type: 'normal',
+          special_round_label: null,
         };
 
         if (gsqId) {
@@ -1084,10 +1124,10 @@ export function DisplayPage() {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const { data: srtData, error: srtErr } = await (supabase as any)
               .from('game_set_questions')
-              .select('special_round_type')
+              .select('special_round_type, special_round_label')
               .eq('id', gsqId)
               .single() as {
-                data: { special_round_type?: string } | null;
+                data: { special_round_type?: string; special_round_label?: string | null } | null;
                 error: { message?: string } | null;
               };
 
@@ -1098,7 +1138,11 @@ export function DisplayPage() {
             }
 
             if (srtData?.special_round_type) {
-              dq = { ...dq, special_round_type: srtData.special_round_type as SpecialRoundType };
+              dq = {
+                ...dq,
+                special_round_type: srtData.special_round_type as SpecialRoundType,
+                special_round_label: srtData.special_round_label ?? null,
+              };
             }
           }
         }
@@ -1129,7 +1173,7 @@ export function DisplayPage() {
   // ── P0.6 — Preload question images when question becomes known ───────────────
   const preloadImageUrl = question ? resolveQuestionImageUrl(question.image_url) : null;
   const preloadRevealUrl = question ? resolveRevealImageUrl(question.reveal_image_url) : null;
-  usePreloadImages(preloadImageUrl, preloadRevealUrl);
+  usePrimeImages([preloadImageUrl, preloadRevealUrl], 6500);
 
   // ── 7.5 Display events subscription ─────────────────────────────────────────
   // Events older than 10s on initial load are ignored to prevent stale hype.
@@ -1550,6 +1594,8 @@ function DsCountdown({
   const circ = 2 * Math.PI * 110;
   const offset = progress >= 1 ? 0 : circ * (1 - progress);
   const clueUrl = question ? resolveQuestionImageUrl(question.image_url) : null;
+  const clueStatus = useImagePreloadStatus(clueUrl, 6500);
+  const specialIntro = question ? getSpecialRoundIntro(question.special_round_type) : null;
 
   return (
     <DsShell centered>
@@ -1593,9 +1639,25 @@ function DsCountdown({
           </div>
         ) : (
           <div className="ds-stage-card ds-stage-card-clue ds-clue-wrap ds-clue-enter">
-            {question && <SpecialRoundBadge type={question.special_round_type} large />}
+            {question && (
+              <>
+                <SpecialRoundBadge type={question.special_round_type} large />
+                {question.special_round_type !== 'normal' && (
+                  <div className="ds-special-round-preview">
+                    <div className="ds-special-round-preview-label">SPECIAL MODE</div>
+                    <div className="ds-special-round-preview-title">{question.special_round_label?.trim() || specialIntro?.badge}</div>
+                    <div className="ds-special-round-preview-copy">{specialIntro?.description}</div>
+                  </div>
+                )}
+              </>
+            )}
             {questionFetchError && !clueUrl ? (
               <div className="ds-muted">ไม่สามารถโหลดภาพคำถามได้</div>
+            ) : clueUrl && clueStatus === 'loading' ? (
+              <div className="ds-image-loading-card">
+                <div className="gr-image-loading-spinner" aria-hidden />
+                <div>กำลังเตรียมภาพปริศนา...</div>
+              </div>
             ) : (
               <DisplayImageStage imageUrl={clueUrl} variant="clue" />
             )}
@@ -1729,7 +1791,13 @@ function DsQuestion({
               {questionFetchError && !question ? (
                 <div className="ds-muted">ไม่สามารถโหลดคำถามได้</div>
               ) : (
-                <div className="ds-q-text">{question?.text ?? 'กำลังโหลด...'}</div>
+                <AutoFitText
+                  text={question?.text ?? 'กำลังโหลด...'}
+                  className="ds-q-text"
+                  maxFontSize={56}
+                  minFontSize={22}
+                  maxHeight="32vh"
+                />
               )}
               <div className={`ds-big-timer ${urgent ? 'ds-timer-urgent' : ''}`}>
                 {timeLeft != null ? timeLeft.toFixed(1) : '—'}
@@ -1866,7 +1934,13 @@ function DsReveal({
 
         <div className="ds-reveal-layout">
           <div className="ds-stage-card ds-stage-card-soft ds-reveal-left">
-            <div className="ds-reveal-text" style={{fontSize:'2rem'}}>{question.text}</div>
+            <AutoFitText
+              text={question.text}
+              className="ds-reveal-text"
+              maxFontSize={40}
+              minFontSize={20}
+              maxHeight="28vh"
+            />
 
             {showReveal && submittedCount > 0 && (
               <div className="ds-reveal-stats">
@@ -1923,10 +1997,15 @@ function DsLeaderboard({
 }) {
   const rowRefs = useRef(new Map<string, HTMLDivElement>());
   const rowTopsRef = useRef(new Map<string, number>());
-  const winner = leaderboard[0];
-  const top = leaderboard.slice(0, 10);
+  const sortedLeaderboard = useMemo(() => sortLeaderboardEntries(leaderboard), [leaderboard]);
+  const winner = sortedLeaderboard[0];
+  const top = sortedLeaderboard.slice(0, 10);
   const MEDALS = ['🥇', '🥈', '🥉'];
-  const podiumSlots = [1, 0, 2].filter((i) => top[i]);
+  const podiumEntries = [
+    { slot: 'left', visualOrder: 0, medal: MEDALS[1], entry: top.find((candidate) => candidate.rank === 2) ?? null },
+    { slot: 'center', visualOrder: 1, medal: MEDALS[0], entry: top.find((candidate) => candidate.rank === 1) ?? null },
+    { slot: 'right', visualOrder: 2, medal: MEDALS[2], entry: top.find((candidate) => candidate.rank === 3) ?? null },
+  ].filter((item) => item.entry);
 
   // Biggest climber: highest positive rankDelta ≥ 2
   const climber = top.reduce<LeaderboardEntry | null>((best, entry) => {
@@ -1941,11 +2020,11 @@ function DsLeaderboard({
     const meta = leaderboardFx[entry.player_id];
     return meta && (meta.previousRank ?? 0) > 3 && entry.rank <= 3;
   }) ?? null;
-  const podiumMaxScore = podiumSlots.length > 0
-    ? Math.max(...podiumSlots.map((i) => top[i].cumulative_score))
+  const podiumMaxScore = podiumEntries.length > 0
+    ? Math.max(...podiumEntries.map((item) => item.entry!.cumulative_score))
     : 0;
-  const podiumMinScore = podiumSlots.length > 0
-    ? Math.min(...podiumSlots.map((i) => top[i].cumulative_score))
+  const podiumMinScore = podiumEntries.length > 0
+    ? Math.min(...podiumEntries.map((item) => item.entry!.cumulative_score))
     : 0;
 
   const podiumBarHeight = useCallback((score: number) => {
@@ -1991,7 +2070,7 @@ function DsLeaderboard({
     return () => {
       cleanupTimers.forEach((id) => window.cancelAnimationFrame(id));
     };
-  }, [leaderboard, reducedMotion]);
+  }, [sortedLeaderboard, reducedMotion]);
 
   const visualRankFor = useCallback((entry: LeaderboardEntry) => {
     if (animationStage === 'counting') {
@@ -2062,27 +2141,28 @@ function DsLeaderboard({
 
       {isFinal && top.length > 0 && (
         <div className="ds-podium">
-          {podiumSlots.map((i) => (
+          {podiumEntries.map(({ entry, medal, slot, visualOrder }) => (
             <div
-              key={top[i].player_id}
-              className={`ds-podium-slot${i === 0 ? ' ds-podium-slot-leader' : ''}`}
+              key={entry!.player_id}
+              className={`ds-podium-slot${entry!.rank === 1 ? ' ds-podium-slot-leader' : ''}`}
               style={{
-                order: i === 0 ? 1 : i === 1 ? 0 : 2,
-                animationDelay: i === 0 ? '1.8s' : i === 1 ? '1.0s' : '.2s',
+                order: visualOrder,
+                animationDelay: entry!.rank === 1 ? '1.8s' : entry!.rank === 2 ? '1.0s' : '.2s',
               }}
             >
-              <div className="ds-pod-medal">{MEDALS[i]}</div>
-              {i === 0 && <div className="ds-pod-crown">👑</div>}
-              <div className="ds-pod-av" style={{ background: avGrad(i) }}>{initials(top[i].display_name)}</div>
-              <div className="ds-pod-name">{top[i].display_name}</div>
+              <div className="ds-pod-rank">#{entry!.rank}</div>
+              <div className="ds-pod-medal">{medal}</div>
+              {entry!.rank === 1 && <div className="ds-pod-crown">👑</div>}
+              <div className="ds-pod-av" style={{ background: avGrad(entry!.rank - 1) }}>{initials(entry!.display_name)}</div>
+              <div className="ds-pod-name">{entry!.display_name}</div>
               <div
-                className={`ds-pod-bar ds-pod-bar-${top[i].rank - 1}`}
-                style={{ height: `${podiumBarHeight(top[i].cumulative_score)}px` }}
+                className={`ds-pod-bar ds-pod-bar-${entry!.rank - 1} ds-pod-bar-slot-${slot}`}
+                style={{ height: `${podiumBarHeight(entry!.cumulative_score)}px` }}
               >
                 <span className="ds-mono ds-pod-score">
                   <AnimatedScore
-                    value={top[i].cumulative_score}
-                    from={leaderboardFx[top[i].player_id]?.previousScore ?? top[i].cumulative_score}
+                    value={entry!.cumulative_score}
+                    from={leaderboardFx[entry!.player_id]?.previousScore ?? entry!.cumulative_score}
                     durationMs={LEADERBOARD_SCORE_ANIMATION_MS}
                     reducedMotion={reducedMotion}
                   />
@@ -2094,7 +2174,7 @@ function DsLeaderboard({
       )}
 
       <div className="ds-stage-card ds-stage-card-soft ds-lb-list">
-        {(isFinal ? top.slice(3) : top).map((entry, idx) => (
+        {(isFinal ? top.filter((entry) => entry.rank > 3) : top).map((entry, idx) => (
           <div
             key={entry.player_id}
             ref={(node) => {
