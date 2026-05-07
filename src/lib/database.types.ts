@@ -119,7 +119,8 @@ export type Database = {
           min_correct_score: number;
           circle_radius_ratio: number;
           is_enabled: boolean;
-          special_round_type: 'normal' | 'double_score' | 'speed_bonus' | 'mystery_round';
+          special_rule_type: 'normal' | 'double_score' | 'triple_score' | 'speed_bonus' | 'no_mistake' | 'fastest_finger' | 'mystery_multiplier';
+          special_rule_config: Json;
           special_round_label: string | null;
           created_at: string;
           updated_at: string;
@@ -134,7 +135,8 @@ export type Database = {
           min_correct_score?: number;
           circle_radius_ratio?: number;
           is_enabled?: boolean;
-          special_round_type?: 'normal' | 'double_score' | 'speed_bonus' | 'mystery_round';
+          special_rule_type?: 'normal' | 'double_score' | 'triple_score' | 'speed_bonus' | 'no_mistake' | 'fastest_finger' | 'mystery_multiplier';
+          special_rule_config?: Json;
           special_round_label?: string | null;
           created_at?: string;
           updated_at?: string;
@@ -149,7 +151,8 @@ export type Database = {
           min_correct_score?: number;
           circle_radius_ratio?: number;
           is_enabled?: boolean;
-          special_round_type?: 'normal' | 'double_score' | 'speed_bonus' | 'mystery_round';
+          special_rule_type?: 'normal' | 'double_score' | 'triple_score' | 'speed_bonus' | 'no_mistake' | 'fastest_finger' | 'mystery_multiplier';
+          special_rule_config?: Json;
           special_round_label?: string | null;
           created_at?: string;
           updated_at?: string;
@@ -308,6 +311,10 @@ export type Database = {
           time_remaining_ratio: number;
           is_correct: boolean;
           score: number;
+          special_rule_type: 'normal' | 'double_score' | 'triple_score' | 'speed_bonus' | 'no_mistake' | 'fastest_finger' | 'mystery_multiplier' | null;
+          special_rule_config_snapshot: Json | null;
+          score_breakdown: Json | null;
+          special_bonus_applied: boolean;
         };
         // Insert is intentionally omitted — no client INSERT policy exists.
         // Inserts are performed by submit-answer Edge Function via service role.

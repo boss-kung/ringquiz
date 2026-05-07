@@ -19,10 +19,11 @@ import type { CSSProperties } from 'react';
 import { supabase, GAME_STATE_ID, FUNCTIONS_URL, SUPABASE_ANON_KEY } from '../lib/supabase';
 import { resolveQuestionImageUrl, resolveRevealImageUrl } from '../lib/questionAssets';
 import { COUNTDOWN_DISPLAY_SECONDS, SERVER_TIME_RESYNC_INTERVAL_MS } from '../lib/constants';
-import type { GameState, Player, LeaderboardEntry, DisplayStatsResponse, DisplayEvent, DisplayEventType, DisplayTheme, SpecialRoundType } from '../lib/types';
+import type { GameState, Player, LeaderboardEntry, DisplayStatsResponse, DisplayEvent, DisplayEventType, DisplayTheme, SpecialRuleType, SpecialRuleConfig } from '../lib/types';
 import { QuestionImage } from '../components/QuestionImage';
 import { AutoFitText } from '../components/AutoFitText';
 import { useImagePreloadStatus, usePrimeImages } from '../hooks/useImagePreload';
+import { getSpecialRulePresentation, normalizeSpecialRuleConfig } from '../lib/specialRules';
 
 // ── Local types ───────────────────────────────────────────────────────────────
 
@@ -39,8 +40,8 @@ interface DisplayQuestion {
   min_correct_score: number;
   circle_radius_ratio: number;
   play_order: number;
-  special_round_type: SpecialRoundType;
-  special_round_label?: string | null;
+  special_rule_type: SpecialRuleType;
+  special_rule_config: SpecialRuleConfig;
 }
 
 interface LeaderboardFxMeta {
@@ -68,7 +69,7 @@ interface RealtimeStatus {
   leaderboard: ChannelStatus;
 }
 
-let gameSetSpecialRoundTypeSupported: boolean | null = null;
+let gameSetSpecialRuleTypeSupported: boolean | null = null;
 
 function toChannelStatus(supabaseStatus: string): ChannelStatus {
   switch (supabaseStatus) {
@@ -88,17 +89,11 @@ function logDisplayRt(channel: string, status: string) {
   console.log(`[Display] ${channel} channel:`, status);
 }
 
-function getSpecialRoundIntro(type: SpecialRoundType) {
-  switch (type) {
-    case 'double_score':
-      return { badge: 'DOUBLE SCORE ×2', description: 'รอบนี้คำตอบที่ถูกต้องได้คะแนน x2' };
-    case 'speed_bonus':
-      return { badge: 'SPEED BONUS ⚡', description: 'ตอบเร็วขึ้นเพื่อรับโบนัสเพิ่ม' };
-    case 'mystery_round':
-      return { badge: 'MYSTERY ROUND 🎭', description: 'รอบนี้มีกติกาพิเศษ อ่านก่อนตอบ' };
-    default:
-      return null;
-  }
+function getDisplayFxVariant(type: SpecialRuleType) {
+  if (type === 'double_score' || type === 'triple_score') return 'double_score';
+  if (type === 'speed_bonus' || type === 'fastest_finger') return 'speed_bonus';
+  if (type === 'mystery_multiplier') return 'mystery_round';
+  return null;
 }
 
 function sortLeaderboardEntries(entries: LeaderboardEntry[]) {
@@ -420,21 +415,24 @@ function ConfettiBurst({
 
 // ── Special round badge (shared across question phases) ───────────────────────
 
-function SpecialRoundBadge({ type, large = false }: { type: SpecialRoundType; large?: boolean }) {
-  if (type === 'normal') return null;
-  const intro = getSpecialRoundIntro(type);
-  if (!intro) return null;
-  const cfg = {
-    double_score: { color: 'var(--gold)', bg: 'rgba(245,199,74,.18)' },
-    speed_bonus:  { color: 'var(--emerald)', bg: 'rgba(52,211,153,.15)' },
-    mystery_round:{ color: 'var(--indigo)', bg: 'rgba(129,140,248,.18)' },
-  }[type];
+function SpecialRoundBadge({
+  type,
+  config,
+  phase = 'question',
+  large = false,
+}: {
+  type: SpecialRuleType;
+  config?: SpecialRuleConfig;
+  phase?: 'countdown' | 'clue' | 'question' | 'reveal' | 'leaderboard';
+  large?: boolean;
+}) {
+  const presentation = getSpecialRulePresentation(type, config ?? {}, phase);
+  if (!presentation) return null;
   return (
     <div
-      className={`ds-special-badge${large ? ' ds-special-badge-lg' : ''}${type === 'mystery_round' ? ' ds-special-badge-mystery' : ''}`}
-      style={{ background: cfg.bg, color: cfg.color }}
+      className={`ds-special-badge${large ? ' ds-special-badge-lg' : ''} special-rule-card--${presentation.theme}`}
     >
-      {intro.badge}
+      {large ? presentation.label : presentation.shortLabel}
     </div>
   );
 }
@@ -443,31 +441,32 @@ function DisplaySpecialRoundFx({
   type,
   reducedMotion,
 }: {
-  type: SpecialRoundType;
+  type: SpecialRuleType;
   reducedMotion: boolean;
 }) {
-  if (type === 'normal') return null;
+  const variant = getDisplayFxVariant(type);
+  if (!variant) return null;
 
   return (
     <div
-      className={`ds-special-round-fx ds-special-round-fx-${type}${reducedMotion ? ' ds-special-round-fx-reduced' : ''}`}
+      className={`ds-special-round-fx ds-special-round-fx-${variant}${reducedMotion ? ' ds-special-round-fx-reduced' : ''}`}
       aria-hidden
     >
-      {type === 'double_score' && (
+      {variant === 'double_score' && (
         <>
           <span className="ds-special-fx-ring ds-special-fx-ring-a" />
           <span className="ds-special-fx-ring ds-special-fx-ring-b" />
           <span className="ds-special-fx-rays" />
         </>
       )}
-      {type === 'speed_bonus' && (
+      {variant === 'speed_bonus' && (
         <>
           <span className="ds-special-fx-streak ds-special-fx-streak-a" />
           <span className="ds-special-fx-streak ds-special-fx-streak-b" />
           <span className="ds-special-fx-streak ds-special-fx-streak-c" />
         </>
       )}
-      {type === 'mystery_round' && (
+      {variant === 'mystery_round' && (
         <>
           <span className="ds-special-fx-veil ds-special-fx-veil-a" />
           <span className="ds-special-fx-veil ds-special-fx-veil-b" />
@@ -1103,8 +1102,8 @@ export function DisplayPage() {
           min_correct_score: qData.min_correct_score,
           circle_radius_ratio: qData.circle_radius_ratio,
           play_order: qData.order_index,
-          special_round_type: 'normal',
-          special_round_label: null,
+          special_rule_type: 'normal',
+          special_rule_config: {},
         };
 
         if (gsqId) {
@@ -1117,31 +1116,35 @@ export function DisplayPage() {
             dq = { ...dq, play_order: gsqData.play_order, time_limit_seconds: gsqData.time_limit_seconds,
               max_score: gsqData.max_score, min_correct_score: gsqData.min_correct_score,
               circle_radius_ratio: gsqData.circle_radius_ratio,
-              special_round_type: 'normal' };
+              special_rule_type: 'normal',
+              special_rule_config: {} };
           }
 
-          if (gameSetSpecialRoundTypeSupported !== false) {
+          if (gameSetSpecialRuleTypeSupported !== false) {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const { data: srtData, error: srtErr } = await (supabase as any)
               .from('game_set_questions')
-              .select('special_round_type, special_round_label')
+              .select('special_rule_type, special_rule_config')
               .eq('id', gsqId)
               .single() as {
-                data: { special_round_type?: string; special_round_label?: string | null } | null;
+                data: { special_rule_type?: string; special_rule_config?: Record<string, unknown> | null } | null;
                 error: { message?: string } | null;
               };
 
             if (srtErr && (srtErr.message ?? '').includes('does not exist')) {
-              gameSetSpecialRoundTypeSupported = false;
+              gameSetSpecialRuleTypeSupported = false;
             } else if (!srtErr) {
-              gameSetSpecialRoundTypeSupported = true;
+              gameSetSpecialRuleTypeSupported = true;
             }
 
-            if (srtData?.special_round_type) {
+            if (srtData?.special_rule_type) {
               dq = {
                 ...dq,
-                special_round_type: srtData.special_round_type as SpecialRoundType,
-                special_round_label: srtData.special_round_label ?? null,
+                special_rule_type: srtData.special_rule_type as SpecialRuleType,
+                special_rule_config: normalizeSpecialRuleConfig(
+                  srtData.special_rule_type as SpecialRuleType,
+                  srtData.special_rule_config ?? {},
+                ),
               };
             }
           }
@@ -1595,17 +1598,27 @@ function DsCountdown({
   const offset = progress >= 1 ? 0 : circ * (1 - progress);
   const clueUrl = question ? resolveQuestionImageUrl(question.image_url) : null;
   const clueStatus = useImagePreloadStatus(clueUrl, 6500);
-  const specialIntro = question ? getSpecialRoundIntro(question.special_round_type) : null;
+  const specialPresentation = question
+    ? getSpecialRulePresentation(question.special_rule_type, question.special_rule_config, showClue ? 'clue' : 'countdown')
+    : null;
 
   return (
     <DsShell centered>
       <div className="ds-special-round-host">
-        {question && <DisplaySpecialRoundFx type={question.special_round_type} reducedMotion={reducedMotion} />}
+        {question && <DisplaySpecialRoundFx type={question.special_rule_type} reducedMotion={reducedMotion} />}
         <QPos question={question} totalQs={totalQs} />
 
         {!showClue ? (
           <div className="ds-countdown-stage">
             <div className="ds-stage-kicker">Next Round</div>
+            {specialPresentation && (
+              <div className={`special-rule-card special-rule-card--${specialPresentation.theme}`} style={{ width: 'min(100%, 520px)', margin: '0 auto 18px', textAlign: 'center' }}>
+                <div className="special-rule-badge">{specialPresentation.label}</div>
+                <div style={{ marginTop: 12, fontSize: 'clamp(18px, 2vw, 28px)', fontWeight: 900, color: '#fff' }}>
+                  {specialPresentation.bigScreenMessage}
+                </div>
+              </div>
+            )}
             <div className="ds-label" style={{ marginBottom: 8 }}>เตรียมพร้อม!</div>
             <div className="ds-countdown-wrap">
               <svg className="ds-ring-svg" viewBox="0 0 260 260" aria-hidden>
@@ -1639,16 +1652,12 @@ function DsCountdown({
           </div>
         ) : (
           <div className="ds-stage-card ds-stage-card-clue ds-clue-wrap ds-clue-enter">
-            {question && (
-              <>
-                {question.special_round_type !== 'normal' && (
-                  <div className="ds-special-round-preview">
-                    <div className="ds-special-round-preview-label">SPECIAL MODE</div>
-                    <div className="ds-special-round-preview-title">{question.special_round_label?.trim() || specialIntro?.badge}</div>
-                    <div className="ds-special-round-preview-copy">{specialIntro?.description}</div>
-                  </div>
-                )}
-              </>
+            {specialPresentation && (
+              <div className="ds-special-round-preview">
+                <div className="ds-special-round-preview-label">SPECIAL RULE</div>
+                <div className="ds-special-round-preview-title">{specialPresentation.label}</div>
+                <div className="ds-special-round-preview-copy">{specialPresentation.bigScreenMessage}</div>
+              </div>
             )}
             {questionFetchError && !clueUrl ? (
               <div className="ds-muted">ไม่สามารถโหลดภาพคำถามได้</div>
@@ -1752,6 +1761,9 @@ function DsQuestion({
   const urgent = timeLeft != null && timeLeft <= 5;
   const critical = timeLeft != null && timeLeft <= 3;
   const imgUrl = question ? resolveQuestionImageUrl(question.image_url) : null;
+  const specialPresentation = question
+    ? getSpecialRulePresentation(question.special_rule_type, question.special_rule_config, 'question')
+    : null;
 
   const submittedCount = stats?.submitted_count ?? null;
   const playerCount = stats?.player_count ?? null;
@@ -1759,7 +1771,7 @@ function DsQuestion({
   return (
     <DsShell>
       <div className="ds-special-round-host">
-        {question && <DisplaySpecialRoundFx type={question.special_round_type} reducedMotion={reducedMotion} />}
+        {question && <DisplaySpecialRoundFx type={question.special_rule_type} reducedMotion={reducedMotion} />}
         <div
           className={[
             'ds-q-root',
@@ -1776,7 +1788,7 @@ function DsQuestion({
           <div className="ds-q-bar" style={{fontSize: '1.45rem'}}>
             <QPos question={question} totalQs={totalQs} small />
             <div className="ds-q-meta">
-              {question && <SpecialRoundBadge type={question.special_round_type} />}
+              {question && <SpecialRoundBadge type={question.special_rule_type} config={question.special_rule_config} phase="question" />}
               {submittedCount !== null && playerCount !== null ? (
                 <span className={`ds-stat-pill${statPulse && !reducedMotion ? ' is-pulsing' : ''}`}>
                   ตอบแล้ว {submittedCount} / {playerCount}
@@ -1787,6 +1799,14 @@ function DsQuestion({
 
           <div className="ds-q-body">
             <div className="ds-stage-card ds-stage-card-soft ds-q-left">
+              {specialPresentation && (
+                <div className={`special-rule-card special-rule-card--${specialPresentation.theme}`} style={{ marginBottom: 18 }}>
+                  <div className="special-rule-badge">{specialPresentation.label}</div>
+                  <div style={{ marginTop: 10, fontSize: 'clamp(16px, 1.6vw, 22px)', fontWeight: 800, color: '#fff' }}>
+                    {specialPresentation.bigScreenMessage}
+                  </div>
+                </div>
+              )}
               {questionFetchError && !question ? (
                 <div className="ds-muted">ไม่สามารถโหลดคำถามได้</div>
               ) : (
@@ -1918,21 +1938,31 @@ function DsReveal({
   const submittedCount = stats?.submitted_count ?? 0;
   const correctCount = stats?.correct_count ?? 0;
   const accuracy = stats?.accuracy ?? 0;
+  const specialPresentation = getSpecialRulePresentation(question.special_rule_type, question.special_rule_config, 'reveal');
+  const fastestFingerWinners = stats?.fastest_finger_winners ?? [];
 
   return (
     <DsShell>
       <div className="ds-special-round-host">
-        <DisplaySpecialRoundFx type={question.special_round_type} reducedMotion={reducedMotion} />
+        <DisplaySpecialRoundFx type={question.special_rule_type} reducedMotion={reducedMotion} />
         <div className="ds-reveal-header">
           <QPos question={question} totalQs={totalQs} small />
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            {question && <SpecialRoundBadge type={question.special_round_type} />}
+            <SpecialRoundBadge type={question.special_rule_type} config={question.special_rule_config} phase="reveal" />
             <div className="ds-label ds-gold" >เฉลย</div>
           </div>
         </div>
 
         <div className="ds-reveal-layout">
           <div className="ds-stage-card ds-stage-card-soft ds-reveal-left">
+            {specialPresentation && (
+              <div className={`special-rule-card special-rule-card--${specialPresentation.theme}`} style={{ marginBottom: 18 }}>
+                <div className="special-rule-badge">{specialPresentation.label}</div>
+                <div style={{ marginTop: 10, fontSize: 'clamp(16px, 1.8vw, 24px)', fontWeight: 800, color: '#fff' }}>
+                  {specialPresentation.revealMessage}
+                </div>
+              </div>
+            )}
             <AutoFitText
               text={question.text}
               className="ds-reveal-text"
@@ -1960,6 +1990,17 @@ function DsReveal({
             )}
             {showReveal && submittedCount === 0 && !statsFetchError && (
               <div className="ds-muted">ไม่มีผู้ที่ตอบในข้อนี้</div>
+            )}
+            {showReveal && question.special_rule_type === 'fastest_finger' && fastestFingerWinners.length > 0 && (
+              <div className="fastest-finger-winners">
+                <div className="fastest-finger-winners-title">FASTEST FINGER WINNERS</div>
+                {fastestFingerWinners.map((winner) => (
+                  <div key={winner.player_id} className="fastest-finger-winner-row">
+                    <span>{winner.rank}. {winner.display_name}</span>
+                    <span>+{winner.bonus_points.toLocaleString()}</span>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
 
@@ -2032,6 +2073,9 @@ function DsLeaderboard({
     const normalized = (score - podiumMinScore) / (podiumMaxScore - podiumMinScore);
     return Math.round(86 + normalized * 64);
   }, [podiumMaxScore, podiumMinScore]);
+  const leaderboardRulePresentation = question
+    ? getSpecialRulePresentation(question.special_rule_type, question.special_rule_config, 'leaderboard')
+    : null;
 
   useLayoutEffect(() => {
     const nextTops = new Map<string, number>();
@@ -2121,6 +2165,16 @@ function DsLeaderboard({
                 : 'Leaderboard'}
             </div>
             <div className="ds-title" style={{ fontSize: 32 }}>ตารางคะแนน</div>
+            {leaderboardRulePresentation && (
+              <div style={{ marginTop: 10 }}>
+                <SpecialRoundBadge
+                  type={question!.special_rule_type}
+                  config={question!.special_rule_config}
+                  phase="leaderboard"
+                  large
+                />
+              </div>
+            )}
             {leaderChange && (
               <div className="ds-new-leader-banner">New Leader · {leaderChange.displayName}</div>
             )}

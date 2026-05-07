@@ -4,19 +4,7 @@ import { COUNTDOWN_DISPLAY_SECONDS } from '../lib/constants';
 import { useGetServerTime } from '../hooks/useServerTime';
 import { useImagePreloadStatus, usePrimeImages } from '../hooks/useImagePreload';
 import { resolveQuestionImageUrl, resolveRevealImageUrl } from '../lib/questionAssets';
-
-function getSpecialRoundPreview(type: string, label?: string | null) {
-  switch (type) {
-    case 'double_score':
-      return { badge: 'SPECIAL MODE', title: label?.trim() || 'Double Score', description: 'รอบนี้คำตอบที่ถูกต้องได้คะแนน x2' };
-    case 'speed_bonus':
-      return { badge: 'SPECIAL MODE', title: label?.trim() || 'Speed Bonus', description: 'ตอบเร็วขึ้นเพื่อรับโบนัสเพิ่ม' };
-    case 'mystery_round':
-      return { badge: 'SPECIAL MODE', title: label?.trim() || 'Mystery Round', description: 'รอบนี้มีกติกาพิเศษ อ่านก่อนตอบ' };
-    default:
-      return null;
-  }
-}
+import { getSpecialRulePresentation, hasSpecialRule } from '../lib/specialRules';
 
 export function CountdownScreen() {
   const question = useGameStore((s) => s.question);
@@ -88,7 +76,14 @@ export function CountdownScreen() {
   }, [question]);
   usePrimeImages([clueImageUrl, revealImageUrl], 6500);
   const clueImageStatus = useImagePreloadStatus(clueImageUrl, 6500);
-  const specialRoundPreview = getSpecialRoundPreview(question?.special_round_type ?? 'normal', question?.special_round_label);
+  const specialRulePresentation = question
+    ? getSpecialRulePresentation(
+        question.special_rule_type ?? 'normal',
+        question.special_rule_config ?? {},
+        cluePhase ? 'clue' : 'countdown',
+      )
+    : null;
+  const showSpecialRule = hasSpecialRule(question?.special_rule_type);
 
   return (
     <div
@@ -109,18 +104,21 @@ export function CountdownScreen() {
       <div className="gr-glow gr-glow-a" />
       <div className="gr-glow gr-glow-b" />
 
-      <div style={{ position: 'relative', zIndex: 1, width: '100%', maxWidth: specialRoundPreview || cluePhase ? 480 : 320 }}>
+      <div style={{ position: 'relative', zIndex: 1, width: '100%', maxWidth: showSpecialRule || cluePhase ? 480 : 320 }}>
         {displayOrder !== null && (
           <div className="gr-label-sm gr-gold" style={{ marginBottom: 10, letterSpacing: '.18em', fontSize: 24 }}>
             Question {displayOrder ?? '—'}
           </div>
         )}
 
-        {specialRoundPreview && (
-          <div className="gr-special-round-card" style={{ marginBottom: 12 }}>
-            <div className="gr-special-round-card-badge">{specialRoundPreview.badge}</div>
-            <div className="gr-special-round-card-title">{specialRoundPreview.title}</div>
-            <div className="gr-special-round-card-copy">{specialRoundPreview.description}</div>
+        {specialRulePresentation && (
+          <div
+            className={`gr-special-round-card special-rule-card special-rule-card--${specialRulePresentation.theme}`}
+            style={{ marginBottom: 12 }}
+          >
+            <div className="gr-special-round-card-badge special-rule-badge">SPECIAL RULE</div>
+            <div className="gr-special-round-card-title">{specialRulePresentation.label}</div>
+            <div className="gr-special-round-card-copy">{specialRulePresentation.bigScreenMessage}</div>
           </div>
         )}
 

@@ -3,11 +3,11 @@ import type { CSSProperties } from 'react';
 import { useGameStore } from '../store/gameStore';
 import { useRevealResult } from '../hooks/useRevealResult';
 import { useGetServerTime } from '../hooks/useServerTime';
-import { AutoFitText } from '../components/AutoFitText';
 import { QuestionImage } from '../components/QuestionImage';
 import { FUNCTIONS_URL } from '../lib/supabase';
 import { resolveQuestionImageUrl, resolveRevealImageUrl } from '../lib/questionAssets';
 import { triggerFeedbackFx } from '../lib/feedbackFx';
+import { formatScoreBreakdown, getSpecialRulePresentation, hasSpecialRule } from '../lib/specialRules';
 
 // ── Streak helpers (localStorage, local-only, never written to Supabase) ─────
 
@@ -101,6 +101,10 @@ export function RevealScreen() {
           score: submitResult.score,
           selected_x_ratio: submitResult.selected_x_ratio ?? circlePosition?.xRatio ?? null,
           selected_y_ratio: submitResult.selected_y_ratio ?? circlePosition?.yRatio ?? null,
+          special_rule_type: submitResult.special_rule_type ?? null,
+          special_rule_config_snapshot: submitResult.special_rule_config_snapshot ?? null,
+          score_breakdown: submitResult.score_breakdown ?? null,
+          special_bonus_applied: submitResult.special_bonus_applied ?? false,
         }
       : null
   );
@@ -195,6 +199,10 @@ export function RevealScreen() {
       : null;
   const persistentCircle = circlePosition ?? revealCircle;
   const isResolvingResult = !effectiveRevealResult && !revealNoAnswer;
+  const specialRuleType = effectiveRevealResult?.special_rule_type ?? question.special_rule_type ?? 'normal';
+  const specialRuleConfig = effectiveRevealResult?.special_rule_config_snapshot ?? question.special_rule_config ?? {};
+  const specialRulePresentation = getSpecialRulePresentation(specialRuleType, specialRuleConfig, 'reveal');
+  const scoreBreakdown = formatScoreBreakdown(effectiveRevealResult?.score_breakdown);
 
   /* Banner variant */
   let bannerClass = 'gr-reveal-banner gr-reveal-banner-neutral';
@@ -311,6 +319,32 @@ export function RevealScreen() {
         )}
       </div>
 
+      {hasSpecialRule(specialRuleType) && specialRulePresentation && (
+        <div
+          className={`special-rule-card special-rule-card--${specialRulePresentation.theme}`}
+          style={{ position: 'relative', zIndex: 1, width: 'min(92vw, 560px)', margin: '12px auto 0', textAlign: 'center' }}
+        >
+          <div className="special-rule-badge">{specialRulePresentation.label}</div>
+          <div style={{ fontSize: 18, fontWeight: 800, color: '#fff', marginTop: 8 }}>
+            {specialRulePresentation.revealMessage}
+          </div>
+          {scoreBreakdown.length > 0 && (
+            <div className="score-breakdown" style={{ marginTop: 14, textAlign: 'left' }}>
+              {scoreBreakdown.map((item, index) => (
+                <div key={`${item.type}-${index}`} className="score-breakdown-row">
+                  <span className="score-breakdown-label">{item.label}</span>
+                  <span className="score-breakdown-value">
+                    {item.value > 0 ? '+' : ''}
+                    {item.value.toLocaleString()}
+                    {item.operation ? ` (${item.operation})` : ''}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Image area */}
       <div className="gr-reveal-body">
         <div className="quiz-image-stage gr-reveal-stage">
@@ -332,13 +366,6 @@ export function RevealScreen() {
       {/* Footer */}
       <div className="gr-reveal-footer">
         <p className="gr-label-xs">กำลังรอตารางคะแนน…</p>
-        <AutoFitText
-          text={question.text}
-          maxFontSize={13}
-          minFontSize={11}
-          maxHeight={40}
-          style={{ color: 'var(--text-2)', lineHeight: 1.45, marginTop: 6 }}
-        />
       </div>
     </div>
   );

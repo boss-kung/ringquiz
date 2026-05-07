@@ -12,19 +12,7 @@ import { resolveQuestionImageUrl, resolveRevealImageUrl } from '../lib/questionA
 import type { CirclePosition } from '../lib/types';
 import { triggerFeedbackFx, unlockFeedbackAudio } from '../lib/feedbackFx';
 import { FUNCTIONS_URL, supabase } from '../lib/supabase';
-
-function getSpecialRoundIntro(type: string) {
-  switch (type) {
-    case 'double_score':
-      return { badge: '×2 Double Score', title: 'Double Score', description: 'รอบนี้คำตอบที่ถูกต้องได้คะแนน x2' };
-    case 'speed_bonus':
-      return { badge: '⚡ Speed Bonus', title: 'Speed Bonus', description: 'ตอบเร็วขึ้นเพื่อรับโบนัสเพิ่ม' };
-    case 'mystery_round':
-      return { badge: '🎭 Mystery Round', title: 'Mystery Round', description: 'มีกติกาพิเศษในข้อนี้ โปรดอ่านก่อนตอบ' };
-    default:
-      return null;
-  }
-}
+import { getSpecialRulePresentation, hasSpecialRule } from '../lib/specialRules';
 
 export function QuestionScreen() {
   const question = useGameStore((s) => s.question);
@@ -127,21 +115,21 @@ export function QuestionScreen() {
 
   useEffect(() => {
     if (!question?.id || gameState?.status !== 'question_open') return;
-    const specialType = question.special_round_type ?? 'normal';
+    const specialType = question.special_rule_type ?? 'normal';
     if (specialType === 'normal') return;
 
     const fxKey = `${gameState.status}:${question.id}:${specialType}`;
     if (lastSpecialRoundFxKeyRef.current === fxKey) return;
     lastSpecialRoundFxKeyRef.current = fxKey;
 
-    if (specialType === 'double_score') {
+    if (specialType === 'double_score' || specialType === 'triple_score') {
       triggerFeedbackFx('specialRoundDouble');
-    } else if (specialType === 'speed_bonus') {
+    } else if (specialType === 'speed_bonus' || specialType === 'fastest_finger') {
       triggerFeedbackFx('specialRoundSpeed');
-    } else if (specialType === 'mystery_round') {
+    } else if (specialType === 'mystery_multiplier' || specialType === 'no_mistake') {
       triggerFeedbackFx('specialRoundMystery');
     }
-  }, [gameState?.status, question?.id, question?.special_round_type]);
+  }, [gameState?.status, question?.id, question?.special_rule_type]);
 
   const questionImageUrl = question ? resolveQuestionImageUrl(question.image_url) : null;
   const revealImageUrl = question ? resolveRevealImageUrl(question.reveal_image_url) : null;
@@ -157,7 +145,11 @@ export function QuestionScreen() {
 
   const hasSelection = Boolean(circlePosition ?? latestCirclePositionRef.current);
   const canSubmit = hasSelection && !isLocked && !timeExpired;
-  const specialRoundIntro = getSpecialRoundIntro(question.special_round_type ?? 'normal');
+  const specialRulePresentation = getSpecialRulePresentation(
+    question.special_rule_type ?? 'normal',
+    question.special_rule_config ?? {},
+    'question',
+  );
 
   // Urgency state for vignette overlay
   const remainingSecs = remainingMs !== null ? remainingMs / 1000 : null;
@@ -232,13 +224,16 @@ export function QuestionScreen() {
       {/* Question text */}
       <div className="gr-qtext-wrap">
         <div className="gr-card gr-qtext-card" style={{ marginBottom: 20 }}>
-          {question.special_round_type && question.special_round_type !== 'normal' && (
+          {hasSpecialRule(question.special_rule_type) && specialRulePresentation && (
             <>
-              <div className={`gr-special-round-badge gr-special-badge-${question.special_round_type}`}>
-                {specialRoundIntro?.badge ?? 'Special Round'}
+              <div
+                className={`gr-special-round-badge special-rule-badge special-rule-card--${specialRulePresentation.theme}`}
+                style={{ marginBottom: 8 }}
+              >
+                {specialRulePresentation.label}
               </div>
               <div className="gr-special-round-reminder gr-special-round-card-copy">
-                {question.special_round_label?.trim() || specialRoundIntro?.description || specialRoundIntro?.title || 'Special mode active'}
+                {specialRulePresentation.bigScreenMessage}
               </div>
             </>
           )}

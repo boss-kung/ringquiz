@@ -13,8 +13,10 @@
 //   - current_question_index mirrors play_order (was order_index).
 //   - If no active game set exists, falls back to legacy questions.order_index.
 import { corsHeaders, handleCors } from '../_shared/cors.ts';
+import { normalizeSpecialRuleConfig } from '../_shared/special-rules.ts';
 import { getSupabaseAdmin } from '../_shared/supabase-admin.ts';
 import type {
+  FastestFingerWinner,
   GameState,
   GameStatus,
   DisplayTheme,
@@ -22,6 +24,8 @@ import type {
   HostActionRequest,
   HostActionResponse,
   ErrorResponse,
+  ScoreBreakdownItem,
+  SpecialRuleType,
 } from '../_shared/types.ts';
 
 const GAME_STATE_ID = '00000000-0000-0000-0000-000000000001';
@@ -244,6 +248,8 @@ async function executeAction(
         await updateGameState(db, { status: 'question_closed' });
       }
 
+      await applyFastestFingerBonusIfNeeded(db, gs.current_question_id, gs.current_game_set_question_id ?? null);
+
       const { data: count, error: lbErr } = await db
         .rpc('compute_leaderboard', {
           p_question_id: gs.current_question_id,
@@ -264,6 +270,7 @@ async function executeAction(
       if (!alreadyInState) await updateGameState(db, { status: 'reveal' });
 
       if (gs.current_question_id) {
+        await applyFastestFingerBonusIfNeeded(db, gs.current_question_id, gs.current_game_set_question_id ?? null);
         const { error: lbErr } = await db.rpc('compute_leaderboard', {
           p_question_id: gs.current_question_id,
           p_game_set_question_id: gs.current_game_set_question_id ?? undefined,
@@ -331,6 +338,7 @@ async function executeAction(
 
       let entriesWritten: number | undefined;
       if (gs.current_question_id) {
+        await applyFastestFingerBonusIfNeeded(db, gs.current_question_id, gs.current_game_set_question_id ?? null);
         const { data: count, error: lbErr } = await db
           .rpc('compute_leaderboard', {
             p_question_id: gs.current_question_id,
@@ -406,6 +414,8 @@ async function executeAction(
     // ── recompute_leaderboard ────────────────────────────────────────────────
     case 'recompute_leaderboard': {
       if (!gs.current_question_id) return error(400, 'no_current_question');
+
+      await applyFastestFingerBonusIfNeeded(db, gs.current_question_id, gs.current_game_set_question_id ?? null);
 
       const { data: count, error: lbErr } = await db
         .rpc('compute_leaderboard', {
@@ -546,6 +556,94 @@ async function selectNextGameSetQuestion(
     question_id: data.question_id,
     play_order: data.play_order,
   };
+}
+
+async function applyFastestFingerBonusIfNeeded(
+  db: ReturnType<typeof getSupabaseAdmin>,
+  questionId: string,
+  gameSetQuestionId: string | null,
+): Promise<FastestFingerWinner[]> {
+  if (!gameSetQuestionId) return [];
+
+  const { data: gsq, error: gsqErr } = await db
+    .from('game_set_questions')
+    .select('special_rule_type, special_rule_config')
+    .eq('id', gameSetQuestionId)
+    .single<{ special_rule_type: SpecialRuleType; special_rule_config: Record<string, unknown> | null }>();
+
+  if (gsqErr || !gsq) throw new Error(`fastest_finger config lookup failed: ${gsqErr?.message}`);
+  if (gsq.special_rule_type !== 'fastest_finger') return [];
+
+  const config = normalizeSpecialRuleConfig('fastest_finger', gsq.special_rule_config ?? {});
+  const topN = config.top_n ?? 3;
+  const bonusPoints = config.bonus_points ?? 300;
+
+  const { data: winners, error: winnersErr } = await db
+    .from('answers')
+    .select('id, player_id, score, score_breakdown, special_bonus_applied, submitted_at, players!inner(display_name)')
+    .eq('question_id', questionId)
+    .eq('is_correct', true)
+    .order('submitted_at', { ascending: true })
+    .order('id', { ascending: true })
+    .limit(topN);
+
+  if (winnersErr) throw new Error(`fastest_finger winners lookup failed: ${winnersErr.message}`);
+  if (!winners || winners.length === 0) return [];
+
+  const appliedWinners: FastestFingerWinner[] = [];
+  for (const [index, winner] of winners.entries()) {
+    const displayName = Array.isArray((winner as Record<string, unknown>).players)
+      ? (((winner as Record<string, unknown>).players as Array<Record<string, unknown>>)[0]?.display_name as string | undefined) ?? 'Player'
+      : ((((winner as Record<string, unknown>).players as Record<string, unknown> | null)?.display_name as string | undefined) ?? 'Player');
+
+    appliedWinners.push({
+      rank: index + 1,
+      player_id: winner.player_id,
+      display_name: displayName,
+      bonus_points: bonusPoints,
+    });
+
+    if (winner.special_bonus_applied) continue;
+
+    const currentBreakdown = Array.isArray(winner.score_breakdown)
+      ? [...(winner.score_breakdown as ScoreBreakdownItem[])]
+      : [];
+    const nextBreakdown = currentBreakdown.filter((item) => item.type !== 'fastest_finger' && item.type !== 'final');
+    nextBreakdown.push({
+      type: 'fastest_finger',
+      label: 'Fastest Finger Bonus',
+      value: bonusPoints,
+      operation: `+${bonusPoints}`,
+    });
+    nextBreakdown.push({
+      type: 'final',
+      label: 'Final Score',
+      value: winner.score + bonusPoints,
+    });
+
+    const { data: updatedWinner, error: updateErr } = await db
+      .from('answers')
+      .update({
+        score: winner.score + bonusPoints,
+        score_breakdown: nextBreakdown,
+        special_bonus_applied: true,
+      })
+      .eq('id', winner.id)
+      .eq('special_bonus_applied', false)
+      .select('id')
+      .maybeSingle();
+
+    if (updateErr) throw new Error(`fastest_finger bonus update failed: ${updateErr.message}`);
+    if (!updatedWinner) continue;
+
+    const { error: playerScoreErr } = await db.rpc('increment_player_score', {
+      p_player_id: winner.player_id,
+      p_amount: bonusPoints,
+    });
+    if (playerScoreErr) throw new Error(`fastest_finger player total update failed: ${playerScoreErr.message}`);
+  }
+
+  return appliedWinners;
 }
 
 function ok(

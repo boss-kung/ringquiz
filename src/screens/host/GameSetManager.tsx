@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { FUNCTIONS_URL, SUPABASE_ANON_KEY } from '../../lib/supabase';
 import { resolveQuestionImageUrl } from '../../lib/questionAssets';
+import type { SpecialRuleConfig, SpecialRuleType } from '../../lib/types';
 import type {
   AdminQuestionRecord,
   AdminQuestionRequest,
@@ -8,6 +9,7 @@ import type {
   GameSetRecord,
   GameSetQuestionRecord,
 } from '../../lib/adminTypes';
+import { getSpecialRulePresentation, hasSpecialRule, normalizeSpecialRuleConfig } from '../../lib/specialRules';
 
 // ── API helpers ───────────────────────────────────────────────────────────────
 
@@ -50,7 +52,23 @@ interface EditingRow {
   max_score: string;
   min_correct_score: string;
   circle_radius_ratio: string;
-  special_round_type: import('../../lib/types').SpecialRoundType;
+  special_rule_type: SpecialRuleType;
+  special_rule_config: SpecialRuleConfig;
+}
+
+const SPECIAL_RULE_OPTIONS: Array<{ type: SpecialRuleType; label: string }> = [
+  { type: 'normal', label: 'None' },
+  { type: 'double_score', label: 'Double Score' },
+  { type: 'triple_score', label: 'Triple Score' },
+  { type: 'speed_bonus', label: 'Speed Bonus' },
+  { type: 'no_mistake', label: 'No Mistake' },
+  { type: 'fastest_finger', label: 'Fastest Finger' },
+  { type: 'mystery_multiplier', label: 'Mystery Multiplier' },
+];
+
+function parseSpecialRuleNumber(value: string, fallback: number | undefined) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
@@ -265,7 +283,8 @@ export function GameSetManager({ secret, onStatsChanged }: { secret: string; onS
       max_score: String(gsq.max_score),
       min_correct_score: String(gsq.min_correct_score),
       circle_radius_ratio: String(gsq.circle_radius_ratio),
-      special_round_type: gsq.special_round_type ?? 'normal',
+      special_rule_type: gsq.special_rule_type ?? 'normal',
+      special_rule_config: normalizeSpecialRuleConfig(gsq.special_rule_type ?? 'normal', gsq.special_rule_config ?? {}),
     });
   };
 
@@ -280,7 +299,8 @@ export function GameSetManager({ secret, onStatsChanged }: { secret: string; onS
         max_score: parseInt(editingRow.max_score, 10),
         min_correct_score: parseInt(editingRow.min_correct_score, 10),
         circle_radius_ratio: parseFloat(editingRow.circle_radius_ratio),
-        special_round_type: editingRow.special_round_type,
+        special_rule_type: editingRow.special_rule_type,
+        special_rule_config: normalizeSpecialRuleConfig(editingRow.special_rule_type, editingRow.special_rule_config),
       });
       setEditingRow(null);
       await loadGSQ(selectedGameSet.id);
@@ -377,6 +397,15 @@ export function GameSetManager({ secret, onStatsChanged }: { secret: string; onS
           onMove={handleMove}
           onStartEdit={startEdit}
           onEditChange={(field, val) => setEditingRow((prev) => prev ? { ...prev, [field]: val } : null)}
+          onEditRuleTypeChange={(type) => setEditingRow((prev) => prev ? {
+            ...prev,
+            special_rule_type: type,
+            special_rule_config: normalizeSpecialRuleConfig(type, prev.special_rule_config),
+          } : null)}
+          onEditRuleConfigChange={(patch) => setEditingRow((prev) => prev ? {
+            ...prev,
+            special_rule_config: { ...prev.special_rule_config, ...patch },
+          } : null)}
           onSaveEdit={handleSaveEdit}
           onCancelEdit={() => setEditingRow(null)}
         />
@@ -576,7 +605,7 @@ function GameSetsListView({
 function GameSetDetailView({
   gameSet, questions, busy, editingRow,
   onBack, onSetActive, onOpenPicker, onRemove, onToggleEnabled,
-  onMove, onStartEdit, onEditChange, onSaveEdit, onCancelEdit,
+  onMove, onStartEdit, onEditChange, onEditRuleTypeChange, onEditRuleConfigChange, onSaveEdit, onCancelEdit,
 }: {
   gameSet: GameSetRecord;
   questions: GameSetQuestionRecord[];
@@ -589,7 +618,9 @@ function GameSetDetailView({
   onToggleEnabled: (gsq: GameSetQuestionRecord) => void;
   onMove: (gsq: GameSetQuestionRecord, dir: 'up' | 'down') => void;
   onStartEdit: (gsq: GameSetQuestionRecord) => void;
-  onEditChange: (field: keyof EditingRow, val: string) => void;
+  onEditChange: (field: keyof EditingRow, val: EditingRow[keyof EditingRow]) => void;
+  onEditRuleTypeChange: (type: SpecialRuleType) => void;
+  onEditRuleConfigChange: (patch: Partial<SpecialRuleConfig>) => void;
   onSaveEdit: () => void;
   onCancelEdit: () => void;
 }) {
@@ -688,6 +719,16 @@ function GameSetDetailView({
             const isEditing = editingRow?.id === gsq.id;
             const isBusy = busy === `remove-${gsq.id}` || busy === `toggle-${gsq.id}` ||
               busy === `move-${gsq.id}` || busy === `save-${gsq.id}`;
+            const rulePresentation = getSpecialRulePresentation(gsq.special_rule_type ?? 'normal', gsq.special_rule_config ?? {}, 'countdown');
+            const editingRulePresentation = isEditing && editingRow
+              ? getSpecialRulePresentation(editingRow.special_rule_type, editingRow.special_rule_config, 'countdown')
+              : null;
+            const editingPlayerPreview = isEditing && editingRow
+              ? getSpecialRulePresentation(editingRow.special_rule_type, editingRow.special_rule_config, 'question')
+              : null;
+            const editingRevealPreview = isEditing && editingRow
+              ? getSpecialRulePresentation(editingRow.special_rule_type, editingRow.special_rule_config, 'reveal')
+              : null;
 
             return (
               <div
@@ -715,7 +756,7 @@ function GameSetDetailView({
                   />
                 </div>
 
-                {/* Question text + special round badge */}
+                {/* Question text + special rule badge */}
                 <div style={{ overflow: 'hidden' }}>
                   <span
                     title={gsq.question_text}
@@ -727,16 +768,9 @@ function GameSetDetailView({
                   >
                     {gsq.question_text}
                   </span>
-                  {gsq.special_round_type && gsq.special_round_type !== 'normal' && !isEditing && (
-                    <span style={{
-                      display: 'inline-block', marginTop: 2, padding: '1px 5px', borderRadius: 4,
-                      fontSize: 9, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase',
-                      background: gsq.special_round_type === 'double_score' ? 'rgba(245,199,74,.2)' :
-                                  gsq.special_round_type === 'speed_bonus'  ? 'rgba(52,211,153,.18)' : 'rgba(129,140,248,.2)',
-                      color:      gsq.special_round_type === 'double_score' ? 'var(--gold)' :
-                                  gsq.special_round_type === 'speed_bonus'  ? 'var(--emerald)' : 'var(--indigo)',
-                    }}>
-                      {gsq.special_round_type === 'double_score' ? '×2' : gsq.special_round_type === 'speed_bonus' ? 'SPEED+' : 'MYSTERY'}
+                  {hasSpecialRule(gsq.special_rule_type) && rulePresentation && !isEditing && (
+                    <span className={`special-rule-badge special-rule-card--${rulePresentation.theme}`} style={{ display: 'inline-flex', marginTop: 4, fontSize: 9, padding: '3px 7px' }}>
+                      {rulePresentation.label}
                     </span>
                   )}
                 </div>
@@ -757,25 +791,131 @@ function GameSetDetailView({
                     <span style={{ fontSize: 11, color: 'var(--text-2)' }}>{gsq.circle_radius_ratio}</span>
                   </>
                 )}
-                {/* Special round type — shown below the row grid when editing */}
+                {/* Special rule config — shown below the row grid when editing */}
                 {isEditing && (
-                  <div style={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: 8, paddingTop: 4 }}>
-                    <span className="gr-label-xs" style={{ flexShrink: 0 }}>Round mode:</span>
-                    {(['normal', 'double_score', 'speed_bonus', 'mystery_round'] as const).map((t) => (
-                      <button
-                        key={t}
-                        type="button"
-                        onClick={() => onEditChange('special_round_type', t)}
-                        style={{
-                          padding: '2px 8px', borderRadius: 6, border: 'none', cursor: 'pointer',
-                          fontFamily: 'var(--font-sans)', fontSize: 10, fontWeight: 700,
-                          background: editingRow!.special_round_type === t ? 'var(--gold)' : 'rgba(255,255,255,.07)',
-                          color: editingRow!.special_round_type === t ? 'var(--navy-deep)' : 'var(--text-2)',
-                        }}
-                      >
-                        {t === 'normal' ? 'Normal' : t === 'double_score' ? '×2 Score' : t === 'speed_bonus' ? 'Speed+' : 'Mystery'}
-                      </button>
-                    ))}
+                  <div style={{ gridColumn: '1 / -1', display: 'grid', gap: 10, paddingTop: 6 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <span className="gr-label-xs" style={{ flexShrink: 0 }}>Special rule:</span>
+                      {SPECIAL_RULE_OPTIONS.map((option) => (
+                        <button
+                          key={option.type}
+                          type="button"
+                          onClick={() => onEditRuleTypeChange(option.type)}
+                          style={{
+                            padding: '4px 8px',
+                            borderRadius: 7,
+                            border: 'none',
+                            cursor: 'pointer',
+                            fontFamily: 'var(--font-sans)',
+                            fontSize: 10,
+                            fontWeight: 700,
+                            background: editingRow!.special_rule_type === option.type ? 'var(--gold)' : 'rgba(255,255,255,.07)',
+                            color: editingRow!.special_rule_type === option.type ? 'var(--navy-deep)' : 'var(--text-2)',
+                          }}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    {editingRow!.special_rule_type === 'speed_bonus' && (
+                      <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))' }}>
+                        <SmallInput
+                          label="bonus_ratio"
+                          value={String(editingRow!.special_rule_config.bonus_ratio ?? 0.5)}
+                          onChange={(value) => onEditRuleConfigChange({ bonus_ratio: parseSpecialRuleNumber(value, 0.5) })}
+                        />
+                        <SmallInput
+                          label="max_bonus_points"
+                          value={String(editingRow!.special_rule_config.max_bonus_points ?? 500)}
+                          onChange={(value) => onEditRuleConfigChange({ max_bonus_points: parseSpecialRuleNumber(value, 500) })}
+                        />
+                      </div>
+                    )}
+
+                    {editingRow!.special_rule_type === 'no_mistake' && (
+                      <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))' }}>
+                        <SmallInput
+                          label="wrong_penalty_points"
+                          value={String(editingRow!.special_rule_config.wrong_penalty_points ?? -200)}
+                          onChange={(value) => onEditRuleConfigChange({ wrong_penalty_points: parseSpecialRuleNumber(value, -200) })}
+                        />
+                        <ToggleField
+                          label="penalize_no_answer"
+                          checked={Boolean(editingRow!.special_rule_config.penalize_no_answer)}
+                          onChange={(checked) => onEditRuleConfigChange({ penalize_no_answer: checked })}
+                        />
+                        <ToggleField
+                          label="allow_negative_total_score"
+                          checked={Boolean(editingRow!.special_rule_config.allow_negative_total_score)}
+                          onChange={(checked) => onEditRuleConfigChange({ allow_negative_total_score: checked })}
+                        />
+                      </div>
+                    )}
+
+                    {editingRow!.special_rule_type === 'fastest_finger' && (
+                      <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))' }}>
+                        <SmallInput
+                          label="top_n"
+                          value={String(editingRow!.special_rule_config.top_n ?? 3)}
+                          onChange={(value) => onEditRuleConfigChange({ top_n: parseSpecialRuleNumber(value, 3) })}
+                        />
+                        <SmallInput
+                          label="bonus_points"
+                          value={String(editingRow!.special_rule_config.bonus_points ?? 300)}
+                          onChange={(value) => onEditRuleConfigChange({ bonus_points: parseSpecialRuleNumber(value, 300) })}
+                        />
+                      </div>
+                    )}
+
+                    {editingRow!.special_rule_type === 'mystery_multiplier' && (
+                      <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))' }}>
+                        <SmallInput
+                          label="multiplier"
+                          value={String(editingRow!.special_rule_config.multiplier ?? 2)}
+                          onChange={(value) => onEditRuleConfigChange({ multiplier: parseSpecialRuleNumber(value, 2) })}
+                        />
+                        <ToggleField
+                          label="hidden_until_reveal"
+                          checked={Boolean(editingRow!.special_rule_config.hidden_until_reveal ?? true)}
+                          onChange={(checked) => onEditRuleConfigChange({ hidden_until_reveal: checked })}
+                        />
+                      </div>
+                    )}
+
+                    {editingRow!.special_rule_type === 'double_score' && (
+                      <div style={{ fontSize: 11, color: 'var(--text-3)' }}>Preset multiplier x2 will be applied to correct answers.</div>
+                    )}
+                    {editingRow!.special_rule_type === 'triple_score' && (
+                      <div style={{ fontSize: 11, color: 'var(--text-3)' }}>Preset multiplier x3 will be applied to correct answers.</div>
+                    )}
+
+                    {editingRulePresentation && (
+                      <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
+                        <RulePreviewCard
+                          title="Big Screen Preview"
+                          badge={editingRulePresentation.label}
+                          message={editingRulePresentation.bigScreenMessage}
+                          theme={editingRulePresentation.theme}
+                        />
+                        {editingPlayerPreview && (
+                          <RulePreviewCard
+                            title="Player Preview"
+                            badge={editingPlayerPreview.label}
+                            message={editingPlayerPreview.playerMessage}
+                            theme={editingPlayerPreview.theme}
+                          />
+                        )}
+                        {editingRevealPreview && (
+                          <RulePreviewCard
+                            title="Reveal Preview"
+                            badge={editingRevealPreview.label}
+                            message={editingRevealPreview.revealMessage}
+                            theme={editingRevealPreview.theme}
+                          />
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -1024,6 +1164,57 @@ function SmallInput({
           {label}
         </span>
       )}
+    </div>
+  );
+}
+
+function ToggleField({
+  label,
+  checked,
+  onChange,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <label
+      style={{
+        display: 'flex',
+        minHeight: 34,
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 10,
+        borderRadius: 9,
+        border: '1px solid rgba(255,255,255,.08)',
+        background: 'rgba(255,255,255,.03)',
+        padding: '8px 10px',
+        fontSize: 11,
+        color: 'var(--text-2)',
+      }}
+    >
+      <span>{label}</span>
+      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+    </label>
+  );
+}
+
+function RulePreviewCard({
+  title,
+  badge,
+  message,
+  theme,
+}: {
+  title: string;
+  badge: string;
+  message: string;
+  theme: string;
+}) {
+  return (
+    <div className={`special-rule-card special-rule-card--${theme}`}>
+      <div className="gr-label-xs" style={{ marginBottom: 8 }}>{title}</div>
+      <div className="special-rule-badge">{badge}</div>
+      <div style={{ marginTop: 10, fontSize: 12, color: '#fff', lineHeight: 1.5 }}>{message}</div>
     </div>
   );
 }

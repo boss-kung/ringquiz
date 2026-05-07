@@ -2,8 +2,9 @@
 // No auth required. Returns only safe aggregate counts — never raw answer rows,
 // individual player data, coordinates, mask paths, or host-secret-protected data.
 import { corsHeaders, handleCors } from '../_shared/cors.ts';
+import { normalizeSpecialRuleConfig } from '../_shared/special-rules.ts';
 import { getSupabaseAdmin } from '../_shared/supabase-admin.ts';
-import type { GameState, ErrorResponse } from '../_shared/types.ts';
+import type { FastestFingerWinner, GameState, ErrorResponse, SpecialRuleType } from '../_shared/types.ts';
 
 interface DisplayStatsResponse {
   player_count: number;
@@ -14,6 +15,7 @@ interface DisplayStatsResponse {
   total_questions: number;       // enabled questions in active game set (0 in legacy)
   current_question_id: string | null;
   active_game_set_id: string | null;
+  fastest_finger_winners: FastestFingerWinner[];
 }
 
 Deno.serve(async (req: Request): Promise<Response> => {
@@ -62,6 +64,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     // Current play position and total in the game set
     let questionIndex: number | null = null;
     let totalQuestions = 0;
+    let fastestFingerWinners: FastestFingerWinner[] = [];
 
     if (gs.active_game_set_id) {
       const [posRes, totalRes] = await Promise.all([
@@ -89,6 +92,45 @@ Deno.serve(async (req: Request): Promise<Response> => {
         if (enabledPositionErr) throw new Error(`Game-set position failed: ${enabledPositionErr.message}`);
         questionIndex = enabledPositionCount ?? null;
       }
+
+      if (gs.current_game_set_question_id && gs.current_question_id) {
+        const { data: ruleRow, error: ruleErr } = await db
+          .from('game_set_questions')
+          .select('special_rule_type, special_rule_config')
+          .eq('id', gs.current_game_set_question_id)
+          .single<{ special_rule_type: SpecialRuleType; special_rule_config: Record<string, unknown> | null }>();
+
+        if (ruleErr) throw new Error(`Special rule lookup failed: ${ruleErr.message}`);
+
+        if (ruleRow.special_rule_type === 'fastest_finger') {
+          const config = normalizeSpecialRuleConfig('fastest_finger', ruleRow.special_rule_config ?? {});
+          const topN = config.top_n ?? 3;
+          const bonusPoints = config.bonus_points ?? 300;
+          const { data: winnerRows, error: winnersErr } = await db
+            .from('answers')
+            .select('player_id, players!inner(display_name)')
+            .eq('question_id', gs.current_question_id)
+            .eq('is_correct', true)
+            .order('submitted_at', { ascending: true })
+            .order('id', { ascending: true })
+            .limit(topN);
+
+          if (winnersErr) throw new Error(`Fastest finger winners failed: ${winnersErr.message}`);
+
+          fastestFingerWinners = (winnerRows ?? []).map((row, index) => {
+            const players = (row as Record<string, unknown>).players;
+            const displayName = Array.isArray(players)
+              ? (((players as Array<Record<string, unknown>>)[0]?.display_name as string | undefined) ?? 'Player')
+              : (((players as Record<string, unknown> | null)?.display_name as string | undefined) ?? 'Player');
+            return {
+              rank: index + 1,
+              player_id: row.player_id,
+              display_name: displayName,
+              bonus_points: bonusPoints,
+            };
+          });
+        }
+      }
     }
 
     const body: DisplayStatsResponse = {
@@ -100,6 +142,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       total_questions: totalQuestions,
       current_question_id: gs.current_question_id,
       active_game_set_id: gs.active_game_set_id,
+      fastest_finger_winners: fastestFingerWinners,
     };
 
     return Response.json(body, { headers: corsHeaders });

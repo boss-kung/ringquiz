@@ -1,4 +1,5 @@
 import { corsHeaders, handleCors } from '../_shared/cors.ts';
+import { normalizeSpecialRuleConfig } from '../_shared/special-rules.ts';
 import { getSupabaseAdmin } from '../_shared/supabase-admin.ts';
 
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
@@ -83,8 +84,19 @@ interface GameSetRecord {
   enabled_question_count: number;
 }
 
-type SpecialRoundType = 'normal' | 'double_score' | 'speed_bonus' | 'mystery_round';
-const VALID_SPECIAL_ROUND_TYPES: SpecialRoundType[] = ['normal', 'double_score', 'speed_bonus', 'mystery_round'];
+type SpecialRuleType = 'normal' | 'double_score' | 'triple_score' | 'speed_bonus' | 'no_mistake' | 'fastest_finger' | 'mystery_multiplier';
+type SpecialRuleConfig = {
+  multiplier?: number;
+  bonus_ratio?: number;
+  max_bonus_points?: number;
+  wrong_penalty_points?: number;
+  penalize_no_answer?: boolean;
+  allow_negative_total_score?: boolean;
+  top_n?: number;
+  bonus_points?: number;
+  hidden_until_reveal?: boolean;
+};
+const VALID_SPECIAL_RULE_TYPES: SpecialRuleType[] = ['normal', 'double_score', 'triple_score', 'speed_bonus', 'no_mistake', 'fastest_finger', 'mystery_multiplier'];
 
 interface GameSetQuestionRecord {
   id: string;
@@ -96,8 +108,8 @@ interface GameSetQuestionRecord {
   min_correct_score: number;
   circle_radius_ratio: number;
   is_enabled: boolean;
-  special_round_type: SpecialRoundType;
-  special_round_label: string | null;
+  special_rule_type: SpecialRuleType;
+  special_rule_config: SpecialRuleConfig;
   created_at: string;
   updated_at: string;
   question_text: string;
@@ -157,8 +169,8 @@ interface AdminRequest {
   circle_radius_ratio?: number;
   is_enabled?: boolean;
   ordered_ids?: string[];
-  special_round_type?: SpecialRoundType;
-  special_round_label?: string | null;
+  special_rule_type?: SpecialRuleType;
+  special_rule_config?: SpecialRuleConfig;
   practice_content?: unknown;
 }
 
@@ -811,7 +823,7 @@ async function listGameSetQuestions(
     .select(`
       id, game_set_id, question_id, play_order,
       time_limit_seconds, max_score, min_correct_score, circle_radius_ratio,
-      is_enabled, special_round_type, special_round_label, created_at, updated_at,
+      is_enabled, special_rule_type, special_rule_config, created_at, updated_at,
       questions!inner(text, image_url, reveal_image_url, image_width, image_height)
     `)
     .eq('game_set_id', gameSetId)
@@ -831,8 +843,8 @@ async function listGameSetQuestions(
       min_correct_score: row.min_correct_score,
       circle_radius_ratio: row.circle_radius_ratio,
       is_enabled: row.is_enabled,
-      special_round_type: row.special_round_type ?? 'normal',
-      special_round_label: row.special_round_label ?? null,
+      special_rule_type: row.special_rule_type ?? 'normal',
+      special_rule_config: normalizeSpecialRuleConfig(row.special_rule_type ?? 'normal', row.special_rule_config ?? {}),
       created_at: row.created_at,
       updated_at: row.updated_at,
       question_text: q?.text ?? '',
@@ -1066,7 +1078,7 @@ async function removeGameSetQuestion(
 
 async function updateGameSetQuestion(
   gameSetQuestionId: string | undefined,
-  fields: Pick<AdminRequest, 'time_limit_seconds' | 'max_score' | 'min_correct_score' | 'circle_radius_ratio' | 'special_round_type' | 'special_round_label'>,
+  fields: Pick<AdminRequest, 'time_limit_seconds' | 'max_score' | 'min_correct_score' | 'circle_radius_ratio' | 'special_rule_type' | 'special_rule_config'>,
   db: ReturnType<typeof getSupabaseAdmin>,
 ): Promise<Response> {
   if (!gameSetQuestionId) return error(400, 'missing_field', 'game_set_question_id');
@@ -1106,13 +1118,14 @@ async function updateGameSetQuestion(
       issues.push({ field: 'circle_radius_ratio', message: 'Must be > 0 and ≤ 0.5.' });
     else patch.circle_radius_ratio = r;
   }
-  if (fields.special_round_type !== undefined) {
-    if (!VALID_SPECIAL_ROUND_TYPES.includes(fields.special_round_type))
-      issues.push({ field: 'special_round_type', message: `Must be one of: ${VALID_SPECIAL_ROUND_TYPES.join(', ')}.` });
-    else patch.special_round_type = fields.special_round_type;
+  if (fields.special_rule_type !== undefined) {
+    if (!VALID_SPECIAL_RULE_TYPES.includes(fields.special_rule_type))
+      issues.push({ field: 'special_rule_type', message: `Must be one of: ${VALID_SPECIAL_RULE_TYPES.join(', ')}.` });
+    else patch.special_rule_type = fields.special_rule_type;
   }
-  if (fields.special_round_label !== undefined) {
-    patch.special_round_label = fields.special_round_label ?? null;
+  if (fields.special_rule_config !== undefined) {
+    const configType = (fields.special_rule_type ?? patch.special_rule_type ?? 'normal') as SpecialRuleType;
+    patch.special_rule_config = normalizeSpecialRuleConfig(configType, fields.special_rule_config ?? {});
   }
 
   if (issues.length > 0)
@@ -1323,7 +1336,7 @@ async function fetchGameSetQuestion(
     .select(`
       id, game_set_id, question_id, play_order,
       time_limit_seconds, max_score, min_correct_score, circle_radius_ratio,
-      is_enabled, special_round_type, special_round_label, created_at, updated_at,
+      is_enabled, special_rule_type, special_rule_config, created_at, updated_at,
       questions!inner(text, image_url, reveal_image_url, image_width, image_height)
     `)
     .eq('id', gsqId)
@@ -1338,8 +1351,8 @@ async function fetchGameSetQuestion(
     play_order: data.play_order, time_limit_seconds: data.time_limit_seconds,
     max_score: data.max_score, min_correct_score: data.min_correct_score,
     circle_radius_ratio: data.circle_radius_ratio, is_enabled: data.is_enabled,
-    special_round_type: (data as any).special_round_type ?? 'normal',
-    special_round_label: (data as any).special_round_label ?? null,
+    special_rule_type: (data as any).special_rule_type ?? 'normal',
+    special_rule_config: normalizeSpecialRuleConfig((data as any).special_rule_type ?? 'normal', (data as any).special_rule_config ?? {}),
     created_at: data.created_at, updated_at: data.updated_at,
     question_text: q?.text ?? '', question_image_url: q?.image_url ?? '',
     question_reveal_image_url: q?.reveal_image_url ?? null,

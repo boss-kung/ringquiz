@@ -528,14 +528,144 @@ body.host-route {
   font-size: 14px;
   line-height: 1.45;
   color: var(--text-2);
-  text-align: center;
 }
 .gr-special-round-reminder {
   margin-bottom: 8px;
   font-size: 13px;
   line-height: 1.45;
   color: var(--text-2);
-  text-align: center;
+}
+.special-rule-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,.12);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: #fff;
+}
+.special-rule-card {
+  padding: 14px 16px;
+  border-radius: 20px;
+  border: 1px solid rgba(255,255,255,.1);
+  background: rgba(255,255,255,.04);
+  box-shadow: 0 14px 34px rgba(2,6,23,.24);
+}
+.special-rule-card--neutral {
+  border-color: rgba(255,255,255,.12);
+  background: linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.025));
+}
+.special-rule-card--double {
+  border-color: rgba(245,199,74,.26);
+  background: linear-gradient(180deg, rgba(245,199,74,.16), rgba(245,199,74,.06));
+}
+.special-rule-card--triple {
+  border-color: rgba(251,191,36,.28);
+  background: linear-gradient(180deg, rgba(251,191,36,.18), rgba(180,83,9,.1));
+}
+.special-rule-card--speed {
+  border-color: rgba(52,211,153,.24);
+  background: linear-gradient(180deg, rgba(52,211,153,.16), rgba(14,116,144,.08));
+}
+.special-rule-card--danger {
+  border-color: rgba(251,113,133,.28);
+  background: linear-gradient(180deg, rgba(251,113,133,.16), rgba(127,29,29,.08));
+}
+.special-rule-card--fastest {
+  border-color: rgba(96,165,250,.26);
+  background: linear-gradient(180deg, rgba(96,165,250,.16), rgba(8,47,73,.08));
+}
+.special-rule-card--mystery {
+  border-color: rgba(167,139,250,.28);
+  background: linear-gradient(180deg, rgba(167,139,250,.18), rgba(236,72,153,.08));
+}
+.special-rule-card--neutral .special-rule-badge,
+.special-rule-badge.special-rule-card--neutral {
+  background: rgba(255,255,255,.08);
+  color: #fff;
+}
+.special-rule-card--double .special-rule-badge,
+.special-rule-badge.special-rule-card--double {
+  background: linear-gradient(135deg, #C49A1A, #F5C74A);
+  color: #1b1300;
+}
+.special-rule-card--triple .special-rule-badge,
+.special-rule-badge.special-rule-card--triple {
+  background: linear-gradient(135deg, #D97706, #FBBF24);
+  color: #1b1300;
+}
+.special-rule-card--speed .special-rule-badge,
+.special-rule-badge.special-rule-card--speed {
+  background: linear-gradient(135deg, #0F766E, #34D399);
+  color: #f8fafc;
+}
+.special-rule-card--danger .special-rule-badge,
+.special-rule-badge.special-rule-card--danger {
+  background: linear-gradient(135deg, #BE123C, #FB7185);
+  color: #fff;
+}
+.special-rule-card--fastest .special-rule-badge,
+.special-rule-badge.special-rule-card--fastest {
+  background: linear-gradient(135deg, #2563EB, #60A5FA);
+  color: #fff;
+}
+.special-rule-card--mystery .special-rule-badge,
+.special-rule-badge.special-rule-card--mystery {
+  background: linear-gradient(135deg, #7C3AED, #EC4899);
+  color: #fff;
+}
+.score-breakdown {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,.08);
+  background: rgba(5,8,16,.22);
+}
+.score-breakdown-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 13px;
+}
+.score-breakdown-label {
+  color: var(--text-2);
+}
+.score-breakdown-value {
+  color: #fff;
+  font-weight: 800;
+  text-align: right;
+}
+.fastest-finger-winners {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(96,165,250,.22);
+  background: linear-gradient(180deg, rgba(59,130,246,.16), rgba(8,13,28,.2));
+}
+.fastest-finger-winners-title {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: #dbeafe;
+}
+.fastest-finger-winner-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
 }
 .gr-image-loading-card,
 .ds-image-loading-card {

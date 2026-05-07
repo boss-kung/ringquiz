@@ -31,12 +31,16 @@ export function useRevealResult() {
         score: submitResult.score,
         selected_x_ratio: submitResult.selected_x_ratio ?? circlePosition?.xRatio ?? null,
         selected_y_ratio: submitResult.selected_y_ratio ?? circlePosition?.yRatio ?? null,
+        special_rule_type: submitResult.special_rule_type ?? null,
+        special_rule_config_snapshot: submitResult.special_rule_config_snapshot ?? null,
+        score_breakdown: submitResult.score_breakdown ?? null,
+        special_bonus_applied: submitResult.special_bonus_applied ?? false,
       });
     }
 
     supabase
       .from('answers')
-      .select('is_correct, score, selected_x_ratio, selected_y_ratio')
+      .select('is_correct, score, selected_x_ratio, selected_y_ratio, special_rule_type, special_rule_config_snapshot, score_breakdown, special_bonus_applied')
       .eq('player_id', playerId)
       .eq('question_id', questionId)
       .maybeSingle()
@@ -54,6 +58,10 @@ export function useRevealResult() {
               score: submitResult.score,
               selected_x_ratio: fallbackX,
               selected_y_ratio: fallbackY,
+              special_rule_type: submitResult.special_rule_type ?? null,
+              special_rule_config_snapshot: submitResult.special_rule_config_snapshot ?? null,
+              score_breakdown: submitResult.score_breakdown ?? null,
+              special_bonus_applied: submitResult.special_bonus_applied ?? false,
             });
           } else {
             setRevealNoAnswer(true);

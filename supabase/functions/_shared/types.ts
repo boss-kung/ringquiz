@@ -12,6 +12,41 @@ export type GameStatus =
 
 export type DisplayTheme = 'classic_gold' | 'neon_night' | 'danger_round' | 'final_round';
 
+export type SpecialRuleType =
+  | 'normal'
+  | 'double_score'
+  | 'triple_score'
+  | 'speed_bonus'
+  | 'no_mistake'
+  | 'fastest_finger'
+  | 'mystery_multiplier';
+
+export interface SpecialRuleConfig {
+  multiplier?: number;
+  bonus_ratio?: number;
+  max_bonus_points?: number;
+  wrong_penalty_points?: number;
+  penalize_no_answer?: boolean;
+  allow_negative_total_score?: boolean;
+  top_n?: number;
+  bonus_points?: number;
+  hidden_until_reveal?: boolean;
+}
+
+export interface ScoreBreakdownItem {
+  type: 'base' | 'multiplier' | 'speed_bonus' | 'penalty' | 'fastest_finger' | 'final' | 'clamp';
+  label: string;
+  value: number;
+  operation?: string;
+}
+
+export interface FastestFingerWinner {
+  rank: number;
+  player_id: string;
+  display_name: string;
+  bonus_points: number;
+}
+
 export interface GameState {
   id: string;
   status: GameStatus;
@@ -42,8 +77,6 @@ export interface Question {
   created_at: string;
 }
 
-export type SpecialRoundType = 'normal' | 'double_score' | 'speed_bonus' | 'mystery_round';
-
 export interface GameSetQuestion {
   id: string;
   game_set_id: string;
@@ -54,8 +87,8 @@ export interface GameSetQuestion {
   min_correct_score: number;
   circle_radius_ratio: number;
   is_enabled: boolean;
-  special_round_type: SpecialRoundType;
-  special_round_label: string | null;
+  special_rule_type: SpecialRuleType;
+  special_rule_config: SpecialRuleConfig;
   created_at: string;
   updated_at: string;
 }
@@ -87,6 +120,10 @@ export interface Answer {
   time_remaining_ratio: number;
   is_correct: boolean;
   score: number;
+  special_rule_type: SpecialRuleType | null;
+  special_rule_config_snapshot: SpecialRuleConfig | null;
+  score_breakdown: ScoreBreakdownItem[] | null;
+  special_bonus_applied: boolean;
 }
 
 export interface LeaderboardEntry {
@@ -164,6 +201,10 @@ export interface SubmitAnswerResponse {
   already_submitted: boolean;
   selected_x_ratio?: number;
   selected_y_ratio?: number;
+  special_rule_type?: SpecialRuleType | null;
+  special_rule_config_snapshot?: SpecialRuleConfig | null;
+  score_breakdown?: ScoreBreakdownItem[] | null;
+  special_bonus_applied?: boolean;
 }
 
 // ── server-time ──────────────────────────────────────────────────────────────
@@ -212,6 +253,10 @@ export interface ExportResultsResponse {
     time_remaining_ratio: number;
     is_correct: boolean;
     score: number;
+    special_rule_type?: SpecialRuleType | null;
+    special_rule_config_snapshot?: SpecialRuleConfig | null;
+    score_breakdown?: ScoreBreakdownItem[] | null;
+    special_bonus_applied?: boolean;
   }>;
   leaderboard: LeaderboardEntry[];
 }

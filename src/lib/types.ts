@@ -15,7 +15,40 @@ export type GameStatus =
 
 export type DisplayTheme = 'classic_gold' | 'neon_night' | 'danger_round' | 'final_round';
 
-export type SpecialRoundType = 'normal' | 'double_score' | 'speed_bonus' | 'mystery_round';
+export type SpecialRuleType =
+  | 'normal'
+  | 'double_score'
+  | 'triple_score'
+  | 'speed_bonus'
+  | 'no_mistake'
+  | 'fastest_finger'
+  | 'mystery_multiplier';
+
+export interface SpecialRuleConfig {
+  multiplier?: number;
+  bonus_ratio?: number;
+  max_bonus_points?: number;
+  wrong_penalty_points?: number;
+  penalize_no_answer?: boolean;
+  allow_negative_total_score?: boolean;
+  top_n?: number;
+  bonus_points?: number;
+  hidden_until_reveal?: boolean;
+}
+
+export interface ScoreBreakdownItem {
+  type: 'base' | 'multiplier' | 'speed_bonus' | 'penalty' | 'fastest_finger' | 'final' | 'clamp';
+  label: string;
+  value: number;
+  operation?: string;
+}
+
+export interface FastestFingerWinner {
+  rank: number;
+  player_id: string;
+  display_name: string;
+  bonus_points: number;
+}
 
 export interface PracticeContent {
   key: string;
@@ -80,10 +113,10 @@ export interface Question {
   image_width: number | null;
   image_height: number | null;
   reveal_image_url: string | null;     // null in V1; optional host-prepared overlay
-  special_round_label?: string | null;
+  special_rule_type?: SpecialRuleType;
+  special_rule_config?: SpecialRuleConfig;
   is_published: boolean;
   created_at: string;
-  special_round_type?: SpecialRoundType; // populated when game-set-aware question fetch includes gsq override
 }
 
 // ── Players ──────────────────────────────────────────────────────────────────
@@ -109,6 +142,10 @@ export interface Answer {
   time_remaining_ratio: number;
   is_correct: boolean;
   score: number;
+  special_rule_type: SpecialRuleType | null;
+  special_rule_config_snapshot: SpecialRuleConfig | null;
+  score_breakdown: ScoreBreakdownItem[] | null;
+  special_bonus_applied: boolean;
 }
 
 // ── Leaderboard ──────────────────────────────────────────────────────────────
@@ -170,6 +207,10 @@ export interface SubmitAnswerResponse {
   already_submitted: boolean;
   selected_x_ratio?: number;
   selected_y_ratio?: number;
+  special_rule_type?: SpecialRuleType | null;
+  special_rule_config_snapshot?: SpecialRuleConfig | null;
+  score_breakdown?: ScoreBreakdownItem[] | null;
+  special_bonus_applied?: boolean;
 }
 
 export interface ServerTimeResponse {
@@ -223,6 +264,7 @@ export interface DisplayStatsResponse {
   total_questions: number;
   current_question_id: string | null;
   active_game_set_id: string | null;
+  fastest_finger_winners?: FastestFingerWinner[];
 }
 
 export interface EdgeFunctionError {
@@ -247,4 +289,8 @@ export interface RevealResult {
   score: number;
   selected_x_ratio: number | null;
   selected_y_ratio: number | null;
+  special_rule_type?: SpecialRuleType | null;
+  special_rule_config_snapshot?: SpecialRuleConfig | null;
+  score_breakdown?: ScoreBreakdownItem[] | null;
+  special_bonus_applied?: boolean;
 }

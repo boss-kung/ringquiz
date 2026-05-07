@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useGameStore } from '../store/gameStore';
+import type { ScoreBreakdownItem, SpecialRuleConfig } from '../lib/types';
 
 /**
  * On every question_open state, checks if the current player already has an
@@ -30,7 +31,7 @@ export function useExistingAnswer() {
 
     supabase
       .from('answers')
-      .select('is_correct, score, selected_x_ratio, selected_y_ratio')
+      .select('is_correct, score, selected_x_ratio, selected_y_ratio, special_rule_type, special_rule_config_snapshot, score_breakdown, special_bonus_applied')
       .eq('player_id', playerId)
       .eq('question_id', questionId)
       .maybeSingle()
@@ -52,6 +53,10 @@ export function useExistingAnswer() {
           already_submitted: true,
           selected_x_ratio: Number(data.selected_x_ratio),
           selected_y_ratio: Number(data.selected_y_ratio),
+          special_rule_type: data.special_rule_type ?? null,
+          special_rule_config_snapshot: (data.special_rule_config_snapshot as SpecialRuleConfig | null | undefined) ?? null,
+          score_breakdown: (data.score_breakdown as ScoreBreakdownItem[] | null | undefined) ?? null,
+          special_bonus_applied: data.special_bonus_applied ?? false,
         });
       });
   }, [status, questionId, playerId, setCirclePosition, setSubmitResult]);

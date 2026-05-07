@@ -80,8 +80,8 @@ export interface AdminQuestionRequest {
   circle_radius_ratio?: number;
   is_enabled?: boolean;
   ordered_ids?: string[];              // for reorder_game_set_questions
-  special_round_type?: import('./types').SpecialRoundType;
-  special_round_label?: string | null;
+  special_rule_type?: import('./types').SpecialRuleType;
+  special_rule_config?: import('./types').SpecialRuleConfig;
   practice_content?: PracticeContentPayload;
 }
 
@@ -160,8 +160,8 @@ export interface GameSetQuestionRecord {
   min_correct_score: number;
   circle_radius_ratio: number;
   is_enabled: boolean;
-  special_round_type: import('./types').SpecialRoundType;
-  special_round_label: string | null;
+  special_rule_type: import('./types').SpecialRuleType;
+  special_rule_config: import('./types').SpecialRuleConfig;
   created_at: string;
   updated_at: string;
   // Joined question data (populated by list_game_set_questions)
