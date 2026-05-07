@@ -1641,7 +1641,6 @@ function DsCountdown({
           <div className="ds-stage-card ds-stage-card-clue ds-clue-wrap ds-clue-enter">
             {question && (
               <>
-                <SpecialRoundBadge type={question.special_round_type} large />
                 {question.special_round_type !== 'normal' && (
                   <div className="ds-special-round-preview">
                     <div className="ds-special-round-preview-label">SPECIAL MODE</div>

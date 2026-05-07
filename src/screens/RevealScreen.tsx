@@ -52,7 +52,7 @@ function makeRevealConfetti(): RevealConfettiParticle[] {
   return Array.from({ length: 18 }, (_, i) => ({
     id: i,
     left: `${4 + i * 5.3}%`,
-    delay: `${(i % 6) * 0.12}s`,
+    delay: '0s',
     duration: `${2.6 + (i % 5) * 0.28}s`,
     drift: `${((i % 2 === 0 ? 1 : -1) * (18 + (i % 4) * 8))}px`,
     rotate: `${(i % 2 === 0 ? 1 : -1) * (110 + (i % 5) * 28)}deg`,

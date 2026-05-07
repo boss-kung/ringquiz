@@ -8,9 +8,9 @@ import { resolveQuestionImageUrl, resolveRevealImageUrl } from '../lib/questionA
 function getSpecialRoundPreview(type: string, label?: string | null) {
   switch (type) {
     case 'double_score':
-      return { badge: 'SPECIAL MODE', title: label?.trim() || 'Double Score', description: 'รอบนี้มีกติกาพิเศษ อ่านก่อนตอบ' };
+      return { badge: 'SPECIAL MODE', title: label?.trim() || 'Double Score', description: 'รอบนี้คำตอบที่ถูกต้องได้คะแนน x2' };
     case 'speed_bonus':
-      return { badge: 'SPECIAL MODE', title: label?.trim() || 'Speed Bonus', description: 'ยิ่งตอบเร็ว ยิ่งได้โบนัสเพิ่ม' };
+      return { badge: 'SPECIAL MODE', title: label?.trim() || 'Speed Bonus', description: 'ตอบเร็วขึ้นเพื่อรับโบนัสเพิ่ม' };
     case 'mystery_round':
       return { badge: 'SPECIAL MODE', title: label?.trim() || 'Mystery Round', description: 'รอบนี้มีกติกาพิเศษ อ่านก่อนตอบ' };
     default:
@@ -109,7 +109,7 @@ export function CountdownScreen() {
       <div className="gr-glow gr-glow-a" />
       <div className="gr-glow gr-glow-b" />
 
-      <div style={{ position: 'relative', zIndex: 1, width: '100%', maxWidth: cluePhase ? 480 : 320 }}>
+      <div style={{ position: 'relative', zIndex: 1, width: '100%', maxWidth: specialRoundPreview || cluePhase ? 480 : 320 }}>
         {displayOrder !== null && (
           <div className="gr-label-sm gr-gold" style={{ marginBottom: 10, letterSpacing: '.18em', fontSize: 24 }}>
             Question {displayOrder ?? '—'}

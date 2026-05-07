@@ -16,9 +16,9 @@ import { FUNCTIONS_URL, supabase } from '../lib/supabase';
 function getSpecialRoundIntro(type: string) {
   switch (type) {
     case 'double_score':
-      return { badge: '×2 Double Score', title: 'Double Score', description: 'คำตอบที่ถูกต้องได้คะแนน x2' };
+      return { badge: '×2 Double Score', title: 'Double Score', description: 'รอบนี้คำตอบที่ถูกต้องได้คะแนน x2' };
     case 'speed_bonus':
-      return { badge: '⚡ Speed Bonus', title: 'Speed Bonus', description: 'ยิ่งตอบเร็ว ยิ่งได้โบนัสเพิ่ม' };
+      return { badge: '⚡ Speed Bonus', title: 'Speed Bonus', description: 'ตอบเร็วขึ้นเพื่อรับโบนัสเพิ่ม' };
     case 'mystery_round':
       return { badge: '🎭 Mystery Round', title: 'Mystery Round', description: 'มีกติกาพิเศษในข้อนี้ โปรดอ่านก่อนตอบ' };
     default:
@@ -237,7 +237,7 @@ export function QuestionScreen() {
               <div className={`gr-special-round-badge gr-special-badge-${question.special_round_type}`}>
                 {specialRoundIntro?.badge ?? 'Special Round'}
               </div>
-              <div className="gr-special-round-reminder">
+              <div className="gr-special-round-reminder gr-special-round-card-copy">
                 {question.special_round_label?.trim() || specialRoundIntro?.description || specialRoundIntro?.title || 'Special mode active'}
               </div>
             </>

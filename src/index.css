@@ -493,9 +493,10 @@ body.host-route {
   width: 8px;
   height: 14px;
   border-radius: 999px;
+  opacity: 0;
   transform: translate3d(0, 0, 0);
   backface-visibility: hidden;
-  animation: grRevealConfettiFall 2.5s linear infinite;
+  animation: grRevealConfettiFall 2.5s linear infinite both;
 }
 .gr-locked-screen {
   background:
@@ -508,7 +509,7 @@ body.host-route {
   border-radius: 18px;
   background: linear-gradient(180deg, rgba(245,199,74,.12), rgba(245,199,74,.05));
   border: 1px solid rgba(245,199,74,.2);
-  text-align: left;
+  text-align: center;
 }
 .gr-special-round-card-badge {
   font: 800 11px/1 var(--font-sans);
@@ -527,12 +528,14 @@ body.host-route {
   font-size: 14px;
   line-height: 1.45;
   color: var(--text-2);
+  text-align: center;
 }
 .gr-special-round-reminder {
   margin-bottom: 8px;
   font-size: 13px;
   line-height: 1.45;
   color: var(--text-2);
+  text-align: center;
 }
 .gr-image-loading-card,
 .ds-image-loading-card {
