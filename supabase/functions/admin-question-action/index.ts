@@ -190,6 +190,26 @@ function normalizeLegacySpecialRoundType(type: AdminRequest['special_round_type'
   }
 }
 
+function toLegacySpecialRoundType(type: SpecialRuleType): 'normal' | 'double_score' | 'speed_bonus' | 'mystery_round' | undefined {
+  switch (type) {
+    case 'normal':
+      return 'normal';
+    case 'double_score':
+      return 'double_score';
+    case 'speed_bonus':
+      return 'speed_bonus';
+    case 'mystery_multiplier':
+      return 'mystery_round';
+    default:
+      return undefined;
+  }
+}
+
+function isMissingSpecialRuleColumn(message: string | undefined) {
+  const text = message ?? '';
+  return text.includes('special_rule_type') || text.includes('special_rule_config');
+}
+
 interface ValidationIssue {
   field: string;
   message: string;
@@ -834,7 +854,7 @@ async function listGameSetQuestions(
 ): Promise<Response> {
   if (!gameSetId) return error(400, 'missing_field', 'game_set_id');
 
-  const { data, error: queryError } = await db
+  let { data, error: queryError } = await db
     .from('game_set_questions')
     .select(`
       id, game_set_id, question_id, play_order,
@@ -844,6 +864,21 @@ async function listGameSetQuestions(
     `)
     .eq('game_set_id', gameSetId)
     .order('play_order', { ascending: true });
+
+  if (queryError && isMissingSpecialRuleColumn(queryError.message)) {
+    const legacyRes = await db
+      .from('game_set_questions')
+      .select(`
+        id, game_set_id, question_id, play_order,
+        time_limit_seconds, max_score, min_correct_score, circle_radius_ratio,
+        is_enabled, special_round_type, created_at, updated_at,
+        questions!inner(text, image_url, reveal_image_url, image_width, image_height)
+      `)
+      .eq('game_set_id', gameSetId)
+      .order('play_order', { ascending: true });
+    data = legacyRes.data;
+    queryError = legacyRes.error;
+  }
 
   if (queryError) throw new Error(`Failed to list game set questions: ${queryError.message}`);
 
@@ -859,8 +894,11 @@ async function listGameSetQuestions(
       min_correct_score: row.min_correct_score,
       circle_radius_ratio: row.circle_radius_ratio,
       is_enabled: row.is_enabled,
-      special_rule_type: row.special_rule_type ?? 'normal',
-      special_rule_config: normalizeSpecialRuleConfig(row.special_rule_type ?? 'normal', row.special_rule_config ?? {}),
+      special_rule_type: row.special_rule_type ?? normalizeLegacySpecialRoundType(row.special_round_type) ?? 'normal',
+      special_rule_config: normalizeSpecialRuleConfig(
+        row.special_rule_type ?? normalizeLegacySpecialRoundType(row.special_round_type) ?? 'normal',
+        row.special_rule_config ?? {},
+      ),
       created_at: row.created_at,
       updated_at: row.updated_at,
       question_text: q?.text ?? '',
@@ -1156,10 +1194,30 @@ async function updateGameSetQuestion(
 
   if (Object.keys(patch).length === 0) return error(400, 'no_fields', 'No fields to update');
 
-  const { error: updateError } = await db
+  let { error: updateError } = await db
     .from('game_set_questions')
     .update(patch)
     .eq('id', gameSetQuestionId);
+
+  if (updateError && isMissingSpecialRuleColumn(updateError.message)) {
+    const legacyType = toLegacySpecialRoundType(requestedSpecialRuleType ?? 'normal');
+    if ((requestedSpecialRuleType ?? 'normal') !== 'normal' && !legacyType) {
+      return error(400, 'legacy_schema_requires_migration', 'Apply the latest special rule migration before saving this rule type.');
+    }
+
+    const legacyPatch: Record<string, unknown> = {};
+    if (patch.time_limit_seconds !== undefined) legacyPatch.time_limit_seconds = patch.time_limit_seconds;
+    if (patch.max_score !== undefined) legacyPatch.max_score = patch.max_score;
+    if (patch.min_correct_score !== undefined) legacyPatch.min_correct_score = patch.min_correct_score;
+    if (patch.circle_radius_ratio !== undefined) legacyPatch.circle_radius_ratio = patch.circle_radius_ratio;
+    if (legacyType !== undefined) legacyPatch.special_round_type = legacyType;
+
+    const legacyUpdate = await db
+      .from('game_set_questions')
+      .update(legacyPatch)
+      .eq('id', gameSetQuestionId);
+    updateError = legacyUpdate.error;
+  }
 
   if (updateError) throw new Error(`Failed to update game set question: ${updateError.message}`);
 
@@ -1348,7 +1406,7 @@ async function fetchGameSetQuestion(
   gsqId: string,
   db: ReturnType<typeof getSupabaseAdmin>,
 ): Promise<Response> {
-  const { data, error: fetchError } = await db
+  let { data, error: fetchError } = await db
     .from('game_set_questions')
     .select(`
       id, game_set_id, question_id, play_order,
@@ -1359,6 +1417,21 @@ async function fetchGameSetQuestion(
     .eq('id', gsqId)
     .single();
 
+  if (fetchError && isMissingSpecialRuleColumn(fetchError.message)) {
+    const legacyRes = await db
+      .from('game_set_questions')
+      .select(`
+        id, game_set_id, question_id, play_order,
+        time_limit_seconds, max_score, min_correct_score, circle_radius_ratio,
+        is_enabled, special_round_type, created_at, updated_at,
+        questions!inner(text, image_url, reveal_image_url, image_width, image_height)
+      `)
+      .eq('id', gsqId)
+      .single();
+    data = legacyRes.data;
+    fetchError = legacyRes.error;
+  }
+
   if (fetchError || !data) throw new Error(`Failed to fetch game set question: ${fetchError?.message}`);
 
   const q = Array.isArray((data as any).questions) ? (data as any).questions[0] : (data as any).questions;
@@ -1368,8 +1441,11 @@ async function fetchGameSetQuestion(
     play_order: data.play_order, time_limit_seconds: data.time_limit_seconds,
     max_score: data.max_score, min_correct_score: data.min_correct_score,
     circle_radius_ratio: data.circle_radius_ratio, is_enabled: data.is_enabled,
-    special_rule_type: (data as any).special_rule_type ?? 'normal',
-    special_rule_config: normalizeSpecialRuleConfig((data as any).special_rule_type ?? 'normal', (data as any).special_rule_config ?? {}),
+    special_rule_type: (data as any).special_rule_type ?? normalizeLegacySpecialRoundType((data as any).special_round_type) ?? 'normal',
+    special_rule_config: normalizeSpecialRuleConfig(
+      (data as any).special_rule_type ?? normalizeLegacySpecialRoundType((data as any).special_round_type) ?? 'normal',
+      (data as any).special_rule_config ?? {},
+    ),
     created_at: data.created_at, updated_at: data.updated_at,
     question_text: q?.text ?? '', question_image_url: q?.image_url ?? '',
     question_reveal_image_url: q?.reveal_image_url ?? null,

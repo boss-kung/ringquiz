@@ -53,7 +53,17 @@ interface EditingRow {
   min_correct_score: string;
   circle_radius_ratio: string;
   special_rule_type: SpecialRuleType;
-  special_rule_config: SpecialRuleConfig;
+  special_rule_form: {
+    multiplier: string;
+    bonus_ratio: string;
+    max_bonus_points: string;
+    wrong_penalty_points: string;
+    top_n: string;
+    bonus_points: string;
+    hidden_until_reveal: boolean;
+    penalize_no_answer: boolean;
+    allow_negative_total_score: boolean;
+  };
 }
 
 const SPECIAL_RULE_OPTIONS: Array<{ type: SpecialRuleType; label: string }> = [
@@ -67,8 +77,39 @@ const SPECIAL_RULE_OPTIONS: Array<{ type: SpecialRuleType; label: string }> = [
 ];
 
 function parseSpecialRuleNumber(value: string, fallback: number | undefined) {
+  if (value.trim() === '') return fallback;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function createSpecialRuleForm(type: SpecialRuleType, rawConfig: SpecialRuleConfig | null | undefined) {
+  const config = normalizeSpecialRuleConfig(type, rawConfig ?? {});
+  return {
+    multiplier: String(config.multiplier ?? (type === 'triple_score' ? 3 : 2)),
+    bonus_ratio: String(config.bonus_ratio ?? 0.5),
+    max_bonus_points: String(config.max_bonus_points ?? 500),
+    wrong_penalty_points: String(config.wrong_penalty_points ?? -200),
+    top_n: String(config.top_n ?? 3),
+    bonus_points: String(config.bonus_points ?? 300),
+    hidden_until_reveal: Boolean(config.hidden_until_reveal ?? true),
+    penalize_no_answer: Boolean(config.penalize_no_answer ?? false),
+    allow_negative_total_score: Boolean(config.allow_negative_total_score ?? false),
+  };
+}
+
+function buildSpecialRuleConfigFromEditingRow(editingRow: EditingRow): SpecialRuleConfig {
+  const form = editingRow.special_rule_form;
+  return normalizeSpecialRuleConfig(editingRow.special_rule_type, {
+    multiplier: parseSpecialRuleNumber(form.multiplier, editingRow.special_rule_type === 'triple_score' ? 3 : 2),
+    bonus_ratio: parseSpecialRuleNumber(form.bonus_ratio, 0.5),
+    max_bonus_points: parseSpecialRuleNumber(form.max_bonus_points, 500),
+    wrong_penalty_points: parseSpecialRuleNumber(form.wrong_penalty_points, -200),
+    penalize_no_answer: form.penalize_no_answer,
+    allow_negative_total_score: form.allow_negative_total_score,
+    top_n: parseSpecialRuleNumber(form.top_n, 3),
+    bonus_points: parseSpecialRuleNumber(form.bonus_points, 300),
+    hidden_until_reveal: form.hidden_until_reveal,
+  });
 }
 
 function toLegacySpecialRoundType(type: SpecialRuleType): 'normal' | 'double_score' | 'speed_bonus' | 'mystery_round' | undefined {
@@ -322,14 +363,15 @@ export function GameSetManager({ secret, onStatsChanged }: { secret: string; onS
   // ── Edit row (inline) ─────────────────────────────────────────────────────
 
   const startEdit = (gsq: GameSetQuestionRecord) => {
+    const specialRuleType = gsq.special_rule_type ?? 'normal';
     setEditingRow({
       id: gsq.id,
       time_limit_seconds: String(gsq.time_limit_seconds),
       max_score: String(gsq.max_score),
       min_correct_score: String(gsq.min_correct_score),
       circle_radius_ratio: String(gsq.circle_radius_ratio),
-      special_rule_type: gsq.special_rule_type ?? 'normal',
-      special_rule_config: normalizeSpecialRuleConfig(gsq.special_rule_type ?? 'normal', gsq.special_rule_config ?? {}),
+      special_rule_type: specialRuleType,
+      special_rule_form: createSpecialRuleForm(specialRuleType, gsq.special_rule_config ?? {}),
     });
   };
 
@@ -345,7 +387,7 @@ export function GameSetManager({ secret, onStatsChanged }: { secret: string; onS
         min_correct_score: parseInt(editingRow.min_correct_score, 10),
         circle_radius_ratio: parseFloat(editingRow.circle_radius_ratio),
         special_rule_type: editingRow.special_rule_type,
-        special_rule_config: normalizeSpecialRuleConfig(editingRow.special_rule_type, editingRow.special_rule_config),
+        special_rule_config: buildSpecialRuleConfigFromEditingRow(editingRow),
         special_round_type: toLegacySpecialRoundType(editingRow.special_rule_type),
       });
       setEditingRow(null);
@@ -446,11 +488,11 @@ export function GameSetManager({ secret, onStatsChanged }: { secret: string; onS
           onEditRuleTypeChange={(type) => setEditingRow((prev) => prev ? {
             ...prev,
             special_rule_type: type,
-            special_rule_config: normalizeSpecialRuleConfig(type, prev.special_rule_config),
+            special_rule_form: createSpecialRuleForm(type, buildSpecialRuleConfigFromEditingRow(prev)),
           } : null)}
-          onEditRuleConfigChange={(patch) => setEditingRow((prev) => prev ? {
+          onEditRuleFormChange={(patch) => setEditingRow((prev) => prev ? {
             ...prev,
-            special_rule_config: { ...prev.special_rule_config, ...patch },
+            special_rule_form: { ...prev.special_rule_form, ...patch },
           } : null)}
           onSaveEdit={handleSaveEdit}
           onCancelEdit={() => setEditingRow(null)}
@@ -651,7 +693,7 @@ function GameSetsListView({
 function GameSetDetailView({
   gameSet, questions, busy, editingRow,
   onBack, onSetActive, onOpenPicker, onRemove, onToggleEnabled,
-  onMove, onStartEdit, onEditChange, onEditRuleTypeChange, onEditRuleConfigChange, onSaveEdit, onCancelEdit,
+  onMove, onStartEdit, onEditChange, onEditRuleTypeChange, onEditRuleFormChange, onSaveEdit, onCancelEdit,
 }: {
   gameSet: GameSetRecord;
   questions: GameSetQuestionRecord[];
@@ -666,7 +708,7 @@ function GameSetDetailView({
   onStartEdit: (gsq: GameSetQuestionRecord) => void;
   onEditChange: (field: keyof EditingRow, val: EditingRow[keyof EditingRow]) => void;
   onEditRuleTypeChange: (type: SpecialRuleType) => void;
-  onEditRuleConfigChange: (patch: Partial<SpecialRuleConfig>) => void;
+  onEditRuleFormChange: (patch: Partial<EditingRow['special_rule_form']>) => void;
   onSaveEdit: () => void;
   onCancelEdit: () => void;
 }) {
@@ -766,14 +808,15 @@ function GameSetDetailView({
             const isBusy = busy === `remove-${gsq.id}` || busy === `toggle-${gsq.id}` ||
               busy === `move-${gsq.id}` || busy === `save-${gsq.id}`;
             const rulePresentation = getSpecialRulePresentation(gsq.special_rule_type ?? 'normal', gsq.special_rule_config ?? {}, 'countdown');
+            const editingRuleConfig = isEditing && editingRow ? buildSpecialRuleConfigFromEditingRow(editingRow) : null;
             const editingRulePresentation = isEditing && editingRow
-              ? getSpecialRulePresentation(editingRow.special_rule_type, editingRow.special_rule_config, 'countdown')
+              ? getSpecialRulePresentation(editingRow.special_rule_type, editingRuleConfig ?? {}, 'countdown')
               : null;
             const editingPlayerPreview = isEditing && editingRow
-              ? getSpecialRulePresentation(editingRow.special_rule_type, editingRow.special_rule_config, 'question')
+              ? getSpecialRulePresentation(editingRow.special_rule_type, editingRuleConfig ?? {}, 'question')
               : null;
             const editingRevealPreview = isEditing && editingRow
-              ? getSpecialRulePresentation(editingRow.special_rule_type, editingRow.special_rule_config, 'reveal')
+              ? getSpecialRulePresentation(editingRow.special_rule_type, editingRuleConfig ?? {}, 'reveal')
               : null;
 
             return (
@@ -868,13 +911,13 @@ function GameSetDetailView({
                       <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))' }}>
                         <SmallInput
                           label="bonus_ratio"
-                          value={String(editingRow!.special_rule_config.bonus_ratio ?? 0.5)}
-                          onChange={(value) => onEditRuleConfigChange({ bonus_ratio: parseSpecialRuleNumber(value, 0.5) })}
+                          value={editingRow!.special_rule_form.bonus_ratio}
+                          onChange={(value) => onEditRuleFormChange({ bonus_ratio: value })}
                         />
                         <SmallInput
                           label="max_bonus_points"
-                          value={String(editingRow!.special_rule_config.max_bonus_points ?? 500)}
-                          onChange={(value) => onEditRuleConfigChange({ max_bonus_points: parseSpecialRuleNumber(value, 500) })}
+                          value={editingRow!.special_rule_form.max_bonus_points}
+                          onChange={(value) => onEditRuleFormChange({ max_bonus_points: value })}
                         />
                       </div>
                     )}
@@ -883,18 +926,18 @@ function GameSetDetailView({
                       <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))' }}>
                         <SmallInput
                           label="wrong_penalty_points"
-                          value={String(editingRow!.special_rule_config.wrong_penalty_points ?? -200)}
-                          onChange={(value) => onEditRuleConfigChange({ wrong_penalty_points: parseSpecialRuleNumber(value, -200) })}
+                          value={editingRow!.special_rule_form.wrong_penalty_points}
+                          onChange={(value) => onEditRuleFormChange({ wrong_penalty_points: value })}
                         />
                         <ToggleField
                           label="penalize_no_answer"
-                          checked={Boolean(editingRow!.special_rule_config.penalize_no_answer)}
-                          onChange={(checked) => onEditRuleConfigChange({ penalize_no_answer: checked })}
+                          checked={editingRow!.special_rule_form.penalize_no_answer}
+                          onChange={(checked) => onEditRuleFormChange({ penalize_no_answer: checked })}
                         />
                         <ToggleField
                           label="allow_negative_total_score"
-                          checked={Boolean(editingRow!.special_rule_config.allow_negative_total_score)}
-                          onChange={(checked) => onEditRuleConfigChange({ allow_negative_total_score: checked })}
+                          checked={editingRow!.special_rule_form.allow_negative_total_score}
+                          onChange={(checked) => onEditRuleFormChange({ allow_negative_total_score: checked })}
                         />
                       </div>
                     )}
@@ -903,13 +946,13 @@ function GameSetDetailView({
                       <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))' }}>
                         <SmallInput
                           label="top_n"
-                          value={String(editingRow!.special_rule_config.top_n ?? 3)}
-                          onChange={(value) => onEditRuleConfigChange({ top_n: parseSpecialRuleNumber(value, 3) })}
+                          value={editingRow!.special_rule_form.top_n}
+                          onChange={(value) => onEditRuleFormChange({ top_n: value })}
                         />
                         <SmallInput
                           label="bonus_points"
-                          value={String(editingRow!.special_rule_config.bonus_points ?? 300)}
-                          onChange={(value) => onEditRuleConfigChange({ bonus_points: parseSpecialRuleNumber(value, 300) })}
+                          value={editingRow!.special_rule_form.bonus_points}
+                          onChange={(value) => onEditRuleFormChange({ bonus_points: value })}
                         />
                       </div>
                     )}
@@ -918,13 +961,13 @@ function GameSetDetailView({
                       <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))' }}>
                         <SmallInput
                           label="multiplier"
-                          value={String(editingRow!.special_rule_config.multiplier ?? 2)}
-                          onChange={(value) => onEditRuleConfigChange({ multiplier: parseSpecialRuleNumber(value, 2) })}
+                          value={editingRow!.special_rule_form.multiplier}
+                          onChange={(value) => onEditRuleFormChange({ multiplier: value })}
                         />
                         <ToggleField
                           label="hidden_until_reveal"
-                          checked={Boolean(editingRow!.special_rule_config.hidden_until_reveal ?? true)}
-                          onChange={(checked) => onEditRuleConfigChange({ hidden_until_reveal: checked })}
+                          checked={editingRow!.special_rule_form.hidden_until_reveal}
+                          onChange={(checked) => onEditRuleFormChange({ hidden_until_reveal: checked })}
                         />
                       </div>
                     )}
