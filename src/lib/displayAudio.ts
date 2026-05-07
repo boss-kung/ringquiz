@@ -43,29 +43,35 @@ export interface DisplayAudioController {
 }
 
 type Listener = () => void;
+type DisplayAudioSnapshot = {
+  enabled: boolean;
+  muted: boolean;
+  volume: number;
+};
 
 const ENABLED_KEY = 'ringquiz.displayAudio.enabled';
 const MUTED_KEY = 'ringquiz.displayAudio.muted';
 const VOLUME_KEY = 'ringquiz.displayAudio.volume';
 const DEFAULT_VOLUME = 0.55;
+const AUDIO_BASE_PATH = `${import.meta.env.BASE_URL || '/'}audio/sfx/`.replace(/\/{2,}/g, '/');
 
 const AUDIO_PATHS: Record<DisplayAudioCue, string> = {
-  lobbyLoop: '/audio/sfx/lobby_loop.mp3',
-  playerJoin: '/audio/sfx/player_join.mp3',
-  countdownTick: '/audio/sfx/countdown_tick.mp3',
-  countdownFinalHit: '/audio/sfx/countdown_final_hit.mp3',
-  questionOpen: '/audio/sfx/question_open.mp3',
-  timerTickFast: '/audio/sfx/timer_tick_fast.mp3',
-  answerLocked: '/audio/sfx/answer_locked.mp3',
-  drumroll: '/audio/sfx/drumroll.mp3',
-  revealHit: '/audio/sfx/reveal_hit.mp3',
-  leaderboardIntro: '/audio/sfx/leaderboard_intro.mp3',
-  rankMove: '/audio/sfx/rank_move.mp3',
-  newLeader: '/audio/sfx/new_leader.mp3',
-  finalIntro: '/audio/sfx/final_intro.mp3',
-  winnerFanfare: '/audio/sfx/winner_fanfare.mp3',
-  confettiPop: '/audio/sfx/confetti_pop.mp3',
-  uiClick: '/audio/sfx/ui_click.mp3',
+  lobbyLoop: `${AUDIO_BASE_PATH}lobby_loop.mp3`,
+  playerJoin: `${AUDIO_BASE_PATH}player_join.mp3`,
+  countdownTick: `${AUDIO_BASE_PATH}countdown_tick.mp3`,
+  countdownFinalHit: `${AUDIO_BASE_PATH}countdown_final_hit.mp3`,
+  questionOpen: `${AUDIO_BASE_PATH}question_open.mp3`,
+  timerTickFast: `${AUDIO_BASE_PATH}timer_tick_fast.mp3`,
+  answerLocked: `${AUDIO_BASE_PATH}answer_locked.mp3`,
+  drumroll: `${AUDIO_BASE_PATH}drumroll.mp3`,
+  revealHit: `${AUDIO_BASE_PATH}reveal_hit.mp3`,
+  leaderboardIntro: `${AUDIO_BASE_PATH}leaderboard_intro.mp3`,
+  rankMove: `${AUDIO_BASE_PATH}rank_move.mp3`,
+  newLeader: `${AUDIO_BASE_PATH}new_leader.mp3`,
+  finalIntro: `${AUDIO_BASE_PATH}final_intro.mp3`,
+  winnerFanfare: `${AUDIO_BASE_PATH}winner_fanfare.mp3`,
+  confettiPop: `${AUDIO_BASE_PATH}confetti_pop.mp3`,
+  uiClick: `${AUDIO_BASE_PATH}ui_click.mp3`,
 };
 
 const DEFAULT_CUE_VOLUMES: Record<DisplayAudioCue, number> = {
@@ -108,6 +114,11 @@ let volume = readNumber(VOLUME_KEY, DEFAULT_VOLUME);
 let currentLoopCue: 'lobbyLoop' | null = null;
 let currentLoopAudio: HTMLAudioElement | null = null;
 let sessionUnlocked = false;
+let cachedSnapshot: DisplayAudioSnapshot = {
+  enabled: preferenceEnabled && sessionUnlocked,
+  muted,
+  volume,
+};
 
 function isBrowser() {
   return typeof window !== 'undefined' && typeof Audio !== 'undefined';
@@ -150,6 +161,11 @@ function writeStorage(key: string, value: string) {
 }
 
 function notify() {
+  cachedSnapshot = {
+    enabled: preferenceEnabled && sessionUnlocked,
+    muted,
+    volume,
+  };
   listeners.forEach((listener) => listener());
 }
 
@@ -326,7 +342,7 @@ function subscribe(listener: Listener) {
 }
 
 function getSnapshot() {
-  return { enabled: controller.isEnabled(), muted, volume };
+  return cachedSnapshot;
 }
 
 export function createDisplayAudioController() {
