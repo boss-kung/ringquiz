@@ -71,6 +71,51 @@ function parseSpecialRuleNumber(value: string, fallback: number | undefined) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function toLegacySpecialRoundType(type: SpecialRuleType): 'normal' | 'double_score' | 'speed_bonus' | 'mystery_round' | undefined {
+  switch (type) {
+    case 'normal':
+      return 'normal';
+    case 'double_score':
+      return 'double_score';
+    case 'speed_bonus':
+      return 'speed_bonus';
+    case 'mystery_multiplier':
+      return 'mystery_round';
+    default:
+      return undefined;
+  }
+}
+
+function fromLegacySpecialRoundType(type: unknown): SpecialRuleType {
+  switch (type) {
+    case 'double_score':
+      return 'double_score';
+    case 'speed_bonus':
+      return 'speed_bonus';
+    case 'mystery_round':
+      return 'mystery_multiplier';
+    default:
+      return 'normal';
+  }
+}
+
+function normalizeGameSetQuestionRecord(
+  raw: GameSetQuestionRecord | (Record<string, unknown> & Partial<GameSetQuestionRecord>),
+): GameSetQuestionRecord {
+  const specialRuleType = (raw.special_rule_type as SpecialRuleType | undefined)
+    ?? fromLegacySpecialRoundType((raw as Record<string, unknown>).special_round_type);
+  const specialRuleConfig = normalizeSpecialRuleConfig(
+    specialRuleType,
+    (raw.special_rule_config as SpecialRuleConfig | undefined) ?? {},
+  );
+
+  return {
+    ...(raw as GameSetQuestionRecord),
+    special_rule_type: specialRuleType,
+    special_rule_config: specialRuleConfig,
+  };
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 export function GameSetManager({ secret, onStatsChanged }: { secret: string; onStatsChanged?: () => Promise<void> | void }) {
@@ -115,7 +160,7 @@ export function GameSetManager({ secret, onStatsChanged }: { secret: string; onS
   const loadGSQ = useCallback(async (gameSetId: string) => {
     try {
       const res = await callAdmin(secret, { action: 'list_game_set_questions', game_set_id: gameSetId });
-      setGsQuestions(res.game_set_questions ?? []);
+      setGsQuestions((res.game_set_questions ?? []).map((row) => normalizeGameSetQuestionRecord(row as GameSetQuestionRecord)));
     } catch (e) {
       flash(e instanceof Error ? e.message : 'Failed to load questions', true);
     }
@@ -301,6 +346,7 @@ export function GameSetManager({ secret, onStatsChanged }: { secret: string; onS
         circle_radius_ratio: parseFloat(editingRow.circle_radius_ratio),
         special_rule_type: editingRow.special_rule_type,
         special_rule_config: normalizeSpecialRuleConfig(editingRow.special_rule_type, editingRow.special_rule_config),
+        special_round_type: toLegacySpecialRoundType(editingRow.special_rule_type),
       });
       setEditingRow(null);
       await loadGSQ(selectedGameSet.id);
@@ -934,7 +980,7 @@ function GameSetDetailView({
                 </button>
 
                 {/* Actions */}
-                <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: 3 }}>
                   {isEditing ? (
                     <>
                       <MiniBtn onClick={onSaveEdit} disabled={isBusy} gold>Save</MiniBtn>

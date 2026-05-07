@@ -82,6 +82,7 @@ export interface AdminQuestionRequest {
   ordered_ids?: string[];              // for reorder_game_set_questions
   special_rule_type?: import('./types').SpecialRuleType;
   special_rule_config?: import('./types').SpecialRuleConfig;
+  special_round_type?: 'normal' | 'double_score' | 'speed_bonus' | 'mystery_round';
   practice_content?: PracticeContentPayload;
 }
 

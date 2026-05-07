@@ -171,7 +171,23 @@ interface AdminRequest {
   ordered_ids?: string[];
   special_rule_type?: SpecialRuleType;
   special_rule_config?: SpecialRuleConfig;
+  special_round_type?: 'normal' | 'double_score' | 'speed_bonus' | 'mystery_round';
   practice_content?: unknown;
+}
+
+function normalizeLegacySpecialRoundType(type: AdminRequest['special_round_type']): SpecialRuleType | undefined {
+  switch (type) {
+    case 'normal':
+      return 'normal';
+    case 'double_score':
+      return 'double_score';
+    case 'speed_bonus':
+      return 'speed_bonus';
+    case 'mystery_round':
+      return 'mystery_multiplier';
+    default:
+      return undefined;
+  }
 }
 
 interface ValidationIssue {
@@ -1078,7 +1094,7 @@ async function removeGameSetQuestion(
 
 async function updateGameSetQuestion(
   gameSetQuestionId: string | undefined,
-  fields: Pick<AdminRequest, 'time_limit_seconds' | 'max_score' | 'min_correct_score' | 'circle_radius_ratio' | 'special_rule_type' | 'special_rule_config'>,
+  fields: Pick<AdminRequest, 'time_limit_seconds' | 'max_score' | 'min_correct_score' | 'circle_radius_ratio' | 'special_rule_type' | 'special_rule_config' | 'special_round_type'>,
   db: ReturnType<typeof getSupabaseAdmin>,
 ): Promise<Response> {
   if (!gameSetQuestionId) return error(400, 'missing_field', 'game_set_question_id');
@@ -1096,6 +1112,7 @@ async function updateGameSetQuestion(
 
   const issues: ValidationIssue[] = [];
   const patch: Record<string, unknown> = {};
+  const requestedSpecialRuleType = fields.special_rule_type ?? normalizeLegacySpecialRoundType(fields.special_round_type);
 
   if (fields.time_limit_seconds !== undefined) {
     if (!Number.isInteger(fields.time_limit_seconds) || fields.time_limit_seconds < 1)
@@ -1118,13 +1135,13 @@ async function updateGameSetQuestion(
       issues.push({ field: 'circle_radius_ratio', message: 'Must be > 0 and ≤ 0.5.' });
     else patch.circle_radius_ratio = r;
   }
-  if (fields.special_rule_type !== undefined) {
-    if (!VALID_SPECIAL_RULE_TYPES.includes(fields.special_rule_type))
+  if (requestedSpecialRuleType !== undefined) {
+    if (!VALID_SPECIAL_RULE_TYPES.includes(requestedSpecialRuleType))
       issues.push({ field: 'special_rule_type', message: `Must be one of: ${VALID_SPECIAL_RULE_TYPES.join(', ')}.` });
-    else patch.special_rule_type = fields.special_rule_type;
+    else patch.special_rule_type = requestedSpecialRuleType;
   }
   if (fields.special_rule_config !== undefined) {
-    const configType = (fields.special_rule_type ?? patch.special_rule_type ?? 'normal') as SpecialRuleType;
+    const configType = (requestedSpecialRuleType ?? patch.special_rule_type ?? 'normal') as SpecialRuleType;
     patch.special_rule_config = normalizeSpecialRuleConfig(configType, fields.special_rule_config ?? {});
   }
 

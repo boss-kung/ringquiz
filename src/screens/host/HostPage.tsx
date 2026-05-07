@@ -433,7 +433,7 @@ function HostDashboard({ secret, onLogout }: { secret: string; onLogout: () => v
         ))}
       </div>
 
-      <div style={{ maxWidth: 640, margin: '0 auto', padding: '14px 16px 24px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div style={{ maxWidth: '90%', margin: '0 auto', padding: '14px 16px 24px', display: 'flex', flexDirection: 'column', gap: 14 }}>
         {activeTab === 'game' ? (
           <>
             {/* State card */}
