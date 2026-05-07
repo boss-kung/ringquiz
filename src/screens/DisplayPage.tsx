@@ -2315,7 +2315,7 @@ function DsLeaderboard({
             }}
             className={[
               'ds-lb-row',
-              visualRankFor(entry) === 1 ? 'ds-lb-row-gold' : '',
+              animationStage === 'steady' && entry.rank === 1 ? 'ds-lb-row-gold' : '',
               entry.rank === 1 ? 'ds-lb-row-top1' : entry.rank === 2 ? 'ds-lb-row-top2' : entry.rank === 3 ? 'ds-lb-row-top3' : '',
               leaderboardFx[entry.player_id]?.rankDelta && leaderboardFx[entry.player_id].rankDelta! > 0 ? 'ds-lb-row-up' : '',
               leaderboardFx[entry.player_id]?.rankDelta && leaderboardFx[entry.player_id].rankDelta! < 0 ? 'ds-lb-row-down' : '',
@@ -2329,7 +2329,7 @@ function DsLeaderboard({
             <div className="ds-lb-av" style={{ background: avGrad(visualRankFor(entry) - 1) }}>{initials(entry.display_name)}</div>
             <div className="ds-lb-name-wrap">
               <span className="ds-lb-name">
-                {visualRankFor(entry) === 1 ? '👑 ' : visualRankFor(entry) <= 3 ? `${MEDALS[visualRankFor(entry) - 1]} ` : ''}{entry.display_name}
+                {animationStage === 'steady' && entry.rank === 1 ? '👑 ' : animationStage === 'steady' && entry.rank <= 3 ? `${MEDALS[entry.rank - 1]} ` : ''}{entry.display_name}
               </span>
               <div className="ds-lb-meta-line">
                 <RankDeltaBadge meta={leaderboardFx[entry.player_id]} />
