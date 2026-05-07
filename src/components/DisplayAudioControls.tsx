@@ -19,10 +19,10 @@ export function DisplayAudioControls() {
     <div className={`display-audio-controls${collapsed ? ' is-collapsed' : ''}`}>
       <button
         type="button"
-        className="display-audio-toggle"
+        className="display-audio-test"
         onClick={() => setCollapsed((prev) => !prev)}
       >
-        {collapsed ? 'Audio' : 'Hide'}
+        {collapsed ? '🔊' : 'X'}
       </button>
 
       {!collapsed && (
@@ -33,8 +33,7 @@ export function DisplayAudioControls() {
               className="display-audio-enable"
               onClick={handleEnable}
             >
-              <span>Enable Audio</span>
-              <small>Click once to allow show sounds</small>
+              <span>🔊</span>
             </button>
           ) : (
             <>

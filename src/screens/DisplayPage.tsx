@@ -1764,7 +1764,6 @@ function DsQuestion({
           <div className="ds-q-bar" style={{fontSize: '1.45rem'}}>
             <QPos question={question} totalQs={totalQs} small />
             <div className="ds-q-meta">
-              {question && <SpecialRoundBadge type={question.special_rule_type} config={question.special_rule_config} phase="question" />}
               {submittedCount !== null && playerCount !== null ? (
                 <span className={`ds-stat-pill${statPulse && !reducedMotion ? ' is-pulsing' : ''}`}>
                   ตอบแล้ว {submittedCount} / {playerCount}

@@ -7,7 +7,7 @@ import { QuestionImage } from '../components/QuestionImage';
 import { FUNCTIONS_URL } from '../lib/supabase';
 import { resolveQuestionImageUrl, resolveRevealImageUrl } from '../lib/questionAssets';
 import { triggerFeedbackFx } from '../lib/feedbackFx';
-import { formatScoreBreakdown, getSpecialRulePresentation, hasSpecialRule } from '../lib/specialRules';
+import { formatScoreBreakdown, getSpecialRulePresentation } from '../lib/specialRules';
 
 // ── Streak helpers (localStorage, local-only, never written to Supabase) ─────
 
@@ -318,32 +318,6 @@ export function RevealScreen() {
           </>
         )}
       </div>
-
-      {hasSpecialRule(specialRuleType) && specialRulePresentation && (
-        <div
-          className={`special-rule-card special-rule-card--${specialRulePresentation.theme}`}
-          style={{ position: 'relative', zIndex: 1, width: 'min(92vw, 560px)', margin: '12px auto 0', textAlign: 'center' }}
-        >
-          <div className="special-rule-badge">{specialRulePresentation.label}</div>
-          <div style={{ fontSize: 18, fontWeight: 800, color: '#fff', marginTop: 8 }}>
-            {specialRulePresentation.revealMessage}
-          </div>
-          {scoreBreakdown.length > 0 && (
-            <div className="score-breakdown" style={{ marginTop: 14, textAlign: 'left' }}>
-              {scoreBreakdown.map((item, index) => (
-                <div key={`${item.type}-${index}`} className="score-breakdown-row">
-                  <span className="score-breakdown-label">{item.label}</span>
-                  <span className="score-breakdown-value">
-                    {item.value > 0 ? '+' : ''}
-                    {item.value.toLocaleString()}
-                    {item.operation ? ` (${item.operation})` : ''}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
 
       {/* Image area */}
       <div className="gr-reveal-body">
