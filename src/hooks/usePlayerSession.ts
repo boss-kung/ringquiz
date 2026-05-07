@@ -31,14 +31,10 @@ export function usePlayerSession() {
 
         const userId = session.user.id;
 
-        // Upsert player row (safe: display_name update is allowed by RLS)
-        const { error: upsertErr } = await supabase
-          .from('players')
-          .upsert(
-            { id: userId, display_name: displayName },
-            { onConflict: 'id' },
-          );
-        if (upsertErr) throw new Error(upsertErr.message);
+        const { error: joinErr } = await supabase.rpc('join_player', {
+          display_name_input: displayName,
+        });
+        if (joinErr) throw new Error(joinErr.message);
 
         // Persist for next visit
         localStorage.setItem(PLAYER_ID_KEY, userId);

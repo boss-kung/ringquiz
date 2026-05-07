@@ -372,6 +372,13 @@ export type Database = {
         Args: { p_question_id: string; p_game_set_question_id?: string };
         Returns: number;
       };
+      join_player: {
+        Args: { display_name_input: string };
+        Returns: {
+          id: string;
+          display_name: string;
+        }[];
+      };
       increment_player_score: {
         Args: { p_player_id: string; p_amount: number };
         Returns: undefined;

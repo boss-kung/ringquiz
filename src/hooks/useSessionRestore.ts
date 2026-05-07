@@ -113,12 +113,9 @@ export function useSessionRestore() {
           }
         } else {
           // Session version matches, so restoring the player row is safe.
-          const { error: upsertErr } = await supabase
-            .from('players')
-            .upsert(
-              { id: savedId, display_name: savedName.trim() },
-              { onConflict: 'id' },
-            );
+          const { error: upsertErr } = await supabase.rpc('join_player', {
+            display_name_input: savedName.trim(),
+          });
 
           if (upsertErr) {
             // Non-fatal: player row likely exists; proceed anyway.
