@@ -59,6 +59,8 @@ export interface GameState {
   active_game_set_id: string | null;               // FK → game_sets.id
   current_game_set_question_id: string | null;     // FK → game_set_questions.id
   display_theme: DisplayTheme;                     // Big Screen theme, set by host
+  current_special_rule_type: string;               // populated on countdown, reset on waiting
+  current_special_rule_config: Record<string, unknown>;
 }
 
 export interface Question {

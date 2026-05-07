@@ -497,11 +497,11 @@ function DisplayStageFxOverlay({ fx }: { fx: ActiveDisplayFx | null }) {
 // ── Root component ────────────────────────────────────────────────────────────
 
 const MAX_VISIBLE_PLAYERS = 24;
-const LEADERBOARD_PRE_COUNT_HOLD_MS = 350;
-const LEADERBOARD_SCORE_ANIMATION_MS = 1900;
-const LEADERBOARD_REORDER_MOVE_MS = 1200;
-const LEADERBOARD_REORDER_SETTLE_MS = 1250;
-const LEADERBOARD_LEADER_BANNER_MS = 2600;
+const LEADERBOARD_PRE_COUNT_HOLD_MS = 1000;
+const LEADERBOARD_SCORE_ANIMATION_MS = 2000;
+const LEADERBOARD_REORDER_MOVE_MS = 3000;
+const LEADERBOARD_REORDER_SETTLE_MS = 1500;
+const LEADERBOARD_LEADER_BANNER_MS = 3000;
 
 export function DisplayPage() {
   const [gameState, setGameState] = useState<GameState | null>(null);
@@ -1575,9 +1575,11 @@ function DsCountdown({
   const offset = progress >= 1 ? 0 : circ * (1 - progress);
   const clueUrl = question ? resolveQuestionImageUrl(question.image_url) : null;
   const clueStatus = useImagePreloadStatus(clueUrl, 6500);
-  const specialPresentation = question
-    ? getSpecialRulePresentation(question.special_rule_type, question.special_rule_config, showClue ? 'clue' : 'countdown')
-    : null;
+  const specialPresentation = getSpecialRulePresentation(
+    gameState.current_special_rule_type ?? 'normal',
+    gameState.current_special_rule_config ?? {},
+    showClue ? 'clue' : 'countdown',
+  );
 
   return (
     <DsShell centered>

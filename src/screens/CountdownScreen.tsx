@@ -77,14 +77,12 @@ export function CountdownScreen() {
   }, [question]);
   usePrimeImages([clueImageUrl, revealImageUrl], 6500);
   const clueImageStatus = useImagePreloadStatus(clueImageUrl, 6500);
-  const specialRulePresentation = question
-    ? getSpecialRulePresentation(
-        question.special_rule_type ?? 'normal',
-        question.special_rule_config ?? {},
-        cluePhase ? 'clue' : 'countdown',
-      )
-    : null;
-  const showSpecialRule = hasSpecialRule(question?.special_rule_type);
+  const specialRulePresentation = getSpecialRulePresentation(
+    gameState?.current_special_rule_type ?? 'normal',
+    gameState?.current_special_rule_config ?? {},
+    cluePhase ? 'clue' : 'countdown',
+  );
+  const showSpecialRule = hasSpecialRule(gameState?.current_special_rule_type);
 
   return (
     <div
@@ -118,8 +116,7 @@ export function CountdownScreen() {
             style={{ marginBottom: 12 }}
           >
             <div className="gr-special-round-card-badge special-rule-badge">SPECIAL RULE</div>
-            <div className="gr-special-round-card-title">{specialRulePresentation.label}</div>
-            <div className="gr-special-round-card-copy">{specialRulePresentation.bigScreenMessage}</div>
+            <div className="gr-special-round-card-title">{specialRulePresentation.label}</div> - <div className="gr-special-round-card-copy">{specialRulePresentation.bigScreenMessage}</div>
           </div>
         )}
 

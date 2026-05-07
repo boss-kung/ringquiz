@@ -93,6 +93,8 @@ export interface GameState {
   active_game_set_id: string | null;               // FK → game_sets.id
   current_game_set_question_id: string | null;     // FK → game_set_questions.id
   display_theme: DisplayTheme;                     // Big Screen theme, persists through reload
+  current_special_rule_type: SpecialRuleType;      // set on countdown, reset on waiting
+  current_special_rule_config: SpecialRuleConfig;
 }
 
 // ── Questions ────────────────────────────────────────────────────────────────

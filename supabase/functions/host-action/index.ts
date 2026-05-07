@@ -163,6 +163,8 @@ async function executeAction(
             current_question_id: nextGSQ.question_id,
             current_question_index: nextGSQ.play_order,
             current_game_set_question_id: nextGSQ.id,
+            current_special_rule_type: nextGSQ.special_rule_type,
+            current_special_rule_config: nextGSQ.special_rule_config,
             question_started_at: null,
             question_ends_at: null,
           });
@@ -171,12 +173,12 @@ async function executeAction(
         // Legacy fallback: use questions.order_index
         const { data: nextQ, error: qErr } = await db
           .from('questions')
-          .select('id, order_index')
+          .select('id, order_index, special_rule_type, special_rule_config')
           .eq('is_published', true)
           .gt('order_index', currentPlayOrder)
           .order('order_index', { ascending: true })
           .limit(1)
-          .single();
+          .single<{ id: string; order_index: number; special_rule_type?: string; special_rule_config?: Record<string, unknown> }>();
 
         if (qErr || !nextQ) return error(400, 'no_next_question');
 
@@ -186,6 +188,8 @@ async function executeAction(
             current_question_id: nextQ.id,
             current_question_index: nextQ.order_index,
             current_game_set_question_id: null,
+            current_special_rule_type: nextQ.special_rule_type ?? 'normal',
+            current_special_rule_config: nextQ.special_rule_config ?? {},
             question_started_at: null,
             question_ends_at: null,
           });
@@ -301,6 +305,8 @@ async function executeAction(
           current_question_id: nextGSQ.question_id,
           current_question_index: nextGSQ.play_order,
           current_game_set_question_id: nextGSQ.id,
+          current_special_rule_type: nextGSQ.special_rule_type,
+          current_special_rule_config: nextGSQ.special_rule_config,
           question_started_at: null,
           question_ends_at: null,
         });
@@ -308,12 +314,12 @@ async function executeAction(
         // Legacy fallback
         const { data: nextQ, error: qErr } = await db
           .from('questions')
-          .select('id, order_index')
+          .select('id, order_index, special_rule_type, special_rule_config')
           .eq('is_published', true)
           .gt('order_index', currentPlayOrder)
           .order('order_index', { ascending: true })
           .limit(1)
-          .single();
+          .single<{ id: string; order_index: number; special_rule_type?: string; special_rule_config?: Record<string, unknown> }>();
 
         if (qErr || !nextQ) return error(400, 'no_next_question');
 
@@ -322,6 +328,8 @@ async function executeAction(
           current_question_id: nextQ.id,
           current_question_index: nextQ.order_index,
           current_game_set_question_id: null,
+          current_special_rule_type: nextQ.special_rule_type ?? 'normal',
+          current_special_rule_config: nextQ.special_rule_config ?? {},
           question_started_at: null,
           question_ends_at: null,
         });
@@ -374,6 +382,8 @@ async function executeAction(
         current_question_id: null,
         current_question_index: null,
         current_game_set_question_id: null,
+        current_special_rule_type: 'normal',
+        current_special_rule_config: {},
         question_started_at: null,
         question_ends_at: null,
       });
@@ -404,6 +414,8 @@ async function executeAction(
         current_question_id: null,
         current_question_index: null,
         current_game_set_question_id: null,
+        current_special_rule_type: 'normal',
+        current_special_rule_config: {},
         question_started_at: null,
         question_ends_at: null,
       });
@@ -519,6 +531,8 @@ async function refetchGs(
     active_game_set_id: data.active_game_set_id ?? null,
     current_game_set_question_id: data.current_game_set_question_id ?? null,
     display_theme: data.display_theme ?? 'classic_gold',
+    current_special_rule_type: data.current_special_rule_type ?? 'normal',
+    current_special_rule_config: data.current_special_rule_config ?? {},
   } as GameState;
 }
 
@@ -526,6 +540,8 @@ type NextGameSetQuestion = {
   id: string;
   question_id: string;
   play_order: number;
+  special_rule_type: string;
+  special_rule_config: Record<string, unknown>;
 };
 
 async function selectNextGameSetQuestion(
@@ -539,6 +555,8 @@ async function selectNextGameSetQuestion(
       id,
       question_id,
       play_order,
+      special_rule_type,
+      special_rule_config,
       questions!inner(id)
     `)
     .eq('game_set_id', gameSetId)
@@ -551,10 +569,13 @@ async function selectNextGameSetQuestion(
   if (error) throw new Error(`game_set_questions query failed: ${error.message}`);
   if (!data) return null;
 
+  const row = data as typeof data & { special_rule_type?: string; special_rule_config?: Record<string, unknown> };
   return {
-    id: data.id,
-    question_id: data.question_id,
-    play_order: data.play_order,
+    id: row.id,
+    question_id: row.question_id,
+    play_order: row.play_order,
+    special_rule_type: row.special_rule_type ?? 'normal',
+    special_rule_config: row.special_rule_config ?? {},
   };
 }
 
