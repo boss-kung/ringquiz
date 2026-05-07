@@ -1,0 +1,5 @@
+-- Legacy migration marker kept only to match the remote schema_migrations
+-- history. The original repository accidentally had multiple different files
+-- sharing the 20260506000002 version prefix, and one of them has already been
+-- recorded remotely. This file is intentionally a no-op so future pushes can
+-- proceed with the uniquely-versioned replacement migrations.
