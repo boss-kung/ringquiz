@@ -218,7 +218,9 @@ export function QuestionScreen() {
     >
       {/* Header */}
       <div className="gr-qhud-wrap">
-        <div className="gr-qhud-order">Question {displayOrder ?? '—'}</div>
+        <div className="gr-qhud-order" style={{ fontSize: 16, fontWeight: 600 }}>
+          Question {displayOrder ?? '—'}
+        </div>
         <Timer
           remainingMs={remainingMs}
           totalMs={durationMs}
@@ -270,15 +272,15 @@ export function QuestionScreen() {
       <div className="gr-qsubmit">
         <div style={{ marginBottom: submitted || timeExpired || submitError ? 8 : 0 }}>
           {timeExpired && !submitted && !submitting && (
-            <p style={{ textAlign: 'center', fontSize: 18, fontWeight: 600, color: 'var(--rose)', marginBottom: 6 }}>
+            <p style={{ textAlign: 'center', fontSize: 16, fontWeight: 600, color: 'var(--rose)', marginBottom: 6 }}>
               หมดเวลา — คำตอบไม่ได้รับการบันทึก
             </p>
           )}
           {submitError && (
-            <p style={{ textAlign: 'center', fontSize: 18, color: 'var(--rose)', marginBottom: 6 }}>{submitError}</p>
+            <p style={{ textAlign: 'center', fontSize: 16, color: 'var(--rose)', marginBottom: 6 }}>{submitError}</p>
           )}
           {submitted && submitResult && (
-            <p style={{ textAlign: 'center', fontSize: 18, fontWeight: 600, color: 'var(--emerald)', marginBottom: 6 }}>
+            <p style={{ textAlign: 'center', fontSize: 16, fontWeight: 600, color: 'var(--emerald)', marginBottom: 6 }}>
               ✓ คำตอบถูกส่งแล้ว — กำลังรอผลลัพธ์
             </p>
           )}

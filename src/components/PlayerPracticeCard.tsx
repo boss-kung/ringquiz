@@ -48,7 +48,7 @@ function withBaseUrl(path: string): string {
 const PRACTICE_QUESTION: PracticeQuestionConfig = {
   key: 'waiting_practice',
   id: 'waiting_practice',
-  title: 'มาซ้อมก่อนเริ่มเกมกันเถอะ!',
+  title: 'ซ้อมก่อนเริ่มเกมกันเถอะ!',
   prompt: 'ซ้อมก่อนเริ่ม',
   instruction: 'วิธีเล่น: อ่านโจทย์ → วางวงกลมที่คิดว่าเป็นคำตอบ → กดปุ่มยืนยันคำตอบ',
   imageUrl: '',
@@ -276,10 +276,10 @@ export function PlayerPracticeCard() {
   const feedbackMessage = (): string | null => {
     if (!submitted) return null;
     switch (feedbackKind) {
-      case 'correct': return 'โดนแล้ว!';
-      case 'close': return 'ใกล้มาก ลองขยับอีกนิด';
-      case 'wrong': return 'ยังไม่โดน ลองใหม่';
-      default: return null;
+      case 'correct': return 'ถูกต้อง!';
+      case 'close': return 'ใกล้มากแล้ว ยังไม่ถูก';
+      case 'wrong': return 'ยังไม่ถูกต้อง ลองใหม่';
+      default: return 'วงกลมทับพื้นที่คำตอบเท่านั้นถึงจะถูกต้อง';
     }
   };
 

@@ -764,7 +764,6 @@ body.host-route {
   background: rgba(8,13,28,.84);
   border: 1px solid rgba(255,255,255,.08);
   box-shadow: 0 8px 20px rgba(0,0,0,.18);
-  min-height: clamp(96px, 22vh, 190px);
   max-height: clamp(96px, 22vh, 190px);
   overflow: hidden;
 }

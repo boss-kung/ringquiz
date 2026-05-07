@@ -278,7 +278,7 @@ export function RevealScreen() {
             <div style={{ fontSize: 26, marginBottom: 6 }}>{resultIcon}</div>
             <div
               style={{
-                fontSize: 30, fontWeight: 900,
+                fontSize: 24, fontWeight: 900,
                 color: revealNoAnswer ? 'var(--text-2)' : isCorrect ? 'var(--emerald)' : 'var(--rose)',
               }}
             >
@@ -288,7 +288,7 @@ export function RevealScreen() {
               <div
                 className="gr-mono"
                 style={{
-                  fontSize: effectiveRevealResult && isCorrect ? 30 : 26,
+                  fontSize: effectiveRevealResult && isCorrect ? 24 : 20,
                   fontWeight: 900,
                   color: effectiveRevealResult && isCorrect ? 'var(--gold)' : 'var(--text-2)',
                   marginTop: 4,
