@@ -331,19 +331,12 @@ export function GameSetManager({ secret, onStatsChanged }: { secret: string; onS
     }
   };
 
-  // ── Reorder (move up/down) ────────────────────────────────────────────────
+  // ── Reorder (drag-and-drop full reorder) ─────────────────────────────────
 
-  const handleMove = async (gsq: GameSetQuestionRecord, direction: 'up' | 'down') => {
+  const handleReorder = async (newOrder: GameSetQuestionRecord[]) => {
     if (!selectedGameSet) return;
-    const idx = gsQuestions.findIndex((q) => q.id === gsq.id);
-    const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
-    if (swapIdx < 0 || swapIdx >= gsQuestions.length) return;
-
-    const newOrder = [...gsQuestions];
-    [newOrder[idx], newOrder[swapIdx]] = [newOrder[swapIdx], newOrder[idx]];
     setGsQuestions(newOrder); // optimistic
-
-    setBusy(`move-${gsq.id}`);
+    setBusy('reorder');
     try {
       await callAdmin(secret, {
         action: 'reorder_game_set_questions',
@@ -354,7 +347,7 @@ export function GameSetManager({ secret, onStatsChanged }: { secret: string; onS
       await onStatsChanged?.();
     } catch (e) {
       flash(e instanceof Error ? e.message : 'Reorder failed', true);
-      await loadGSQ(selectedGameSet.id); // revert
+      await loadGSQ(selectedGameSet.id);
     } finally {
       setBusy(null);
     }
@@ -482,7 +475,7 @@ export function GameSetManager({ secret, onStatsChanged }: { secret: string; onS
           onOpenPicker={handleOpenPicker}
           onRemove={handleRemoveGSQ}
           onToggleEnabled={handleToggleEnabled}
-          onMove={handleMove}
+          onReorderAll={handleReorder}
           onStartEdit={startEdit}
           onEditChange={(field, val) => setEditingRow((prev) => prev ? { ...prev, [field]: val } : null)}
           onEditRuleTypeChange={(type) => setEditingRow((prev) => prev ? {
@@ -693,7 +686,7 @@ function GameSetsListView({
 function GameSetDetailView({
   gameSet, questions, busy, editingRow,
   onBack, onSetActive, onOpenPicker, onRemove, onToggleEnabled,
-  onMove, onStartEdit, onEditChange, onEditRuleTypeChange, onEditRuleFormChange, onSaveEdit, onCancelEdit,
+  onReorderAll, onStartEdit, onEditChange, onEditRuleTypeChange, onEditRuleFormChange, onSaveEdit, onCancelEdit,
 }: {
   gameSet: GameSetRecord;
   questions: GameSetQuestionRecord[];
@@ -704,7 +697,7 @@ function GameSetDetailView({
   onOpenPicker: () => void;
   onRemove: (id: string) => void;
   onToggleEnabled: (gsq: GameSetQuestionRecord) => void;
-  onMove: (gsq: GameSetQuestionRecord, dir: 'up' | 'down') => void;
+  onReorderAll: (newOrder: GameSetQuestionRecord[]) => void;
   onStartEdit: (gsq: GameSetQuestionRecord) => void;
   onEditChange: (field: keyof EditingRow, val: EditingRow[keyof EditingRow]) => void;
   onEditRuleTypeChange: (type: SpecialRuleType) => void;
@@ -712,16 +705,40 @@ function GameSetDetailView({
   onSaveEdit: () => void;
   onCancelEdit: () => void;
 }) {
-  const readyCount = questions.filter((question) => question.is_enabled).length;
+  const readyCount = questions.filter((q) => q.is_enabled).length;
   const canActivate = readyCount > 0;
+
+  // Drag-and-drop state
+  const [dragId,     setDragId]     = useState<string | null>(null);
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
+
+  const handleDragStart = (e: React.DragEvent, id: string) => {
+    setDragId(id);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+  const handleDragOver = (e: React.DragEvent, id: string) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (id !== dragOverId) setDragOverId(id);
+  };
+  const handleDrop = (e: React.DragEvent, targetId: string) => {
+    e.preventDefault();
+    if (!dragId || dragId === targetId) { setDragId(null); setDragOverId(null); return; }
+    const from = questions.findIndex((q) => q.id === dragId);
+    const to   = questions.findIndex((q) => q.id === targetId);
+    if (from === -1 || to === -1) { setDragId(null); setDragOverId(null); return; }
+    const next = [...questions];
+    next.splice(to, 0, next.splice(from, 1)[0]);
+    setDragId(null); setDragOverId(null);
+    onReorderAll(next);
+  };
+  const handleDragEnd = () => { setDragId(null); setDragOverId(null); };
+
   return (
     <>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-        <button
-          onClick={onBack}
-          style={{ fontSize: 13, color: 'var(--text-3)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--font-sans)', padding: 0 }}
-        >
+        <button onClick={onBack} style={{ fontSize: 13, color: 'var(--text-3)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--font-sans)', padding: 0 }}>
           ← Back
         </button>
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -734,18 +751,12 @@ function GameSetDetailView({
           </div>
         </div>
         {gameSet.status !== 'active' && (
-          <button
-            onClick={onSetActive}
-            disabled={busy !== null || !canActivate}
-            className="gr-btn gr-btn-gold"
-            style={{ fontSize: 12, padding: '8px 14px', flexShrink: 0, width: 'auto' }}
-          >
+          <button onClick={onSetActive} disabled={busy !== null || !canActivate} className="gr-btn gr-btn-gold" style={{ fontSize: 12, padding: '8px 14px', flexShrink: 0, width: 'auto' }}>
             {busy?.startsWith('active') ? '…' : 'Set Active'}
           </button>
         )}
       </div>
 
-      {/* Info box */}
       {gameSet.status === 'active' && (
         <div style={{ padding: '10px 14px', borderRadius: 10, fontSize: 12, background: 'rgba(245,199,74,.07)', border: '1px solid rgba(245,199,74,.2)', color: 'var(--gold)' }}>
           ✓ This is the active Game Set. Host navigation uses these questions in this order.
@@ -764,289 +775,105 @@ function GameSetDetailView({
         </div>
       )}
 
-      {/* Toolbar */}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        <button
-          onClick={onOpenPicker}
-          disabled={busy !== null}
-          className="gr-btn gr-btn-gold"
-          style={{ fontSize: 12, padding: '9px 14px', width: 'auto' }}
-        >
+        <button onClick={onOpenPicker} disabled={busy !== null} className="gr-btn gr-btn-gold" style={{ fontSize: 12, padding: '9px 14px', width: 'auto' }}>
           + Add Questions from Bank
         </button>
       </div>
 
-      {/* Question Order Timeline */}
-      {questions.length > 0 && (
-        <QuestionTimeline questions={questions} />
-      )}
+      {questions.length > 0 && <QuestionTimeline questions={questions} />}
 
-      {/* Questions table */}
+      {/* Questions list */}
       {questions.length === 0 ? (
         <div style={{ padding: '24px 14px', textAlign: 'center', fontSize: 13, color: 'var(--text-3)', border: '1px dashed rgba(255,255,255,.1)', borderRadius: 12 }}>
           <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', marginBottom: 6 }}>No questions selected yet.</div>
           <div>Add questions from Question Bank to make this set playable.</div>
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, overflowX: 'auto', paddingBottom: 2 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {/* Column header */}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: '28px 60px 1fr 60px 70px 70px 60px 50px 80px',
-            gap: 6, padding: '6px 10px', minWidth: 720,
-            fontSize: 10, fontWeight: 700, letterSpacing: '.08em',
-            color: 'var(--text-3)', textTransform: 'uppercase',
-          }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '22px 24px 52px minmax(140px,1fr) 52px 60px 60px 52px 32px 66px', gap: 6, padding: '4px 10px', minWidth: 680, fontSize: 10, fontWeight: 700, letterSpacing: '.07em', color: 'var(--text-3)', textTransform: 'uppercase' }}>
+            <span />
             <span>#</span>
-            <span>Preview</span>
+            <span>IMG</span>
             <span>Question</span>
             <span>Time</span>
             <span>Max</span>
             <span>Min</span>
-            <span>Circle</span>
+            <span>⊙</span>
             <span>On</span>
             <span>Actions</span>
           </div>
 
-          {questions.map((gsq, idx) => {
-            const isEditing = editingRow?.id === gsq.id;
-            const isBusy = busy === `remove-${gsq.id}` || busy === `toggle-${gsq.id}` ||
-              busy === `move-${gsq.id}` || busy === `save-${gsq.id}`;
-            const rulePresentation = getSpecialRulePresentation(gsq.special_rule_type ?? 'normal', gsq.special_rule_config ?? {}, 'countdown');
-            const editingRuleConfig = isEditing && editingRow ? buildSpecialRuleConfigFromEditingRow(editingRow) : null;
-            const editingRulePresentation = isEditing && editingRow
-              ? getSpecialRulePresentation(editingRow.special_rule_type, editingRuleConfig ?? {}, 'countdown')
-              : null;
-            const editingPlayerPreview = isEditing && editingRow
-              ? getSpecialRulePresentation(editingRow.special_rule_type, editingRuleConfig ?? {}, 'question')
-              : null;
-            const editingRevealPreview = isEditing && editingRow
-              ? getSpecialRulePresentation(editingRow.special_rule_type, editingRuleConfig ?? {}, 'reveal')
+          {questions.map((gsq) => {
+            const isBusy    = busy === `remove-${gsq.id}` || busy === `toggle-${gsq.id}` || busy === 'reorder';
+            const isDragging = dragId === gsq.id;
+            const isOver     = dragOverId === gsq.id && dragId !== gsq.id;
+            const rulePresentation = hasSpecialRule(gsq.special_rule_type)
+              ? getSpecialRulePresentation(gsq.special_rule_type ?? 'normal', gsq.special_rule_config ?? {}, 'countdown')
               : null;
 
             return (
               <div
                 key={gsq.id}
+                draggable
+                onDragStart={(e) => handleDragStart(e, gsq.id)}
+                onDragOver={(e) => handleDragOver(e, gsq.id)}
+                onDrop={(e) => handleDrop(e, gsq.id)}
+                onDragEnd={handleDragEnd}
                 className="gr-card"
                 style={{
-                  padding: '10px 10px',
-                  opacity: gsq.is_enabled ? 1 : 0.5,
                   display: 'grid',
-                  gridTemplateColumns: '28px 60px minmax(140px, 1fr) 60px 70px 70px 60px 50px minmax(96px, auto)',
-                  minWidth: 720,
-                  gap: 6,
+                  gridTemplateColumns: '22px 24px 52px minmax(140px,1fr) 52px 60px 60px 52px 32px 66px',
+                  gap: 6, padding: '9px 10px', minWidth: 680,
                   alignItems: 'center',
+                  opacity: isDragging ? 0.35 : gsq.is_enabled ? 1 : 0.5,
+                  outline: isOver ? '2px dashed rgba(245,199,74,.55)' : 'none',
+                  outlineOffset: -2,
+                  transition: 'opacity .15s, outline .1s',
+                  cursor: isDragging ? 'grabbing' : 'default',
                 }}
               >
-                {/* Play order */}
-                <span style={{ fontSize: 12, fontWeight: 800, color: 'var(--text-2)' }}>{gsq.play_order}</span>
-
-                {/* Preview */}
-                <div style={{ width: 52, height: 36, borderRadius: 7, overflow: 'hidden', background: 'rgba(0,0,0,.4)', flexShrink: 0 }}>
-                  <img
-                    src={resolveQuestionImageUrl(gsq.question_image_url) ?? undefined}
-                    alt={gsq.question_text}
-                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                  />
+                {/* Drag handle */}
+                <div style={{ cursor: 'grab', color: 'var(--text-3)', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', userSelect: 'none' }} title="Drag to reorder">
+                  ⠿
                 </div>
 
-                {/* Question text + special rule badge */}
+                {/* Play order */}
+                <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--text-2)', textAlign: 'center' }}>{gsq.play_order}</span>
+
+                {/* Preview */}
+                <div style={{ width: 44, height: 30, borderRadius: 6, overflow: 'hidden', background: 'rgba(0,0,0,.4)' }}>
+                  <img src={resolveQuestionImageUrl(gsq.question_image_url) ?? undefined} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                </div>
+
+                {/* Question text */}
                 <div style={{ overflow: 'hidden' }}>
-                  <span
-                    title={gsq.question_text}
-                    style={{
-                      fontSize: 11, color: 'var(--text)', lineHeight: 1.4,
-                      overflow: 'hidden', display: '-webkit-box',
-                      WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
-                    }}
-                  >
+                  <span title={gsq.question_text} style={{ fontSize: 11, color: 'var(--text)', lineHeight: 1.4, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
                     {gsq.question_text}
                   </span>
-                  {hasSpecialRule(gsq.special_rule_type) && rulePresentation && !isEditing && (
-                    <span className={`special-rule-badge special-rule-card--${rulePresentation.theme}`} style={{ display: 'inline-flex', marginTop: 4, fontSize: 9, padding: '3px 7px' }}>
+                  {rulePresentation && (
+                    <span className={`special-rule-badge special-rule-card--${rulePresentation.theme}`} style={{ display: 'inline-flex', marginTop: 3, fontSize: 9, padding: '2px 6px' }}>
                       {rulePresentation.label}
                     </span>
                   )}
                 </div>
 
-                {/* Editable fields */}
-                {isEditing ? (
-                  <>
-                    <SmallInput label="s" value={editingRow!.time_limit_seconds} onChange={(v) => onEditChange('time_limit_seconds', v)} />
-                    <SmallInput label="pts" value={editingRow!.max_score} onChange={(v) => onEditChange('max_score', v)} />
-                    <SmallInput label="pts" value={editingRow!.min_correct_score} onChange={(v) => onEditChange('min_correct_score', v)} />
-                    <SmallInput label="" value={editingRow!.circle_radius_ratio} onChange={(v) => onEditChange('circle_radius_ratio', v)} />
-                  </>
-                ) : (
-                  <>
-                    <span style={{ fontSize: 11, color: 'var(--text-2)' }}>{gsq.time_limit_seconds}s</span>
-                    <span style={{ fontSize: 11, color: 'var(--text-2)' }}>{gsq.max_score}</span>
-                    <span style={{ fontSize: 11, color: 'var(--text-2)' }}>{gsq.min_correct_score}</span>
-                    <span style={{ fontSize: 11, color: 'var(--text-2)' }}>{gsq.circle_radius_ratio}</span>
-                  </>
-                )}
-                {/* Special rule config — shown below the row grid when editing */}
-                {isEditing && (
-                  <div style={{ gridColumn: '1 / -1', display: 'grid', gap: 10, paddingTop: 6 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                      <span className="gr-label-xs" style={{ flexShrink: 0 }}>Special rule:</span>
-                      {SPECIAL_RULE_OPTIONS.map((option) => (
-                        <button
-                          key={option.type}
-                          type="button"
-                          onClick={() => onEditRuleTypeChange(option.type)}
-                          style={{
-                            padding: '4px 8px',
-                            borderRadius: 7,
-                            border: 'none',
-                            cursor: 'pointer',
-                            fontFamily: 'var(--font-sans)',
-                            fontSize: 10,
-                            fontWeight: 700,
-                            background: editingRow!.special_rule_type === option.type ? 'var(--gold)' : 'rgba(255,255,255,.07)',
-                            color: editingRow!.special_rule_type === option.type ? 'var(--navy-deep)' : 'var(--text-2)',
-                          }}
-                        >
-                          {option.label}
-                        </button>
-                      ))}
-                    </div>
-
-                    {editingRow!.special_rule_type === 'speed_bonus' && (
-                      <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))' }}>
-                        <SmallInput
-                          label="bonus_ratio"
-                          value={editingRow!.special_rule_form.bonus_ratio}
-                          onChange={(value) => onEditRuleFormChange({ bonus_ratio: value })}
-                        />
-                        <SmallInput
-                          label="max_bonus_points"
-                          value={editingRow!.special_rule_form.max_bonus_points}
-                          onChange={(value) => onEditRuleFormChange({ max_bonus_points: value })}
-                        />
-                      </div>
-                    )}
-
-                    {editingRow!.special_rule_type === 'no_mistake' && (
-                      <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))' }}>
-                        <SmallInput
-                          label="คะแนนโทษ (ติดลบ)"
-                          value={editingRow!.special_rule_form.wrong_penalty_points}
-                          onChange={(value) => onEditRuleFormChange({ wrong_penalty_points: value })}
-                        />
-                        <ToggleField
-                          label="หักคะแนนเมื่อไม่ตอบ"
-                          checked={editingRow!.special_rule_form.penalize_no_answer}
-                          onChange={(checked) => onEditRuleFormChange({ penalize_no_answer: checked })}
-                        />
-                        <ToggleField
-                          label="ยอมให้คะแนนรวมติดลบ"
-                          checked={editingRow!.special_rule_form.allow_negative_total_score}
-                          onChange={(checked) => onEditRuleFormChange({ allow_negative_total_score: checked })}
-                        />
-                      </div>
-                    )}
-                    {editingRow!.special_rule_type === 'no_mistake' && (
-                      <div style={{ fontSize: 11, color: 'var(--text-3)', lineHeight: 1.5 }}>
-                        ตอบผิด → หักคะแนนโทษ · ไม่ตอบ → หักเมื่อเปิดตัวเลือก "หักคะแนนเมื่อไม่ตอบ" · ตอบถูก → ได้คะแนนตามปกติ
-                      </div>
-                    )}
-
-                    {editingRow!.special_rule_type === 'fastest_finger' && (
-                      <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))' }}>
-                        <SmallInput
-                          label="top_n"
-                          value={editingRow!.special_rule_form.top_n}
-                          onChange={(value) => onEditRuleFormChange({ top_n: value })}
-                        />
-                        <SmallInput
-                          label="bonus_points"
-                          value={editingRow!.special_rule_form.bonus_points}
-                          onChange={(value) => onEditRuleFormChange({ bonus_points: value })}
-                        />
-                      </div>
-                    )}
-
-                    {editingRow!.special_rule_type === 'mystery_multiplier' && (
-                      <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))' }}>
-                        <SmallInput
-                          label="multiplier"
-                          value={editingRow!.special_rule_form.multiplier}
-                          onChange={(value) => onEditRuleFormChange({ multiplier: value })}
-                        />
-                        <ToggleField
-                          label="hidden_until_reveal"
-                          checked={editingRow!.special_rule_form.hidden_until_reveal}
-                          onChange={(checked) => onEditRuleFormChange({ hidden_until_reveal: checked })}
-                        />
-                      </div>
-                    )}
-
-                    {editingRow!.special_rule_type === 'double_score' && (
-                      <div style={{ fontSize: 11, color: 'var(--text-3)' }}>Preset multiplier x2 will be applied to correct answers.</div>
-                    )}
-                    {editingRow!.special_rule_type === 'triple_score' && (
-                      <div style={{ fontSize: 11, color: 'var(--text-3)' }}>Preset multiplier x3 will be applied to correct answers.</div>
-                    )}
-
-                    {editingRulePresentation && (
-                      <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
-                        <RulePreviewCard
-                          title="Big Screen Preview"
-                          badge={editingRulePresentation.label}
-                          message={editingRulePresentation.bigScreenMessage}
-                          theme={editingRulePresentation.theme}
-                        />
-                        {editingPlayerPreview && (
-                          <RulePreviewCard
-                            title="Player Preview"
-                            badge={editingPlayerPreview.label}
-                            message={editingPlayerPreview.playerMessage}
-                            theme={editingPlayerPreview.theme}
-                          />
-                        )}
-                        {editingRevealPreview && (
-                          <RulePreviewCard
-                            title="Reveal Preview"
-                            badge={editingRevealPreview.label}
-                            message={editingRevealPreview.revealMessage}
-                            theme={editingRevealPreview.theme}
-                          />
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
+                {/* Static values */}
+                <span style={{ fontSize: 11, color: 'var(--text-2)' }}>{gsq.time_limit_seconds}s</span>
+                <span style={{ fontSize: 11, color: 'var(--text-2)' }}>{gsq.max_score}</span>
+                <span style={{ fontSize: 11, color: 'var(--text-2)' }}>{gsq.min_correct_score}</span>
+                <span style={{ fontSize: 11, color: 'var(--text-2)' }}>{gsq.circle_radius_ratio}</span>
 
                 {/* Enabled toggle */}
-                <button
-                  onClick={() => onToggleEnabled(gsq)}
-                  disabled={isBusy}
-                  style={{
-                    background: 'none', border: 'none', cursor: 'pointer',
-                    fontSize: 16, opacity: isBusy ? 0.5 : 1,
-                    color: gsq.is_enabled ? 'var(--emerald)' : 'var(--text-3)',
-                  }}
-                  title={gsq.is_enabled ? 'Disable' : 'Enable'}
-                >
+                <button onClick={() => onToggleEnabled(gsq)} disabled={isBusy} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 15, opacity: isBusy ? 0.5 : 1, color: gsq.is_enabled ? 'var(--emerald)' : 'var(--text-3)' }} title={gsq.is_enabled ? 'Disable' : 'Enable'}>
                   {gsq.is_enabled ? '✓' : '○'}
                 </button>
 
                 {/* Actions */}
                 <div style={{ display: 'flex', gap: 3 }}>
-                  {isEditing ? (
-                    <>
-                      <MiniBtn onClick={onSaveEdit} disabled={isBusy} gold>Save</MiniBtn>
-                      <MiniBtn onClick={onCancelEdit} disabled={isBusy}>✕</MiniBtn>
-                    </>
-                  ) : (
-                    <>
-                      <MiniBtn onClick={() => onStartEdit(gsq)} disabled={isBusy}>Edit</MiniBtn>
-                      <MiniBtn onClick={() => onMove(gsq, 'up')} disabled={isBusy || idx === 0}>↑</MiniBtn>
-                      <MiniBtn onClick={() => onMove(gsq, 'down')} disabled={isBusy || idx === questions.length - 1}>↓</MiniBtn>
-                      <MiniBtn onClick={() => onRemove(gsq.id)} disabled={isBusy} danger>×</MiniBtn>
-                    </>
-                  )}
+                  <MiniBtn onClick={() => onStartEdit(gsq)} disabled={isBusy} gold>Edit</MiniBtn>
+                  <MiniBtn onClick={() => onRemove(gsq.id)} disabled={isBusy} danger>×</MiniBtn>
                 </div>
               </div>
             );
@@ -1054,12 +881,180 @@ function GameSetDetailView({
         </div>
       )}
 
-      {/* Legend */}
       <div style={{ fontSize: 10, color: 'var(--text-3)', lineHeight: 1.6 }}>
-        These values are the actual runtime values for this Game Set only.<br />
-        Changing Question Bank defaults after this point will NOT affect this Game Set.
+        Drag ⠿ to reorder. Values here are runtime snapshots — changes to Question Bank defaults won't affect this set.
       </div>
+
+      {/* Edit Modal */}
+      {editingRow && (
+        <QuestionEditModal
+          editingRow={editingRow}
+          questions={questions}
+          busy={busy}
+          onEditChange={onEditChange}
+          onEditRuleTypeChange={onEditRuleTypeChange}
+          onEditRuleFormChange={onEditRuleFormChange}
+          onSave={onSaveEdit}
+          onCancel={onCancelEdit}
+        />
+      )}
     </>
+  );
+}
+
+// ── Question Edit Modal ───────────────────────────────────────────────────────
+
+function QuestionEditModal({
+  editingRow, questions, busy,
+  onEditChange, onEditRuleTypeChange, onEditRuleFormChange, onSave, onCancel,
+}: {
+  editingRow: EditingRow;
+  questions: GameSetQuestionRecord[];
+  busy: string | null;
+  onEditChange: (field: keyof EditingRow, val: EditingRow[keyof EditingRow]) => void;
+  onEditRuleTypeChange: (type: SpecialRuleType) => void;
+  onEditRuleFormChange: (patch: Partial<EditingRow['special_rule_form']>) => void;
+  onSave: () => void;
+  onCancel: () => void;
+}) {
+  const gsq = questions.find((q) => q.id === editingRow.id);
+  const isBusy = busy === `save-${editingRow.id}`;
+
+  const editingRuleConfig = buildSpecialRuleConfigFromEditingRow(editingRow);
+  const editingRulePresentation = getSpecialRulePresentation(editingRow.special_rule_type, editingRuleConfig, 'countdown');
+  const editingPlayerPreview    = getSpecialRulePresentation(editingRow.special_rule_type, editingRuleConfig, 'question');
+  const editingRevealPreview    = getSpecialRulePresentation(editingRow.special_rule_type, editingRuleConfig, 'reveal');
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      style={{ position: 'fixed', inset: 0, background: 'rgba(5,8,16,.92)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px 16px', zIndex: 200, backdropFilter: 'blur(6px)', overflowY: 'auto' }}
+      onClick={onCancel}
+    >
+      <div
+        style={{ width: '100%', maxWidth: 560, background: 'var(--navy-mid)', borderRadius: 16, border: '1px solid rgba(255,255,255,.1)', padding: 22, display: 'flex', flexDirection: 'column', gap: 16 }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Modal header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
+          <div>
+            <div className="gr-label-xs" style={{ marginBottom: 4 }}>Edit Question Settings</div>
+            {gsq && (
+              <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 6 }}>
+                <div style={{ width: 52, height: 36, borderRadius: 7, overflow: 'hidden', background: 'rgba(0,0,0,.4)', flexShrink: 0 }}>
+                  <img src={resolveQuestionImageUrl(gsq.question_image_url) ?? undefined} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--text)', lineHeight: 1.5, fontWeight: 600 }}>{gsq.question_text}</div>
+              </div>
+            )}
+          </div>
+          <button onClick={onCancel} style={{ fontSize: 20, color: 'var(--text-3)', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 6px', lineHeight: 1, flexShrink: 0 }}>×</button>
+        </div>
+
+        {/* Core numeric fields */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <ModalField label="Time (วินาที)" hint="s">
+            <input value={editingRow.time_limit_seconds} onChange={(e) => onEditChange('time_limit_seconds', e.target.value)} style={modalInputStyle} type="number" min={5} max={300} />
+          </ModalField>
+          <ModalField label="Max Score (pts)" hint="pts">
+            <input value={editingRow.max_score} onChange={(e) => onEditChange('max_score', e.target.value)} style={modalInputStyle} type="number" min={0} />
+          </ModalField>
+          <ModalField label="Min Correct Score (pts)" hint="pts">
+            <input value={editingRow.min_correct_score} onChange={(e) => onEditChange('min_correct_score', e.target.value)} style={modalInputStyle} type="number" />
+          </ModalField>
+          <ModalField label="Circle Radius Ratio" hint="0–0.5">
+            <input value={editingRow.circle_radius_ratio} onChange={(e) => onEditChange('circle_radius_ratio', e.target.value)} style={modalInputStyle} type="number" min={0.01} max={0.5} step={0.01} />
+          </ModalField>
+        </div>
+
+        {/* Special rule selector */}
+        <div>
+          <div className="gr-label-xs" style={{ marginBottom: 8 }}>Special Rule</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {SPECIAL_RULE_OPTIONS.map((opt) => (
+              <button
+                key={opt.type}
+                type="button"
+                onClick={() => onEditRuleTypeChange(opt.type)}
+                style={{ padding: '5px 10px', borderRadius: 8, border: 'none', cursor: 'pointer', fontFamily: 'var(--font-sans)', fontSize: 11, fontWeight: 700, background: editingRow.special_rule_type === opt.type ? 'var(--gold)' : 'rgba(255,255,255,.08)', color: editingRow.special_rule_type === opt.type ? 'var(--navy-deep)' : 'var(--text-2)' }}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Rule-specific fields */}
+        {editingRow.special_rule_type === 'speed_bonus' && (
+          <div style={{ display: 'grid', gap: 10, gridTemplateColumns: '1fr 1fr' }}>
+            <ModalField label="Bonus Ratio" hint="0–1"><input value={editingRow.special_rule_form.bonus_ratio} onChange={(e) => onEditRuleFormChange({ bonus_ratio: e.target.value })} style={modalInputStyle} type="number" step={0.05} min={0} max={1} /></ModalField>
+            <ModalField label="Max Bonus Points" hint="pts"><input value={editingRow.special_rule_form.max_bonus_points} onChange={(e) => onEditRuleFormChange({ max_bonus_points: e.target.value })} style={modalInputStyle} type="number" min={0} /></ModalField>
+          </div>
+        )}
+        {editingRow.special_rule_type === 'no_mistake' && (
+          <>
+            <div style={{ display: 'grid', gap: 10, gridTemplateColumns: '1fr 1fr' }}>
+              <ModalField label="คะแนนโทษ (ติดลบ)" hint="pts"><input value={editingRow.special_rule_form.wrong_penalty_points} onChange={(e) => onEditRuleFormChange({ wrong_penalty_points: e.target.value })} style={modalInputStyle} type="number" max={0} /></ModalField>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <ToggleField label="หักคะแนนเมื่อไม่ตอบ" checked={editingRow.special_rule_form.penalize_no_answer} onChange={(v) => onEditRuleFormChange({ penalize_no_answer: v })} />
+              <ToggleField label="ยอมให้คะแนนรวมติดลบ" checked={editingRow.special_rule_form.allow_negative_total_score} onChange={(v) => onEditRuleFormChange({ allow_negative_total_score: v })} />
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--text-3)', lineHeight: 1.5 }}>ตอบผิด → หักคะแนนโทษ · ไม่ตอบ → หักเมื่อเปิด "หักคะแนนเมื่อไม่ตอบ" · ตอบถูก → ได้คะแนนตามปกติ</div>
+          </>
+        )}
+        {editingRow.special_rule_type === 'fastest_finger' && (
+          <div style={{ display: 'grid', gap: 10, gridTemplateColumns: '1fr 1fr' }}>
+            <ModalField label="Top N" hint="คน"><input value={editingRow.special_rule_form.top_n} onChange={(e) => onEditRuleFormChange({ top_n: e.target.value })} style={modalInputStyle} type="number" min={1} /></ModalField>
+            <ModalField label="Bonus Points" hint="pts"><input value={editingRow.special_rule_form.bonus_points} onChange={(e) => onEditRuleFormChange({ bonus_points: e.target.value })} style={modalInputStyle} type="number" min={0} /></ModalField>
+          </div>
+        )}
+        {editingRow.special_rule_type === 'mystery_multiplier' && (
+          <div style={{ display: 'grid', gap: 10, gridTemplateColumns: '1fr 1fr' }}>
+            <ModalField label="Multiplier" hint="×"><input value={editingRow.special_rule_form.multiplier} onChange={(e) => onEditRuleFormChange({ multiplier: e.target.value })} style={modalInputStyle} type="number" min={1} step={0.5} /></ModalField>
+            <ToggleField label="Hidden until reveal" checked={editingRow.special_rule_form.hidden_until_reveal} onChange={(v) => onEditRuleFormChange({ hidden_until_reveal: v })} />
+          </div>
+        )}
+        {editingRow.special_rule_type === 'double_score' && <div style={{ fontSize: 11, color: 'var(--text-3)' }}>Multiplier ×2 will be applied to correct answers.</div>}
+        {editingRow.special_rule_type === 'triple_score' && <div style={{ fontSize: 11, color: 'var(--text-3)' }}>Multiplier ×3 will be applied to correct answers.</div>}
+
+        {/* Rule preview cards */}
+        {editingRow.special_rule_type !== 'normal' && editingRulePresentation && (
+          <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}>
+            <RulePreviewCard title="Big Screen" badge={editingRulePresentation.label} message={editingRulePresentation.bigScreenMessage} theme={editingRulePresentation.theme} />
+            {editingPlayerPreview && <RulePreviewCard title="Player" badge={editingPlayerPreview.label} message={editingPlayerPreview.playerMessage} theme={editingPlayerPreview.theme} />}
+            {editingRevealPreview && <RulePreviewCard title="Reveal" badge={editingRevealPreview.label} message={editingRevealPreview.revealMessage} theme={editingRevealPreview.theme} />}
+          </div>
+        )}
+
+        {/* Save / Cancel */}
+        <div style={{ display: 'flex', gap: 10, paddingTop: 4 }}>
+          <button onClick={onCancel} disabled={isBusy} className="gr-btn gr-btn-ghost" style={{ padding: '11px 16px', fontSize: 13 }}>ยกเลิก</button>
+          <button onClick={onSave} disabled={isBusy} className="gr-btn gr-btn-gold" style={{ flex: 1, fontSize: 14, padding: '11px 16px' }}>
+            {isBusy ? 'กำลังบันทึก…' : 'บันทึก'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const modalInputStyle: React.CSSProperties = {
+  width: '100%', fontSize: 14, padding: '9px 12px', borderRadius: 9,
+  border: '1px solid rgba(255,255,255,.12)', background: 'rgba(255,255,255,.05)',
+  color: 'var(--text)', fontFamily: 'var(--font-mono)', boxSizing: 'border-box', outline: 'none',
+};
+
+function ModalField({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-3)', marginBottom: 5, letterSpacing: '.04em', display: 'flex', justifyContent: 'space-between' }}>
+        <span>{label}</span>
+        {hint && <span style={{ color: 'var(--text-3)', opacity: .6 }}>{hint}</span>}
+      </div>
+      {children}
+    </div>
   );
 }
 
@@ -1332,36 +1327,6 @@ function MiniBtn({
   );
 }
 
-function SmallInput({
-  value, onChange, label,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  label: string;
-}) {
-  return (
-    <div style={{ position: 'relative' }}>
-      <input
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        style={{
-          width: '100%', fontSize: 11, padding: '4px 6px',
-          borderRadius: 7, border: '1px solid rgba(245,199,74,.4)',
-          background: 'rgba(0,0,0,.3)', color: 'var(--text)',
-          fontFamily: 'var(--font-mono)', boxSizing: 'border-box',
-        }}
-      />
-      {label && (
-        <span style={{
-          position: 'absolute', right: 5, top: '50%', transform: 'translateY(-50%)',
-          fontSize: 9, color: 'var(--text-3)', pointerEvents: 'none',
-        }}>
-          {label}
-        </span>
-      )}
-    </div>
-  );
-}
 
 function ToggleField({
   label,
