@@ -4338,3 +4338,140 @@ body.host-route {
     opacity: 1 !important;
   }
 }
+
+/* ── HOST CONSOLE (Operator Console redesign) ──────────────────────────────── */
+
+/* 2-column responsive grid for main console area */
+.hc-two-col {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+@media (min-width: 720px) {
+  .hc-two-col {
+    grid-template-columns: minmax(280px, 1.25fr) minmax(220px, 1fr);
+    align-items: start;
+  }
+}
+
+/* Large primary CTA button */
+.hc-cta {
+  width: 100%;
+  padding: 20px 22px;
+  border-radius: 14px;
+  border: 1.5px solid rgba(245,199,74,.35);
+  background: linear-gradient(135deg, rgba(245,199,74,.15) 0%, rgba(245,199,74,.07) 100%);
+  color: var(--gold);
+  font: 800 17px/1.25 var(--font-sans);
+  cursor: pointer;
+  transition: background .15s, border-color .15s, transform .1s, box-shadow .15s;
+  text-align: center;
+  letter-spacing: .01em;
+}
+.hc-cta:hover:not(:disabled) {
+  background: linear-gradient(135deg, rgba(245,199,74,.24) 0%, rgba(245,199,74,.13) 100%);
+  border-color: rgba(245,199,74,.55);
+  box-shadow: 0 4px 22px rgba(245,199,74,.14);
+  transform: translateY(-1px);
+}
+.hc-cta:active:not(:disabled) { transform: scale(.98); }
+.hc-cta:disabled { opacity: .38; cursor: not-allowed; transform: none; box-shadow: none; }
+
+/* Caution variant (close_question, end_game on last Q) */
+.hc-cta-caution {
+  border-color: rgba(251,113,133,.3);
+  background: linear-gradient(135deg, rgba(251,113,133,.1) 0%, rgba(251,113,133,.05) 100%);
+  color: var(--rose);
+}
+.hc-cta-caution:hover:not(:disabled) {
+  background: linear-gradient(135deg, rgba(251,113,133,.18) 0%, rgba(251,113,133,.09) 100%);
+  border-color: rgba(251,113,133,.5);
+  box-shadow: 0 4px 22px rgba(251,113,133,.12);
+}
+
+/* Emergency drawer toggle */
+.hc-emergency-toggle {
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px dashed rgba(251,113,133,.22);
+  background: transparent;
+  color: var(--text-3);
+  font: 700 11px/1 var(--font-sans);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  transition: all .15s;
+}
+.hc-emergency-toggle:hover,
+.hc-emergency-toggle.hc-open {
+  border-color: rgba(251,113,133,.42);
+  background: rgba(251,113,133,.06);
+  color: var(--rose);
+}
+
+/* Compact stat chip in status strip */
+.hc-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 5px 10px;
+  border-radius: 8px;
+  background: rgba(255,255,255,.04);
+  border: 1px solid rgba(255,255,255,.06);
+  min-width: 48px;
+  flex-shrink: 0;
+}
+.hc-stat-label {
+  font: 700 9px/1 var(--font-sans);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.hc-stat-value {
+  font: 700 14px/1 var(--font-mono);
+  color: var(--text);
+}
+
+/* Phase indicator pill */
+.hc-phase-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  font: 700 11px/1 var(--font-sans);
+  letter-spacing: .04em;
+  opacity: .85;
+}
+.hc-phase-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: grBlink 1.6s ease-in-out infinite;
+}
+
+/* Warning chip */
+.hc-warning {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 12px;
+  border-radius: 9px;
+  background: rgba(251,197,74,.08);
+  border: 1px solid rgba(251,197,74,.22);
+  color: var(--gold);
+  font: 600 12px/1.4 var(--font-sans);
+}
+
+/* Secondary action grid */
+.hc-sec-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px;
+}
