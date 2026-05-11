@@ -1031,7 +1031,7 @@ function QuestionEditModal({
         {/* Save / Cancel */}
         <div style={{ display: 'flex', gap: 10, paddingTop: 4 }}>
           <button onClick={onCancel} disabled={isBusy} className="gr-btn gr-btn-ghost" style={{ padding: '11px 16px', fontSize: 13 }}>ยกเลิก</button>
-          <button onClick={onSave} disabled={isBusy} className="gr-btn gr-btn-gold" style={{ flex: 1, fontSize: 14, padding: '11px 16px' }}>
+          <button onClick={onSave} disabled={isBusy} className="gr-btn gr-btn-gold" style={{ minWidth: '50%', flex: 1, fontSize: 14, padding: '11px 16px' }}>
             {isBusy ? 'กำลังบันทึก…' : 'บันทึก'}
           </button>
         </div>
