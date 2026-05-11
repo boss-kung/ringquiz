@@ -226,14 +226,13 @@ export function QuestionScreen() {
         <div className="gr-card gr-qtext-card" style={{ marginBottom: 20 }}>
           {hasSpecialRule(question.special_rule_type) && specialRulePresentation && (
             <>
-              <div
-                className={`gr-special-round-badge special-rule-badge special-rule-card--${specialRulePresentation.theme}`}
-                style={{ marginBottom: 8 }}
-              >
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center'}}>
+              <div className={`gr-special-round-badge special-rule-badge special-rule-card--${specialRulePresentation.theme}`} style={{ marginBottom: 8 }}>
                 {specialRulePresentation.label}
               </div>
               <div className="gr-special-round-reminder gr-special-round-card-copy">
                 {specialRulePresentation.bigScreenMessage}
+              </div>
               </div>
             </>
           )}

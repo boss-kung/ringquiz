@@ -116,7 +116,10 @@ export function CountdownScreen() {
             style={{ marginBottom: 12 }}
           >
             <div className="gr-special-round-card-badge special-rule-badge">SPECIAL RULE</div>
-            <div className="gr-special-round-card-title">{specialRulePresentation.label}</div> - <div className="gr-special-round-card-copy">{specialRulePresentation.bigScreenMessage}</div>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', justifyContent: 'center'}}>
+            <div className="gr-special-round-card-title">{specialRulePresentation.label}</div>
+            <div className="gr-special-round-card-copy">{specialRulePresentation.bigScreenMessage}</div>
+            </div>
           </div>
         )}
 

@@ -776,6 +776,11 @@ function GameSetDetailView({
         </button>
       </div>
 
+      {/* Question Order Timeline */}
+      {questions.length > 0 && (
+        <QuestionTimeline questions={questions} />
+      )}
+
       {/* Questions table */}
       {questions.length === 0 ? (
         <div style={{ padding: '24px 14px', textAlign: 'center', fontSize: 13, color: 'var(--text-3)', border: '1px dashed rgba(255,255,255,.1)', borderRadius: 12 }}>
@@ -925,20 +930,25 @@ function GameSetDetailView({
                     {editingRow!.special_rule_type === 'no_mistake' && (
                       <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))' }}>
                         <SmallInput
-                          label="wrong_penalty_points"
+                          label="คะแนนโทษ (ติดลบ)"
                           value={editingRow!.special_rule_form.wrong_penalty_points}
                           onChange={(value) => onEditRuleFormChange({ wrong_penalty_points: value })}
                         />
                         <ToggleField
-                          label="penalize_no_answer"
+                          label="หักคะแนนเมื่อไม่ตอบ"
                           checked={editingRow!.special_rule_form.penalize_no_answer}
                           onChange={(checked) => onEditRuleFormChange({ penalize_no_answer: checked })}
                         />
                         <ToggleField
-                          label="allow_negative_total_score"
+                          label="ยอมให้คะแนนรวมติดลบ"
                           checked={editingRow!.special_rule_form.allow_negative_total_score}
                           onChange={(checked) => onEditRuleFormChange({ allow_negative_total_score: checked })}
                         />
+                      </div>
+                    )}
+                    {editingRow!.special_rule_type === 'no_mistake' && (
+                      <div style={{ fontSize: 11, color: 'var(--text-3)', lineHeight: 1.5 }}>
+                        ตอบผิด → หักคะแนนโทษ · ไม่ตอบ → หักเมื่อเปิดตัวเลือก "หักคะแนนเมื่อไม่ตอบ" · ตอบถูก → ได้คะแนนตามปกติ
                       </div>
                     )}
 
@@ -1050,6 +1060,102 @@ function GameSetDetailView({
         Changing Question Bank defaults after this point will NOT affect this Game Set.
       </div>
     </>
+  );
+}
+
+// ── Question Order Timeline ───────────────────────────────────────────────────
+
+function QuestionTimeline({ questions }: { questions: GameSetQuestionRecord[] }) {
+  const enabledCount = questions.filter((q) => q.is_enabled).length;
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+        <div className="gr-label-xs">Play Order</div>
+        <span style={{ fontSize: 10, color: 'var(--text-3)' }}>{enabledCount} of {questions.length} active</span>
+      </div>
+      <div
+        style={{
+          display: 'flex', alignItems: 'center', gap: 0,
+          overflowX: 'auto', paddingBottom: 6,
+          scrollbarWidth: 'thin',
+        }}
+      >
+        {questions.map((gsq, idx) => {
+          const rulePresentation = hasSpecialRule(gsq.special_rule_type)
+            ? getSpecialRulePresentation(gsq.special_rule_type ?? 'normal', gsq.special_rule_config ?? {}, 'countdown')
+            : null;
+          const isLast = idx === questions.length - 1;
+          return (
+            <div key={gsq.id} style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+              {/* Card */}
+              <div
+                style={{
+                  width: 72, flexShrink: 0,
+                  borderRadius: 10,
+                  border: `1px solid ${gsq.is_enabled ? 'rgba(245,199,74,.28)' : 'rgba(255,255,255,.07)'}`,
+                  background: gsq.is_enabled ? 'rgba(245,199,74,.05)' : 'rgba(255,255,255,.02)',
+                  opacity: gsq.is_enabled ? 1 : 0.45,
+                  overflow: 'hidden',
+                  position: 'relative',
+                }}
+              >
+                {/* Play order badge */}
+                <div
+                  style={{
+                    position: 'absolute', top: 4, left: 4,
+                    width: 18, height: 18, borderRadius: '50%',
+                    background: gsq.is_enabled ? 'var(--gold)' : 'rgba(255,255,255,.15)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 9, fontWeight: 900, color: gsq.is_enabled ? 'var(--navy-deep)' : 'var(--text-3)',
+                    zIndex: 1,
+                  }}
+                >
+                  {gsq.play_order}
+                </div>
+                {/* Thumbnail */}
+                <div style={{ width: '100%', height: 44, overflow: 'hidden', background: 'rgba(0,0,0,.4)' }}>
+                  <img
+                    src={resolveQuestionImageUrl(gsq.question_image_url) ?? undefined}
+                    alt=""
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  />
+                </div>
+                {/* Text */}
+                <div style={{ padding: '4px 5px 5px' }}>
+                  <div
+                    style={{
+                      fontSize: 9, color: 'var(--text-2)', lineHeight: 1.35,
+                      overflow: 'hidden', display: '-webkit-box',
+                      WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
+                    }}
+                  >
+                    {gsq.question_text}
+                  </div>
+                  {rulePresentation && (
+                    <div
+                      style={{
+                        marginTop: 3,
+                        fontSize: 8, fontWeight: 700, letterSpacing: '.04em',
+                        color: 'var(--gold)', opacity: 0.85,
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      }}
+                    >
+                      ★ {rulePresentation.label}
+                    </div>
+                  )}
+                </div>
+              </div>
+              {/* Connector arrow */}
+              {!isLast && (
+                <div style={{ width: 14, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <div style={{ fontSize: 10, color: 'rgba(255,255,255,.18)', userSelect: 'none' }}>›</div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 

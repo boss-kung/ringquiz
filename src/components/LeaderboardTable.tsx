@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react';
 import type { LeaderboardEntry } from '../lib/types';
 import { LEADERBOARD_VISIBLE_ROWS } from '../lib/constants';
 
@@ -7,6 +8,20 @@ interface Props {
   playerEntry: LeaderboardEntry | null;
   showPodium?: boolean;
   compactTopSpacing?: boolean;
+}
+
+// Delta badge shown for a few seconds after rank changes
+function RankDelta({ delta }: { delta: number }) {
+  if (delta === 0) return null;
+  const isUp = delta > 0;
+  return (
+    <span
+      className={`gr-lb-rank-delta ${isUp ? 'gr-lb-rank-delta-up' : 'gr-lb-rank-delta-down'}`}
+      aria-label={isUp ? `ขึ้น ${delta} อันดับ` : `ลง ${Math.abs(delta)} อันดับ`}
+    >
+      {isUp ? `↑${delta}` : `↓${Math.abs(delta)}`}
+    </span>
+  );
 }
 
 const AV_GRADS = [
@@ -36,6 +51,32 @@ export function LeaderboardTable({
   showPodium = false,
   compactTopSpacing = false,
 }: Props) {
+  // Track previous ranks to compute deltas (3.4)
+  const prevRanksRef = useRef<Map<string, number>>(new Map());
+  const [visibleDeltas, setVisibleDeltas] = useState<Map<string, number>>(new Map());
+
+  useEffect(() => {
+    if (entries.length === 0) return;
+    const prev = prevRanksRef.current;
+    const newDeltas = new Map<string, number>();
+
+    for (const entry of entries) {
+      const prevRank = prev.get(entry.player_id);
+      if (prevRank !== undefined && prevRank !== entry.rank) {
+        newDeltas.set(entry.player_id, prevRank - entry.rank); // positive = moved up
+      }
+    }
+
+    if (newDeltas.size > 0) {
+      setVisibleDeltas(newDeltas);
+      const timerId = setTimeout(() => setVisibleDeltas(new Map()), 3500);
+      prevRanksRef.current = new Map(entries.map((e) => [e.player_id, e.rank]));
+      return () => clearTimeout(timerId);
+    }
+
+    prevRanksRef.current = new Map(entries.map((e) => [e.player_id, e.rank]));
+  }, [entries]);
+
   const top = entries.slice(0, LEADERBOARD_VISIBLE_ROWS);
   const podiumEntries = showPodium ? entries.slice(0, 3) : [];
   const listEntries = showPodium ? top.slice(Math.min(podiumEntries.length, 3)) : top;
@@ -109,7 +150,7 @@ export function LeaderboardTable({
                         border: isMe ? '1px solid rgba(245,199,74,.25)' : '1px solid rgba(255,255,255,.07)',
                       }}
                     >
-                      <span className="gr-mono" style={{ fontSize: 16, fontWeight: 800, color: idx === 0 ? '#0C1228' : 'var(--text)' }}>
+                      <span className="gr-mono" style={{ fontSize: 16, fontWeight: 800, color: idx === 0 ? 'rgb(255, 255, 255)' : 'var(--text)' }}>
                         {entry.cumulative_score.toLocaleString()}
                       </span>
                     </div>
@@ -140,9 +181,12 @@ export function LeaderboardTable({
               >
                 #{entry.rank}
               </span>
-              <span style={{ flex: 1, fontSize: 18, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text)' }}>
-                {entry.display_name}
-                {isMe && <span style={{ marginLeft: 6, fontSize: 12, color: 'var(--gold)' }}>(you)</span>}
+              <span style={{ flex: 1, fontSize: 18, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text)', display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {entry.display_name}
+                  {isMe && <span style={{ marginLeft: 6, fontSize: 12, color: 'var(--gold)' }}>(you)</span>}
+                </span>
+                <RankDelta delta={visibleDeltas.get(entry.player_id) ?? 0} />
               </span>
               <div style={{ textAlign: 'right' }}>
                 <div className="gr-mono" style={{ fontSize: 18, fontWeight: 800, color: isMe ? 'var(--gold)' : 'var(--text)' }}>

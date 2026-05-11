@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { usePlayerSession } from '../hooks/usePlayerSession';
 import { DISPLAY_NAME_MAX_LENGTH, DISPLAY_NAME_MIN_LENGTH } from '../lib/constants';
 import { unlockFeedbackAudio } from '../lib/feedbackFx';
+import { AVATAR_COLORS, AVATAR_COLOR_KEY, getAvatarGrad, getInitials } from '../lib/avatarColor';
 
 function RingMark({ size = 96 }: { size?: number }) {
   const r1 = size * 0.45, r2 = size * 0.38, r3 = size * 0.31;
@@ -22,9 +23,19 @@ function RingMark({ size = 96 }: { size?: number }) {
 export function JoinScreen() {
   const { join, loading, error, savedName } = usePlayerSession();
   const [name, setName] = useState(savedName);
+  const [colorIdx, setColorIdx] = useState<number>(() => {
+    const stored = localStorage.getItem(AVATAR_COLOR_KEY);
+    const parsed = stored !== null ? parseInt(stored, 10) : NaN;
+    return Number.isFinite(parsed) && parsed >= 0 && parsed < AVATAR_COLORS.length ? parsed : 0;
+  });
   const inputId = 'join-display-name';
 
   useEffect(() => { setName(savedName); }, [savedName]);
+
+  const handleColorSelect = (idx: number) => {
+    setColorIdx(idx);
+    localStorage.setItem(AVATAR_COLOR_KEY, String(idx));
+  };
 
   const canSubmit = name.trim().length >= DISPLAY_NAME_MIN_LENGTH && !loading;
 
@@ -110,6 +121,42 @@ export function JoinScreen() {
             autoFocus
             className="gr-input"
           />
+
+          {/* Avatar preview + color picker */}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '8px 0' }}>
+            <div
+              style={{
+                width: 52, height: 52, borderRadius: '50%',
+                background: getAvatarGrad(colorIdx),
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 18, fontWeight: 900, color: 'white',
+                boxShadow: '0 0 18px rgba(0,0,0,.35)',
+                transition: 'background .2s ease',
+              }}
+            >
+              {getInitials(name) || '?'}
+            </div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
+              {AVATAR_COLORS.map((grad, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => handleColorSelect(idx)}
+                  aria-label={`Avatar color ${idx + 1}`}
+                  style={{
+                    width: 26, height: 26, borderRadius: '50%',
+                    background: grad,
+                    border: colorIdx === idx ? '2px solid white' : '2px solid transparent',
+                    outline: colorIdx === idx ? '2px solid rgba(245,199,74,.6)' : 'none',
+                    cursor: 'pointer',
+                    padding: 0,
+                    transition: 'outline .15s, border .15s',
+                    boxShadow: colorIdx === idx ? '0 0 8px rgba(245,199,74,.35)' : 'none',
+                  }}
+                />
+              ))}
+            </div>
+          </div>
 
           {error && (
             <p style={{ color: 'var(--rose)', fontSize: 16, textAlign: 'center' }}>{error}</p>

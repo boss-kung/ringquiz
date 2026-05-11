@@ -1,7 +1,7 @@
 // Supabase-style generated database types.
 // Used with createClient<Database> for type-safe queries.
 // Regenerate with: npx supabase gen types typescript --linked > src/lib/database.types.ts
-// This hand-crafted version matches the schema in 20260501000001_initial_schema.sql.
+// Updated to match migrations through 20260507210000_add_special_rule_to_game_state.sql.
 
 export type Json =
   | string
@@ -27,6 +27,9 @@ export type Database = {
           active_game_set_id: string | null;
           current_game_set_question_id: string | null;
           display_theme: Database['public']['Enums']['display_theme'];
+          // Added by 20260507210000_add_special_rule_to_game_state.sql
+          current_special_rule_type: string;
+          current_special_rule_config: Json;
         };
         Insert: {
           id?: string;
@@ -40,6 +43,8 @@ export type Database = {
           active_game_set_id?: string | null;
           current_game_set_question_id?: string | null;
           display_theme?: Database['public']['Enums']['display_theme'];
+          current_special_rule_type?: string;
+          current_special_rule_config?: Json;
         };
         Update: {
           id?: string;
@@ -53,6 +58,8 @@ export type Database = {
           active_game_set_id?: string | null;
           current_game_set_question_id?: string | null;
           display_theme?: Database['public']['Enums']['display_theme'];
+          current_special_rule_type?: string;
+          current_special_rule_config?: Json;
         };
         Relationships: [
           {

@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { FUNCTIONS_URL, SUPABASE_ANON_KEY } from '../../lib/supabase';
-import { STATS_POLL_INTERVAL_MS } from '../../lib/constants';
+import { supabase, FUNCTIONS_URL, SUPABASE_ANON_KEY } from '../../lib/supabase';
+import { STATS_POLL_INTERVAL_MS, COUNTDOWN_DISPLAY_SECONDS } from '../../lib/constants';
 import { useGameStore } from '../../store/gameStore';
 import { useGetServerTime } from '../../hooks/useServerTime';
 import { AdminQuestionManager } from './AdminQuestionManager';
 import { GameSetManager } from './GameSetManager';
+import { getHostActionMessage } from '../../lib/hostActionMessages';
 import type {
   HostActionName,
   HostActionResponse,
@@ -14,6 +15,16 @@ import type {
 } from '../../lib/types';
 
 const SESSION_KEY = 'quiz_host_secret';
+
+type ConfirmAction = 'soft_reset_game' | 'hard_reset_game' | 'end_game';
+
+type RtStatus = 'connecting' | 'connected' | 'disconnected';
+
+function getRtDotStyle(s: RtStatus): React.CSSProperties {
+  if (s === 'connected')    return { background: '#34D399' };
+  if (s === 'disconnected') return { background: '#FB7185' };
+  return { background: '#F5C74A', animation: 'grGlowPulse 1.2s ease-in-out infinite' };
+}
 
 const PRIMARY_ACTIONS: { action: HostActionName; label: string }[] = [
   { action: 'start_countdown',   label: 'Start Game' },
@@ -152,12 +163,21 @@ function HostDashboard({ secret, onLogout }: { secret: string; onLogout: () => v
   const [actionError, setActionError] = useState('');
   const [actionSuccess, setActionSuccess] = useState('');
   const [statsError, setStatsError] = useState('');
-  const [resetConfirm, setResetConfirm] = useState<'soft_reset_game' | 'hard_reset_game' | null>(null);
+  const [resetConfirm, setResetConfirm] = useState<ConfirmAction | null>(null);
+  const [autoAdvance, setAutoAdvance] = useState(false);
+  const [autoAdvanceCountdown, setAutoAdvanceCountdown] = useState<number | null>(null);
+  const [rtStatus, setRtStatus] = useState<RtStatus>('connecting');
+  const [exportBusy, setExportBusy] = useState(false);
   const resetInput = useRef('');
   const resetInputRef = useRef<HTMLInputElement | null>(null);
   const cancelButtonRef = useRef<HTMLButtonElement | null>(null);
   const confirmButtonRef = useRef<HTMLButtonElement | null>(null);
   const lastFocusedRef = useRef<HTMLElement | null>(null);
+  const autoCloseCalledRef = useRef(false);
+  const autoOpenCalledRef = useRef(false);
+
+  // Declared early so effects below can reference it without hitting TDZ
+  const status = gameState?.status ?? 'loading…';
 
   const postHostAction = useCallback(async (action: string, payload?: Record<string, unknown>) => {
     const body = { action, ...(payload ? { payload } : {}) };
@@ -190,17 +210,32 @@ function HostDashboard({ secret, onLogout }: { secret: string; onLogout: () => v
     }
   }, [secret]);
 
+  // Dynamic poll: 1 s during question_open, 2.5 s otherwise (2.8)
   useEffect(() => {
     fetchStats();
-    const id = setInterval(fetchStats, STATS_POLL_INTERVAL_MS);
+    const interval = status === 'question_open' ? 1000 : STATS_POLL_INTERVAL_MS;
+    const id = setInterval(fetchStats, interval);
     return () => clearInterval(id);
-  }, [fetchStats]);
+  }, [fetchStats, status]);
 
   useEffect(() => {
     if (activeTab === 'game') {
       void fetchStats();
     }
   }, [activeTab, fetchStats]);
+
+  // Realtime connection status (2.1)
+  useEffect(() => {
+    const channel = supabase
+      .channel('host-rt-watch')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'game_state' }, () => {})
+      .subscribe((s) => {
+        if (s === 'SUBSCRIBED') setRtStatus('connected');
+        else if (s === 'CHANNEL_ERROR' || s === 'TIMED_OUT') setRtStatus('disconnected');
+        else setRtStatus('connecting');
+      });
+    return () => { void supabase.removeChannel(channel); };
+  }, []);
 
   useEffect(() => {
     if (!resetConfirm) return;
@@ -265,8 +300,87 @@ function HostDashboard({ secret, onLogout }: { secret: string; onLogout: () => v
     return () => clearInterval(id);
   }, [stats?.question_ends_at, getServerTime]);
 
+  // Auto-advance: auto-open after countdown, auto-close when timer expires (3.1)
+  useEffect(() => {
+    if (!autoAdvance || status !== 'countdown') {
+      autoOpenCalledRef.current = false;
+      return;
+    }
+    if (autoOpenCalledRef.current) return;
+    const updatedAt = gameState?.updated_at;
+    if (!updatedAt) return;
+
+    const openAt = new Date(updatedAt).getTime() + (COUNTDOWN_DISPLAY_SECONDS + 1) * 1000;
+    const delay = Math.max(0, openAt - getServerTime());
+
+    const timerId = setTimeout(() => {
+      if (!autoOpenCalledRef.current && isActionEnabled('open_question')) {
+        autoOpenCalledRef.current = true;
+        void doAction('open_question');
+      }
+    }, delay);
+    return () => clearTimeout(timerId);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoAdvance, status, gameState?.updated_at, getServerTime]);
+
+  useEffect(() => {
+    if (!autoAdvance || status !== 'question_open') {
+      autoCloseCalledRef.current = false;
+      return;
+    }
+    if (timeLeft !== 0 || autoCloseCalledRef.current) return;
+    autoCloseCalledRef.current = true;
+    void doAction('close_question');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoAdvance, status, timeLeft]);
+
+  // Auto-advance countdown display
+  useEffect(() => {
+    if (!autoAdvance) { setAutoAdvanceCountdown(null); return; }
+    if (status === 'countdown' && gameState?.updated_at) {
+      const openAt = new Date(gameState.updated_at).getTime() + (COUNTDOWN_DISPLAY_SECONDS + 1) * 1000;
+      const tick = () => setAutoAdvanceCountdown(Math.max(0, Math.ceil((openAt - getServerTime()) / 1000)));
+      tick();
+      const id = setInterval(tick, 250);
+      return () => clearInterval(id);
+    }
+    if (status === 'question_open') {
+      setAutoAdvanceCountdown(timeLeft);
+    } else {
+      setAutoAdvanceCountdown(null);
+    }
+  }, [autoAdvance, status, gameState?.updated_at, timeLeft, getServerTime]);
+
+  const handleExportResults = useCallback(async () => {
+    setExportBusy(true);
+    try {
+      const res = await fetch(`${FUNCTIONS_URL}/export-results`, {
+        headers: { 'Authorization': `Bearer ${SUPABASE_ANON_KEY}`, 'X-Host-Secret': secret },
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        const code = (j as { error?: string }).error ?? 'function_error';
+        setActionError(getHostActionMessage(code, `export HTTP ${res.status}`));
+        return;
+      }
+      const json = await res.json();
+      const blob = new Blob([JSON.stringify(json, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `game-results-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setActionSuccess('Results exported.');
+    } catch {
+      setActionError(getHostActionMessage('network_error'));
+    } finally {
+      setExportBusy(false);
+    }
+  }, [secret]);
+
   const callAction = useCallback(async (action: HostActionName) => {
-    if (action === 'soft_reset_game' || action === 'hard_reset_game') {
+    if (action === 'soft_reset_game' || action === 'hard_reset_game' || action === 'end_game') {
       setResetConfirm(action);
       return;
     }
@@ -280,14 +394,15 @@ function HostDashboard({ secret, onLogout }: { secret: string; onLogout: () => v
     try {
       const { res, json } = await postHostAction(action, payload);
       if (!res.ok) {
-        setActionError((json as EdgeFunctionError).error ?? 'Unknown error');
+        const code = (json as EdgeFunctionError).error ?? 'unknown_error';
+        setActionError(getHostActionMessage(code, `action=${action}`));
       } else {
         const r = json as HostActionResponse;
         setActionSuccess(`${action} → ${r.status}${r.already_in_state ? ' (already)' : ''}`);
         fetchStats();
       }
     } catch {
-      setActionError('Network error');
+      setActionError(getHostActionMessage('network_error'));
     } finally {
       setActionLoading(null);
     }
@@ -312,31 +427,30 @@ function HostDashboard({ secret, onLogout }: { secret: string; onLogout: () => v
       }
 
       if (!res.ok) {
-        const err = json as EdgeFunctionError;
-        setActionError(
-          err.error === 'unknown_action'
-            ? 'Stage FX/Theme is not supported by the deployed host-action function yet.'
-            : err.error ?? 'Unknown error',
-        );
+        const code = (json as EdgeFunctionError).error ?? 'unknown_error';
+        setActionError(getHostActionMessage(code, `fx action=${action}`));
       } else {
         setActionSuccess(`✓ ${action} sent`);
       }
     } catch {
-      setActionError('Network error');
+      setActionError(getHostActionMessage('network_error'));
     } finally {
       setFxLoading(null);
     }
   };
 
+  const confirmKeyword = (action: ConfirmAction) =>
+    action === 'end_game' ? 'END' : 'RESET';
+
   const handleResetConfirm = async () => {
-    if (resetInput.current !== 'RESET' || !resetConfirm) return;
+    if (!resetConfirm) return;
+    if (resetInput.current !== confirmKeyword(resetConfirm)) return;
     const action = resetConfirm;
     setResetConfirm(null);
     resetInput.current = '';
     await doAction(action);
   };
 
-  const status = gameState?.status ?? 'loading…';
   const questionProgress = stats?.question_index != null
     ? `Q${stats.question_index}/${stats.total_questions || '—'}`
     : null;
@@ -389,6 +503,14 @@ function HostDashboard({ secret, onLogout }: { secret: string; onLogout: () => v
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <div className="gr-badge gr-badge-live">LIVE</div>
+          {/* 2.1 Realtime connection dot */}
+          <div
+            title={`Realtime: ${rtStatus}`}
+            style={{
+              width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
+              ...getRtDotStyle(rtStatus),
+            }}
+          />
           <button
             onClick={onLogout}
             style={{ fontSize: 11, color: 'var(--text-3)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--font-sans)' }}
@@ -509,7 +631,7 @@ function HostDashboard({ secret, onLogout }: { secret: string; onLogout: () => v
             )}
             {statsError && (
               <div style={{ background: 'rgba(251,113,133,.1)', border: '1px solid rgba(251,113,133,.3)', borderRadius: 10, padding: '10px 14px', color: 'var(--rose)', fontSize: 13 }}>
-                Stats may be stale: {statsError}
+                ข้อมูลสถิติอาจล้าสมัย: {getHostActionMessage(statsError, statsError)}
               </div>
             )}
             {actionSuccess && (
@@ -520,7 +642,35 @@ function HostDashboard({ secret, onLogout }: { secret: string; onLogout: () => v
 
             {/* Primary actions */}
             <div>
-              <div className="gr-label-xs" style={{ marginBottom: 8 }}>Game Flow</div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                <div className="gr-label-xs">Game Flow</div>
+                {/* 3.1 Auto-advance toggle */}
+                <button
+                  onClick={() => setAutoAdvance((v) => !v)}
+                  style={{
+                    fontSize: 10, fontWeight: 700, padding: '4px 10px',
+                    borderRadius: 999, border: '1px solid',
+                    cursor: 'pointer', fontFamily: 'var(--font-sans)',
+                    background: autoAdvance ? 'rgba(52,211,153,.12)' : 'rgba(255,255,255,.04)',
+                    borderColor: autoAdvance ? 'rgba(52,211,153,.35)' : 'rgba(255,255,255,.1)',
+                    color: autoAdvance ? 'var(--emerald)' : 'var(--text-3)',
+                    transition: 'all .15s',
+                  }}
+                >
+                  {autoAdvance ? '⚡ Auto ON' : 'Auto OFF'}
+                </button>
+              </div>
+              {autoAdvance && autoAdvanceCountdown !== null && (
+                <div style={{
+                  fontSize: 11, color: 'var(--emerald)', marginBottom: 8,
+                  padding: '5px 10px', borderRadius: 8,
+                  background: 'rgba(52,211,153,.08)', border: '1px solid rgba(52,211,153,.18)',
+                }}>
+                  {status === 'countdown'
+                    ? `⚡ Auto-open คำถามใน ${autoAdvanceCountdown}s`
+                    : `⚡ Auto-close เมื่อหมดเวลา (เหลือ ${autoAdvanceCountdown}s)`}
+                </div>
+              )}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 7 }}>
                 {PRIMARY_ACTIONS.map(({ action, label }) => (
                   <button
@@ -528,7 +678,13 @@ function HostDashboard({ secret, onLogout }: { secret: string; onLogout: () => v
                     onClick={() => callAction(action)}
                     disabled={actionLoading !== null || !isActionEnabled(action)}
                     className="gr-hbtn"
-                    style={isActionEnabled(action) && actionLoading === null ? { borderColor: 'rgba(245,199,74,.2)', color: 'var(--gold)', background: 'rgba(245,199,74,.07)' } : undefined}
+                    style={
+                      action === 'end_game' && isActionEnabled(action) && actionLoading === null
+                        ? { borderColor: 'rgba(251,113,133,.3)', color: 'var(--rose)', background: 'rgba(251,113,133,.07)' }
+                        : isActionEnabled(action) && actionLoading === null
+                        ? { borderColor: 'rgba(245,199,74,.2)', color: 'var(--gold)', background: 'rgba(245,199,74,.07)' }
+                        : undefined
+                    }
                   >
                     <span style={{ fontSize: 12, fontWeight: 700 }}>
                       {actionLoading === action ? '…' : label}
@@ -554,6 +710,17 @@ function HostDashboard({ secret, onLogout }: { secret: string; onLogout: () => v
                     </span>
                   </button>
                 ))}
+                {/* Export results button */}
+                <button
+                  onClick={handleExportResults}
+                  disabled={exportBusy}
+                  className="gr-hbtn"
+                  style={{ borderColor: 'rgba(129,140,248,.25)', color: 'var(--indigo)' }}
+                >
+                  <span style={{ fontSize: 12, fontWeight: 700 }}>
+                    {exportBusy ? '…' : '⬇ Export Results'}
+                  </span>
+                </button>
               </div>
             </div>
 
@@ -629,21 +796,26 @@ function HostDashboard({ secret, onLogout }: { secret: string; onLogout: () => v
         >
           <div className="gr-card" style={{ width: '100%', maxWidth: 300, padding: 22 }}>
             <div id="reset-confirm-title" style={{ fontSize: 18, fontWeight: 800, color: 'var(--rose)', marginBottom: 10 }}>
-              ⚠️ {resetConfirm === 'soft_reset_game' ? 'Soft Reset Round' : 'Hard Reset Game'}
+              ⚠️{' '}
+              {resetConfirm === 'soft_reset_game' ? 'Soft Reset Round'
+                : resetConfirm === 'hard_reset_game' ? 'Hard Reset Game'
+                : 'End Game'}
             </div>
             <p style={{ fontSize: 12, color: 'var(--text-2)', marginBottom: 14, lineHeight: 1.6 }}>
               {resetConfirm === 'soft_reset_game'
-                ? 'This deletes answers, scores, and leaderboard data. Type RESET to confirm.'
-                : 'This clears ALL players, answers, scores, and leaderboard data. Type RESET to confirm.'}
+                ? `This deletes answers, scores, and leaderboard data. Type RESET to confirm.`
+                : resetConfirm === 'hard_reset_game'
+                ? `This clears ALL players, answers, scores, and leaderboard data. Type RESET to confirm.`
+                : `This ends the game immediately and shows the final leaderboard to all players. Type END to confirm.`}
             </p>
             <label htmlFor="reset-confirm-input" className="gr-label-xs" style={{ color: 'var(--text-2)', marginBottom: 8, display: 'block' }}>
-              Type RESET to confirm
+              Type {resetConfirm ? confirmKeyword(resetConfirm) : ''} to confirm
             </label>
             <input
               id="reset-confirm-input"
               ref={resetInputRef}
               type="text"
-              placeholder="Type RESET"
+              placeholder={`Type ${resetConfirm ? confirmKeyword(resetConfirm) : ''}`}
               autoFocus
               onChange={(e) => { resetInput.current = e.target.value; }}
               className="gr-input"

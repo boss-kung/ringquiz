@@ -395,6 +395,8 @@ export function AdminQuestionManager({ secret }: { secret: string }) {
   const [bulkMessage, setBulkMessage] = useState('');
   const [bulkError, setBulkError] = useState('');
 
+  const [maskPreviewQuestion, setMaskPreviewQuestion] = useState<AdminQuestionRecord | null>(null);
+
   const loadQuestions = useCallback(async () => {
     setBankLoading(true);
     setBankError('');
@@ -1686,6 +1688,16 @@ export function AdminQuestionManager({ secret }: { secret: string }) {
                         >
                           Edit
                         </button>
+                        {question.mask_storage_path && (
+                          <button
+                            type="button"
+                            onClick={() => setMaskPreviewQuestion(question)}
+                            disabled={busyAction !== null}
+                            className="flex-1 rounded-lg bg-amber-900/50 px-3 py-2 text-sm font-semibold text-amber-200 disabled:opacity-50"
+                          >
+                            Preview Mask
+                          </button>
+                        )}
                         <button
                           type="button"
                           onClick={() => { void handleTogglePublish(question); }}
@@ -1715,6 +1727,121 @@ export function AdminQuestionManager({ secret }: { secret: string }) {
           )}
         </div>
       )}
+
+      {maskPreviewQuestion && (
+        <MaskPreviewModal
+          question={maskPreviewQuestion}
+          secret={secret}
+          onClose={() => setMaskPreviewQuestion(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+function MaskPreviewModal({
+  question,
+  secret,
+  onClose,
+}: {
+  question: AdminQuestionRecord;
+  secret: string;
+  onClose: () => void;
+}) {
+  const [maskBlobUrl, setMaskBlobUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const imageUrl = resolveQuestionImageUrl(question.image_url);
+
+  useEffect(() => {
+    let cancelled = false;
+    let blobUrl = '';
+    setLoading(true);
+    setError('');
+    setMaskBlobUrl(null);
+
+    fetch(`${FUNCTIONS_URL}/get-reveal-mask?questionId=${encodeURIComponent(question.id)}&updatedAt=${encodeURIComponent(new Date().toISOString())}`, {
+      headers: {
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        'X-Host-Secret': secret,
+      },
+    })
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const blob = await res.blob();
+        if (!cancelled) {
+          blobUrl = URL.createObjectURL(blob);
+          setMaskBlobUrl(blobUrl);
+        }
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load mask');
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+      if (blobUrl) URL.revokeObjectURL(blobUrl);
+    };
+  }, [question.id, secret]);
+
+  return (
+    <div
+      style={{ position: 'fixed', inset: 0, background: 'rgba(5,8,16,.92)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 20, zIndex: 400, backdropFilter: 'blur(6px)' }}
+      onClick={onClose}
+    >
+      <div
+        style={{ width: '100%', maxWidth: 560, display: 'flex', flexDirection: 'column', gap: 12 }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--gold)' }}>Mask Preview</div>
+            <div style={{ fontSize: 11, color: 'var(--text-2)', marginTop: 2, maxWidth: 420, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{question.text}</div>
+          </div>
+          <button
+            onClick={onClose}
+            style={{ fontSize: 18, color: 'var(--text-3)', background: 'none', border: 'none', cursor: 'pointer', padding: '4px 8px', lineHeight: 1 }}
+            aria-label="Close"
+          >
+            ×
+          </button>
+        </div>
+
+        <div style={{ position: 'relative', width: '100%', borderRadius: 12, overflow: 'hidden', background: 'rgba(0,0,0,.6)', border: '1px solid rgba(255,255,255,.1)', minHeight: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          {imageUrl && (
+            <img
+              src={imageUrl}
+              alt={question.text}
+              style={{ width: '100%', height: 'auto', maxHeight: '60vh', objectFit: 'contain', display: 'block' }}
+            />
+          )}
+          {maskBlobUrl && (
+            <img
+              src={maskBlobUrl}
+              alt="Mask overlay"
+              aria-hidden
+              style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', pointerEvents: 'none' }}
+            />
+          )}
+          {loading && (
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(5,8,16,.6)', fontSize: 12, color: 'var(--text-2)' }}>
+              Loading mask…
+            </div>
+          )}
+          {error && (
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(5,8,16,.7)', fontSize: 12, color: 'var(--rose)', padding: 16, textAlign: 'center' }}>
+              {error}
+            </div>
+          )}
+        </div>
+
+        <div style={{ fontSize: 11, color: 'var(--text-3)', textAlign: 'center' }}>
+          Bright/white area = correct zone · Click outside to close
+        </div>
+      </div>
     </div>
   );
 }

@@ -2,6 +2,7 @@ import type { CSSProperties } from 'react';
 import { useGameStore } from '../store/gameStore';
 import { PlayerPracticeCard } from '../components/PlayerPracticeCard';
 import { SoundFxToggle } from '../components/SoundFxToggle';
+import { getAvatarGrad, getInitials, readStoredColorIndex } from '../lib/avatarColor';
 
 const PARTICLES = [
   { w: 6, h: 6, top: '18%', left: '12%', bg: 'rgba(245,199,74,.5)', dur: '5.2s', delay: '0s' },
@@ -13,6 +14,7 @@ const PARTICLES = [
 
 export function WaitingScreen() {
   const displayName = useGameStore((s) => s.displayName);
+  const colorIdx = readStoredColorIndex();
 
   return (
     <div className="pw-screen">
@@ -51,8 +53,19 @@ export function WaitingScreen() {
 
       <div className="pw-body">
         <div className="gr-card-gold pw-status-bar">
-          <div className="pw-status-line" style={{fontSize:20}}>
+          <div className="pw-status-line" style={{ fontSize: 20, alignItems: 'center' }}>
             <span className="pw-status-dot" />
+            <div
+              style={{
+                width: 36, height: 36, borderRadius: '50%', flexShrink: 0,
+                background: getAvatarGrad(colorIdx),
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 13, fontWeight: 900, color: 'white',
+                boxShadow: '0 0 10px rgba(0,0,0,.3)',
+              }}
+            >
+              {getInitials(displayName ?? '') || '?'}
+            </div>
             ยินดีต้อนรับ!<strong>{displayName}</strong>
           </div>
         </div>

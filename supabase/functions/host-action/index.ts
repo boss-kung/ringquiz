@@ -252,6 +252,10 @@ async function executeAction(
         await updateGameState(db, { status: 'question_closed' });
       }
 
+      // no_mistake: insert synthetic penalty rows for players who did not answer.
+      // Must run before compute_leaderboard so penalties are included in the snapshot.
+      await applyNoMistakePenaltyIfNeeded(db, gs.current_question_id, gs.current_game_set_question_id ?? null);
+
       await applyFastestFingerBonusIfNeeded(db, gs.current_question_id, gs.current_game_set_question_id ?? null);
 
       const { data: count, error: lbErr } = await db
@@ -577,6 +581,99 @@ async function selectNextGameSetQuestion(
     special_rule_type: row.special_rule_type ?? 'normal',
     special_rule_config: row.special_rule_config ?? {},
   };
+}
+
+// ---------------------------------------------------------------------------
+// no_mistake: insert synthetic "no-answer" penalty rows for players who did
+// not submit any answer before the question closed.
+//
+// Idempotency: the answers table has a UNIQUE(player_id, question_id)
+// constraint. We check which players already have an answer row before
+// inserting, so calling this twice is safe — the second call finds
+// no unanswered players and is a no-op.
+//
+// The score_non_negative constraint was dropped in migration
+// 20260507000002_special_rule_v1.sql, so negative scores are allowed.
+// ---------------------------------------------------------------------------
+async function applyNoMistakePenaltyIfNeeded(
+  db: ReturnType<typeof getSupabaseAdmin>,
+  questionId: string,
+  gameSetQuestionId: string | null,
+): Promise<void> {
+  if (!gameSetQuestionId) return;
+
+  const { data: gsq, error: gsqErr } = await db
+    .from('game_set_questions')
+    .select('special_rule_type, special_rule_config')
+    .eq('id', gameSetQuestionId)
+    .single<{ special_rule_type: SpecialRuleType; special_rule_config: Record<string, unknown> | null }>();
+
+  if (gsqErr || !gsq) {
+    console.warn('[no_mistake] gsq lookup failed:', gsqErr?.message);
+    return;
+  }
+  if (gsq.special_rule_type !== 'no_mistake') return;
+
+  const config = normalizeSpecialRuleConfig('no_mistake', gsq.special_rule_config ?? {});
+  if (!config.penalize_no_answer) return;
+
+  const penalty = config.wrong_penalty_points ?? -200; // negative number
+
+  // All players currently in the game
+  const { data: allPlayers, error: playersErr } = await db
+    .from('players')
+    .select('id');
+
+  if (playersErr) throw new Error(`no_mistake: players lookup failed: ${playersErr.message}`);
+  if (!allPlayers || allPlayers.length === 0) return;
+
+  // Players who already have an answer for this question (genuine or synthetic)
+  const { data: existing, error: existErr } = await db
+    .from('answers')
+    .select('player_id')
+    .eq('question_id', questionId);
+
+  if (existErr) throw new Error(`no_mistake: answers lookup failed: ${existErr.message}`);
+
+  const answeredIds = new Set((existing ?? []).map((a: { player_id: string }) => a.player_id));
+  const unanswered = allPlayers.filter((p: { id: string }) => !answeredIds.has(p.id));
+  if (unanswered.length === 0) return;
+
+  console.log(`[no_mistake] inserting penalty rows for ${unanswered.length} player(s), penalty=${penalty}`);
+
+  const now = new Date().toISOString();
+  const penaltyRows = unanswered.map((p: { id: string }) => ({
+    player_id: p.id,
+    question_id: questionId,
+    selected_x_ratio: 0,
+    selected_y_ratio: 0,
+    submitted_at: now,
+    time_remaining_ratio: 0,
+    is_correct: false,
+    score: penalty,
+    special_rule_type: 'no_mistake',
+    special_rule_config_snapshot: gsq.special_rule_config ?? {},
+    score_breakdown: [
+      { type: 'penalty', label: 'ไม่ตอบคำถาม (No Answer Penalty)', value: penalty, operation: String(penalty) },
+      { type: 'final',   label: 'Final Score', value: penalty },
+    ],
+    special_bonus_applied: false,
+  }));
+
+  const { error: insertErr } = await db
+    .from('answers')
+    .insert(penaltyRows);
+
+  if (insertErr) throw new Error(`no_mistake: penalty insert failed: ${insertErr.message}`);
+
+  // Update players.total_score for the newly inserted rows
+  for (const p of unanswered) {
+    const { error: scoreErr } = await db.rpc('increment_player_score', {
+      p_player_id: p.id,
+      p_amount: penalty,
+    });
+    if (scoreErr) console.warn('[no_mistake] increment_player_score failed:', scoreErr.message);
+  }
 }
 
 async function applyFastestFingerBonusIfNeeded(

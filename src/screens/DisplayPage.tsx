@@ -15,11 +15,12 @@
  * - All image/mask layers use object-fit:cover (same as player view).
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { QRCodeSVG } from 'qrcode.react';
 import type { CSSProperties } from 'react';
 import { supabase, GAME_STATE_ID, FUNCTIONS_URL, SUPABASE_ANON_KEY } from '../lib/supabase';
 import { resolveQuestionImageUrl, resolveRevealImageUrl } from '../lib/questionAssets';
 import { COUNTDOWN_DISPLAY_SECONDS, SERVER_TIME_RESYNC_INTERVAL_MS } from '../lib/constants';
-import type { GameState, Player, LeaderboardEntry, DisplayStatsResponse, DisplayEvent, DisplayEventType, DisplayTheme, SpecialRuleType, SpecialRuleConfig } from '../lib/types';
+import type { GameState, Player, Question, LeaderboardEntry, DisplayStatsResponse, DisplayEvent, DisplayEventType, DisplayTheme, SpecialRuleType, SpecialRuleConfig } from '../lib/types';
 import { DisplayAudioControls } from '../components/DisplayAudioControls';
 import { QuestionImage } from '../components/QuestionImage';
 import { AutoFitText } from '../components/AutoFitText';
@@ -29,22 +30,10 @@ import { getSpecialRulePresentation, normalizeSpecialRuleConfig } from '../lib/s
 
 // ── Local types ───────────────────────────────────────────────────────────────
 
-interface DisplayQuestion {
-  id: string;
-  text: string;
-  image_url: string;
-  reveal_image_url: string | null;
-  image_width: number | null;
-  image_height: number | null;
-  order_index: number;
-  time_limit_seconds: number;
-  max_score: number;
-  min_correct_score: number;
-  circle_radius_ratio: number;
-  play_order: number;
+type DisplayQuestion = Omit<Question, 'special_rule_type' | 'special_rule_config' | 'is_published' | 'created_at'> & {
   special_rule_type: SpecialRuleType;
   special_rule_config: SpecialRuleConfig;
-}
+};
 
 interface LeaderboardFxMeta {
   previousRank: number | null;
@@ -70,8 +59,6 @@ interface RealtimeStatus {
   answers: ChannelStatus;
   leaderboard: ChannelStatus;
 }
-
-let gameSetSpecialRuleTypeSupported: boolean | null = null;
 
 function toChannelStatus(supabaseStatus: string): ChannelStatus {
   switch (supabaseStatus) {
@@ -211,25 +198,46 @@ function useDisplayServerTime() {
   return useCallback(() => Date.now() + offset.current, []);
 }
 
-// ── QR code ───────────────────────────────────────────────────────────────────
+// ── QR code — rendered locally via qrcode.react (no external service) ─────────
 
 function QRCode({ url }: { url: string }) {
-  const [imgFailed, setImgFailed] = useState(false);
-  const encoded = encodeURIComponent(url);
-  const src = `https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=${encoded}&bgcolor=050810&color=F5C74A&margin=12&qzone=1`;
+  const [renderFailed, setRenderFailed] = useState(false);
 
-  return (
-    <div className="ds-qr-wrap">
-      {!imgFailed ? (
-        <img src={src} alt="QR Code" className="ds-qr-img-lg" onError={() => setImgFailed(true)} />
-      ) : (
+  if (renderFailed) {
+    return (
+      <div className="ds-qr-wrap">
         <div className="ds-qr-fallback">
           <div className="ds-label" style={{ marginBottom: 8 }}>สแกนหรือพิมพ์ URL</div>
           <div className="ds-join-url ds-join-url-lg">{url}</div>
         </div>
-      )}
-    </div>
-  );
+      </div>
+    );
+  }
+
+  try {
+    return (
+      <div className="ds-qr-wrap">
+        <QRCodeSVG
+          value={url}
+          size={280}
+          bgColor="#050810"
+          fgColor="#F5C74A"
+          level="M"
+          className="ds-qr-img-lg"
+          onError={() => setRenderFailed(true)}
+        />
+      </div>
+    );
+  } catch {
+    return (
+      <div className="ds-qr-wrap">
+        <div className="ds-qr-fallback">
+          <div className="ds-label" style={{ marginBottom: 8 }}>สแกนหรือพิมพ์ URL</div>
+          <div className="ds-join-url ds-join-url-lg">{url}</div>
+        </div>
+      </div>
+    );
+  }
 }
 
 // ── P0.5 — DisplayImageStage ─────────────────────────────────────────────────
@@ -1087,44 +1095,21 @@ export function DisplayPage() {
         if (gsqId) {
           const { data: gsqData } = await supabase
             .from('game_set_questions')
-            .select('play_order, time_limit_seconds, max_score, min_correct_score, circle_radius_ratio')
+            .select('play_order, time_limit_seconds, max_score, min_correct_score, circle_radius_ratio, special_rule_type, special_rule_config')
             .eq('id', gsqId)
-            .single() as { data: { play_order: number; time_limit_seconds: number; max_score: number; min_correct_score: number; circle_radius_ratio: number } | null };
+            .single();
           if (gsqData) {
-            dq = { ...dq, play_order: gsqData.play_order, time_limit_seconds: gsqData.time_limit_seconds,
-              max_score: gsqData.max_score, min_correct_score: gsqData.min_correct_score,
+            const ruleType = (gsqData.special_rule_type as SpecialRuleType | null) ?? 'normal';
+            dq = {
+              ...dq,
+              play_order: gsqData.play_order,
+              time_limit_seconds: gsqData.time_limit_seconds,
+              max_score: gsqData.max_score,
+              min_correct_score: gsqData.min_correct_score,
               circle_radius_ratio: gsqData.circle_radius_ratio,
-              special_rule_type: 'normal',
-              special_rule_config: {} };
-          }
-
-          if (gameSetSpecialRuleTypeSupported !== false) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const { data: srtData, error: srtErr } = await (supabase as any)
-              .from('game_set_questions')
-              .select('special_rule_type, special_rule_config')
-              .eq('id', gsqId)
-              .single() as {
-                data: { special_rule_type?: string; special_rule_config?: Record<string, unknown> | null } | null;
-                error: { message?: string } | null;
-              };
-
-            if (srtErr && (srtErr.message ?? '').includes('does not exist')) {
-              gameSetSpecialRuleTypeSupported = false;
-            } else if (!srtErr) {
-              gameSetSpecialRuleTypeSupported = true;
-            }
-
-            if (srtData?.special_rule_type) {
-              dq = {
-                ...dq,
-                special_rule_type: srtData.special_rule_type as SpecialRuleType,
-                special_rule_config: normalizeSpecialRuleConfig(
-                  srtData.special_rule_type as SpecialRuleType,
-                  srtData.special_rule_config ?? {},
-                ),
-              };
-            }
+              special_rule_type: ruleType,
+              special_rule_config: normalizeSpecialRuleConfig(ruleType, (gsqData.special_rule_config as SpecialRuleConfig | null) ?? {}),
+            };
           }
         }
 
@@ -1633,9 +1618,8 @@ function DsCountdown({
           <div className="ds-stage-card ds-stage-card-clue ds-clue-wrap ds-clue-enter">
             {specialPresentation && (
               <div className="ds-special-round-preview">
-                <div className="ds-special-round-preview-label">SPECIAL RULE</div>
-                <div className="ds-special-round-preview-title">{specialPresentation.label}</div>
-                <div className="ds-special-round-preview-copy">{specialPresentation.bigScreenMessage}</div>
+                  <div className="ds-special-round-preview-title">{specialPresentation.label}</div>
+                  <div className="ds-special-round-preview-copy">{specialPresentation.bigScreenMessage}</div>
               </div>
             )}
             {questionFetchError && !clueUrl ? (

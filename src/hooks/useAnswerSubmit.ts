@@ -35,7 +35,7 @@ export function useAnswerSubmit() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         clearPendingSubmission();
-        setSubmitError('Not authenticated. Please refresh and rejoin.');
+        setSubmitError('ยังไม่ได้ล็อกอิน — โปรด refresh และเข้าร่วมใหม่');
         return;
       }
 
@@ -58,22 +58,25 @@ export function useAnswerSubmit() {
 
       if (!res.ok) {
         const err = json as EdgeFunctionError;
+        clearPendingSubmission();
         switch (err.error) {
           case 'question_not_open':
-            clearPendingSubmission();
-            setSubmitError('Question is no longer open. Your answer was not recorded.');
+            setSubmitError('คำถามปิดแล้ว — คำตอบไม่ได้รับการบันทึก');
             break;
           case 'time_expired':
-            clearPendingSubmission();
-            setSubmitError('Time is up! Answer not recorded.');
+            setSubmitError('หมดเวลา! คำตอบไม่ได้รับการบันทึก');
             break;
           case 'wrong_question':
-            clearPendingSubmission();
-            setSubmitError('Game moved to the next question. Answer not recorded.');
+            setSubmitError('เกมข้ามไปข้อถัดไปแล้ว — คำตอบไม่ได้รับการบันทึก');
+            break;
+          case 'player_not_found':
+            setSubmitError('ไม่พบข้อมูลผู้เล่น — โปรด refresh และเข้าร่วมใหม่');
+            break;
+          case 'unauthorized':
+            setSubmitError('Session หมดอายุ — โปรด refresh และเข้าร่วมใหม่');
             break;
           default:
-            clearPendingSubmission();
-            setSubmitError('Could not submit. Please try again.');
+            setSubmitError('ส่งคำตอบไม่สำเร็จ — โปรดลองอีกครั้ง');
         }
         return;
       }
@@ -92,7 +95,7 @@ export function useAnswerSubmit() {
       triggerFeedbackFx('answerLocked');
     } catch {
       clearPendingSubmission();
-      setSubmitError('Network error. Please check your connection and try again.');
+      setSubmitError('เกิดข้อผิดพลาดเครือข่าย — ตรวจสอบสัญญาณและลองใหม่');
     } finally {
       submitLockRef.current = false;
       setSubmitting(false);

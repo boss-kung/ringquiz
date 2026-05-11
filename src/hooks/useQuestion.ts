@@ -2,16 +2,17 @@ import { useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useGameStore } from '../store/gameStore';
 import { PLAYER_ID_KEY } from '../lib/constants';
-import type { Question } from '../lib/types';
+import type { Question, SpecialRuleConfig, SpecialRuleType } from '../lib/types';
+import { normalizeSpecialRuleConfig } from '../lib/specialRules';
 
 type RuntimeQuestionRow = Omit<Question, 'play_order'>;
-let gameSetSpecialRuleSupported: boolean | null = null;
 
 /**
  * Fetches the current question whenever current_question_id changes.
  * If current_game_set_question_id is set, overlays the game-set snapshot
- * values (circle_radius_ratio, time_limit_seconds, max_score, min_correct_score)
- * so the player UI uses the correct runtime values rather than bank defaults.
+ * values (circle_radius_ratio, time_limit_seconds, max_score, min_correct_score,
+ * special_rule_type, special_rule_config) so the player UI uses the correct
+ * runtime values rather than bank defaults.
  * Clears question when game returns to waiting state.
  */
 export function useQuestion() {
@@ -89,22 +90,20 @@ export function useQuestion() {
       };
 
       // Overlay game-set snapshot values when a game-set question is active.
-      // This ensures circle_radius_ratio and timing shown to the player match
-      // what the server will use for correctness evaluation.
+      // Fetches all snapshot fields (including special rule) in one query.
       if (gsqId) {
-        // Two-step fetch: core fields first (always present), then special_rule fields
-        // separately so a missing column (migration pending) never blocks the question load.
         const { data: gsqData, error: gsqErr } = await supabase
           .from('game_set_questions')
-          .select('play_order, time_limit_seconds, max_score, min_correct_score, circle_radius_ratio')
+          .select('play_order, time_limit_seconds, max_score, min_correct_score, circle_radius_ratio, special_rule_type, special_rule_config')
           .eq('id', gsqId)
-          .single<Pick<Question, 'play_order' | 'time_limit_seconds' | 'max_score' | 'min_correct_score' | 'circle_radius_ratio'>>();
+          .single();
 
         if (!cancelled && gsqErr) {
           console.warn('[useQuestion] game_set overlay fetch:', gsqErr.message);
         }
 
         if (!cancelled && gsqData) {
+          const ruleType = (gsqData.special_rule_type as SpecialRuleType | null) ?? 'normal';
           merged = {
             ...merged,
             play_order: gsqData.play_order,
@@ -112,36 +111,9 @@ export function useQuestion() {
             max_score: gsqData.max_score,
             min_correct_score: gsqData.min_correct_score,
             circle_radius_ratio: gsqData.circle_radius_ratio,
-            special_rule_type: 'normal',
-            special_rule_config: {},
+            special_rule_type: ruleType,
+            special_rule_config: normalizeSpecialRuleConfig(ruleType, (gsqData.special_rule_config as SpecialRuleConfig | null) ?? {}),
           };
-
-          // Fetch special-rule fields separately — columns may not exist until migration is applied.
-          if (gameSetSpecialRuleSupported !== false) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const { data: srData, error: srErr } = await (supabase as any)
-              .from('game_set_questions')
-              .select('special_rule_type, special_rule_config')
-              .eq('id', gsqId)
-              .single() as {
-                data: { special_rule_type?: string; special_rule_config?: Record<string, unknown> | null } | null;
-                error: { message?: string } | null;
-              };
-
-            if (srErr && (srErr.message ?? '').includes('does not exist')) {
-              gameSetSpecialRuleSupported = false;
-            } else if (!srErr) {
-              gameSetSpecialRuleSupported = true;
-            }
-
-            if (!cancelled && srData?.special_rule_type) {
-              merged = {
-                ...merged,
-                special_rule_type: (srData.special_rule_type as import('../lib/types').SpecialRuleType),
-                special_rule_config: (srData.special_rule_config as import('../lib/types').SpecialRuleConfig | null) ?? {},
-              };
-            }
-          }
         }
       }
 
