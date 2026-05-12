@@ -1,4 +1,5 @@
-export const AVATAR_COLOR_KEY = 'quiz_avatar_color_index';
+export const AVATAR_COLOR_KEY  = 'quiz_avatar_color_index';
+export const AVATAR_EMOJI_KEY  = 'quiz_avatar_emoji';
 
 export const AVATAR_COLORS: string[] = [
   'linear-gradient(135deg,#6366F1,#818CF8)',
@@ -27,4 +28,8 @@ export function readStoredColorIndex(): number {
   } catch {
     return 0;
   }
+}
+
+export function readStoredEmoji(): string {
+  try { return localStorage.getItem(AVATAR_EMOJI_KEY) ?? ''; } catch { return ''; }
 }

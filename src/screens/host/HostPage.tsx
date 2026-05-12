@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase, FUNCTIONS_URL, SUPABASE_ANON_KEY } from '../../lib/supabase';
-import { STATS_POLL_INTERVAL_MS, COUNTDOWN_DISPLAY_SECONDS } from '../../lib/constants';
+import { STATS_POLL_INTERVAL_MS } from '../../lib/constants';
 import { useGameStore } from '../../store/gameStore';
 import { useGetServerTime } from '../../hooks/useServerTime';
 import { AdminQuestionManager } from './AdminQuestionManager';
@@ -105,8 +105,11 @@ function HostDashboard({ secret, onLogout }: { secret: string; onLogout: () => v
   const [statsError,    setStatsError]    = useState('');
 
   const [resetConfirm,       setResetConfirm]       = useState<ConfirmAction | null>(null);
-  const [autoAdvance,        setAutoAdvance]        = useState(false);
+  const [autoAdvance,          setAutoAdvance]          = useState(false);
   const [autoAdvanceCountdown, setAutoAdvanceCountdown] = useState<number | null>(null);
+  const [autoAdvanceLabel,     setAutoAdvanceLabel]     = useState('');
+  const [closeDelay,           setCloseDelay]           = useState(0);   // seconds after all-answered/timeout
+  const [revealDelay,          setRevealDelay]          = useState(3);   // seconds after question_closed
   const [rtStatus,           setRtStatus]           = useState<RtStatus>('connecting');
   const [exportBusy,         setExportBusy]         = useState(false);
   const [emergencyOpen,      setEmergencyOpen]      = useState(false);
@@ -117,9 +120,11 @@ function HostDashboard({ secret, onLogout }: { secret: string; onLogout: () => v
   const cancelButtonRef   = useRef<HTMLButtonElement | null>(null);
   const confirmButtonRef  = useRef<HTMLButtonElement | null>(null);
   const lastFocusedRef    = useRef<HTMLElement | null>(null);
-  const autoCloseCalledRef = useRef(false);
-  const autoOpenCalledRef  = useRef(false);
-  const actionPendingRef   = useRef(false);
+  const autoCloseCalledRef    = useRef(false);
+  const autoCloseTimerRef     = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoRevealCalledRef   = useRef(false);
+  const autoRevealTimerRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const actionPendingRef      = useRef(false);
 
   // Declared early so effects below can reference without TDZ
   const status = gameState?.status ?? 'loading';
@@ -213,45 +218,76 @@ function HostDashboard({ secret, onLogout }: { secret: string; onLogout: () => v
     return () => clearInterval(id);
   }, [stats?.question_ends_at, getServerTime]);
 
-  // Auto-advance: auto-open after countdown
+  // Auto-close: when timer expires OR all players answered (with optional closeDelay)
   useEffect(() => {
-    if (!autoAdvance || status !== 'countdown') { autoOpenCalledRef.current = false; return; }
-    if (autoOpenCalledRef.current) return;
-    const updatedAt = gameState?.updated_at;
-    if (!updatedAt) return;
-    const openAt = new Date(updatedAt).getTime() + (COUNTDOWN_DISPLAY_SECONDS + 1) * 1000;
-    const delay  = Math.max(0, openAt - getServerTime());
-    const id = setTimeout(() => {
-      if (!autoOpenCalledRef.current && isActionEnabled('open_question')) {
-        autoOpenCalledRef.current = true;
-        void doAction('open_question');
-      }
-    }, delay);
-    return () => clearTimeout(id);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoAdvance, status, gameState?.updated_at, getServerTime]);
+    if (!autoAdvance || status !== 'question_open') {
+      autoCloseCalledRef.current = false;
+      if (autoCloseTimerRef.current) { clearTimeout(autoCloseTimerRef.current); autoCloseTimerRef.current = null; }
+      return;
+    }
+    const pc = stats?.player_count ?? 0;
+    const sc = stats?.submitted_count ?? 0;
+    const allAnswered = pc > 0 && sc >= pc;
+    const timerExpired = timeLeft === 0;
+    if ((!timerExpired && !allAnswered) || autoCloseCalledRef.current || autoCloseTimerRef.current) return;
 
-  // Auto-advance: auto-close when timer expires
-  useEffect(() => {
-    if (!autoAdvance || status !== 'question_open') { autoCloseCalledRef.current = false; return; }
-    if (timeLeft !== 0 || autoCloseCalledRef.current) return;
-    autoCloseCalledRef.current = true;
-    void doAction('close_question');
+    if (closeDelay <= 0) {
+      autoCloseCalledRef.current = true;
+      void doAction('close_question');
+    } else {
+      autoCloseTimerRef.current = setTimeout(() => {
+        autoCloseTimerRef.current = null;
+        if (!autoCloseCalledRef.current) {
+          autoCloseCalledRef.current = true;
+          void doAction('close_question');
+        }
+      }, closeDelay * 1000);
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoAdvance, status, timeLeft]);
+  }, [autoAdvance, status, timeLeft, stats?.player_count, stats?.submitted_count, closeDelay]);
+
+  // Auto-reveal: after question_closed, wait revealDelay then show_reveal
+  useEffect(() => {
+    if (!autoAdvance || status !== 'question_closed') {
+      autoRevealCalledRef.current = false;
+      if (autoRevealTimerRef.current) { clearTimeout(autoRevealTimerRef.current); autoRevealTimerRef.current = null; }
+      return;
+    }
+    if (autoRevealCalledRef.current || autoRevealTimerRef.current) return;
+
+    autoRevealTimerRef.current = setTimeout(() => {
+      autoRevealTimerRef.current = null;
+      if (!autoRevealCalledRef.current) {
+        autoRevealCalledRef.current = true;
+        void doAction('show_reveal');
+      }
+    }, Math.max(0, revealDelay) * 1000);
+
+    return () => {
+      if (autoRevealTimerRef.current) { clearTimeout(autoRevealTimerRef.current); autoRevealTimerRef.current = null; }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoAdvance, status, gameState?.updated_at, revealDelay]);
 
   // Auto-advance countdown display
   useEffect(() => {
-    if (!autoAdvance) { setAutoAdvanceCountdown(null); return; }
-    if (status === 'countdown' && gameState?.updated_at) {
-      const openAt = new Date(gameState.updated_at).getTime() + (COUNTDOWN_DISPLAY_SECONDS + 1) * 1000;
-      const tick = () => setAutoAdvanceCountdown(Math.max(0, Math.ceil((openAt - getServerTime()) / 1000)));
+    if (!autoAdvance) { setAutoAdvanceCountdown(null); setAutoAdvanceLabel(''); return; }
+    if (status === 'question_closed' && gameState?.updated_at) {
+      const revealAt = new Date(gameState.updated_at).getTime() + Math.max(0, revealDelay) * 1000;
+      const tick = () => setAutoAdvanceCountdown(Math.max(0, Math.ceil((revealAt - getServerTime()) / 1000)));
       tick();
+      setAutoAdvanceLabel('เฉลยใน');
       const id = setInterval(tick, 250);
       return () => clearInterval(id);
     }
-    setAutoAdvanceCountdown(status === 'question_open' ? timeLeft : null);
-  }, [autoAdvance, status, gameState?.updated_at, timeLeft, getServerTime]);
+    if (status === 'question_open') {
+      setAutoAdvanceLabel('ปิดรับใน');
+      setAutoAdvanceCountdown(timeLeft);
+    } else {
+      setAutoAdvanceCountdown(null);
+      setAutoAdvanceLabel('');
+    }
+  }, [autoAdvance, status, gameState?.updated_at, timeLeft, revealDelay, getServerTime]);
 
   // Clear success message after 3 s
   useEffect(() => {
@@ -448,12 +484,17 @@ function HostDashboard({ secret, onLogout }: { secret: string; onLogout: () => v
             primaryDisabled={primaryDisabled}
             autoAdvance={autoAdvance}
             autoAdvanceCountdown={autoAdvanceCountdown}
+            autoAdvanceLabel={autoAdvanceLabel}
+            closeDelay={closeDelay}
+            revealDelay={revealDelay}
             emergencyOpen={emergencyOpen}
             copiedLink={copiedLink}
             exportBusy={exportBusy}
             isActionEnabled={isActionEnabled}
             onPrimaryAction={() => step.primaryAction && callAction(step.primaryAction)}
             onAutoAdvanceToggle={() => setAutoAdvance((v) => !v)}
+            onCloseDelayChange={setCloseDelay}
+            onRevealDelayChange={setRevealDelay}
             onCallAction={callAction}
             onFxAction={doFxAction}
             onExport={handleExportResults}
@@ -528,12 +569,17 @@ interface GameConsoleProps {
   primaryDisabled: boolean;
   autoAdvance: boolean;
   autoAdvanceCountdown: number | null;
+  autoAdvanceLabel: string;
+  closeDelay: number;
+  revealDelay: number;
   emergencyOpen: boolean;
   copiedLink: 'join' | 'display' | null;
   exportBusy: boolean;
   isActionEnabled: (action: HostActionName) => boolean;
   onPrimaryAction: () => void;
   onAutoAdvanceToggle: () => void;
+  onCloseDelayChange: (v: number) => void;
+  onRevealDelayChange: (v: number) => void;
   onCallAction: (action: HostActionName) => void;
   onFxAction: (action: HostActionName, payload?: Record<string, unknown>) => void;
   onExport: () => void;
@@ -547,8 +593,11 @@ function GameConsole({
   question, gameState,
   timeLeft, submittedRatio, submittedCount, playerCount, specialRuleLabel,
   actionLoading, fxLoading, actionError, actionSuccess,
-  primaryDisabled, autoAdvance, autoAdvanceCountdown, emergencyOpen, copiedLink, exportBusy,
+  primaryDisabled, autoAdvance, autoAdvanceCountdown, autoAdvanceLabel,
+  closeDelay, revealDelay,
+  emergencyOpen, copiedLink, exportBusy,
   isActionEnabled, onPrimaryAction, onAutoAdvanceToggle,
+  onCloseDelayChange, onRevealDelayChange,
   onCallAction, onFxAction, onExport, onCopyLink, onEmergencyToggle, onSetTab,
 }: GameConsoleProps) {
   const anyPending = actionLoading !== null;
@@ -652,27 +701,52 @@ function GameConsole({
             )}
 
             {/* Auto-advance toggle */}
-            <div style={{ marginTop:14, paddingTop:12, borderTop:'1px solid rgba(255,255,255,.06)', display:'flex', alignItems:'center', justifyContent:'space-between', gap:8 }}>
-              <div>
-                <div style={{ fontSize:11, fontWeight:700, color: autoAdvance ? 'var(--emerald)' : 'var(--text-3)' }}>
-                  {autoAdvance ? '⚡ ทำงานอัตโนมัติ' : 'ทำงานอัตโนมัติ'}
-                </div>
-                {autoAdvance && (
-                  <div style={{ fontSize:10, color:'var(--text-3)', marginTop:2 }}>
-                    {autoAdvanceCountdown !== null
-                      ? (status === 'countdown'
-                          ? `เปิดรับคำตอบใน ${autoAdvanceCountdown}s`
-                          : `ปิดรับคำตอบใน ${autoAdvanceCountdown}s`)
-                      : 'รอสถานะถัดไป'}
+            <div style={{ marginTop:14, paddingTop:12, borderTop:'1px solid rgba(255,255,255,.06)' }}>
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:8, marginBottom: autoAdvance ? 10 : 0 }}>
+                <div>
+                  <div style={{ fontSize:11, fontWeight:700, color: autoAdvance ? 'var(--emerald)' : 'var(--text-3)' }}>
+                    {autoAdvance ? '⚡ Auto (ปิด+เฉลยอัตโนมัติ)' : 'ทำงานอัตโนมัติ'}
                   </div>
-                )}
+                  {autoAdvance && autoAdvanceCountdown !== null && (
+                    <div style={{ fontSize:10, color:'var(--text-3)', marginTop:2 }}>
+                      {autoAdvanceLabel} {autoAdvanceCountdown}s
+                    </div>
+                  )}
+                  {autoAdvance && autoAdvanceCountdown === null && (
+                    <div style={{ fontSize:10, color:'var(--text-3)', marginTop:2 }}>รอสถานะถัดไป</div>
+                  )}
+                </div>
+                <button
+                  onClick={onAutoAdvanceToggle}
+                  style={{ fontSize:10, fontWeight:700, padding:'5px 12px', borderRadius:999, border:'1px solid', cursor:'pointer', fontFamily:'var(--font-sans)', background: autoAdvance ? 'rgba(52,211,153,.12)' : 'rgba(255,255,255,.05)', borderColor: autoAdvance ? 'rgba(52,211,153,.35)' : 'rgba(255,255,255,.12)', color: autoAdvance ? 'var(--emerald)' : 'var(--text-3)', transition:'all .15s', flexShrink:0 }}
+                >
+                  {autoAdvance ? 'เปิดอยู่' : 'ปิดอยู่'}
+                </button>
               </div>
-              <button
-                onClick={onAutoAdvanceToggle}
-                style={{ fontSize:10, fontWeight:700, padding:'5px 12px', borderRadius:999, border:'1px solid', cursor:'pointer', fontFamily:'var(--font-sans)', background: autoAdvance ? 'rgba(52,211,153,.12)' : 'rgba(255,255,255,.05)', borderColor: autoAdvance ? 'rgba(52,211,153,.35)' : 'rgba(255,255,255,.12)', color: autoAdvance ? 'var(--emerald)' : 'var(--text-3)', transition:'all .15s', flexShrink:0 }}
-              >
-                {autoAdvance ? 'เปิดอยู่' : 'ปิดอยู่'}
-              </button>
+              {autoAdvance && (
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:6 }}>
+                  <div style={{ background:'rgba(255,255,255,.04)', borderRadius:8, padding:'7px 10px' }}>
+                    <div style={{ fontSize:10, color:'var(--text-3)', marginBottom:4 }}>หน่วงก่อนปิด (s)</div>
+                    <input
+                      type="number" min={0} max={30} step={1}
+                      value={closeDelay}
+                      onChange={(e) => onCloseDelayChange(Math.max(0, Math.min(30, parseInt(e.target.value) || 0)))}
+                      className="gr-input"
+                      style={{ padding:'4px 8px', fontSize:13, fontWeight:700, textAlign:'center', height:'auto' }}
+                    />
+                  </div>
+                  <div style={{ background:'rgba(255,255,255,.04)', borderRadius:8, padding:'7px 10px' }}>
+                    <div style={{ fontSize:10, color:'var(--text-3)', marginBottom:4 }}>หน่วงก่อนเฉลย (s)</div>
+                    <input
+                      type="number" min={0} max={60} step={1}
+                      value={revealDelay}
+                      onChange={(e) => onRevealDelayChange(Math.max(0, Math.min(60, parseInt(e.target.value) || 0)))}
+                      className="gr-input"
+                      style={{ padding:'4px 8px', fontSize:13, fontWeight:700, textAlign:'center', height:'auto' }}
+                    />
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 

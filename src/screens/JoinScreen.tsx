@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { usePlayerSession } from '../hooks/usePlayerSession';
 import { DISPLAY_NAME_MAX_LENGTH, DISPLAY_NAME_MIN_LENGTH } from '../lib/constants';
 import { unlockFeedbackAudio } from '../lib/feedbackFx';
-import { AVATAR_COLORS, AVATAR_COLOR_KEY, getAvatarGrad, getInitials } from '../lib/avatarColor';
+import { AVATAR_COLORS, AVATAR_COLOR_KEY, AVATAR_EMOJI_KEY, getAvatarGrad, getInitials, readStoredEmoji } from '../lib/avatarColor';
 
 function RingMark({ size = 96 }: { size?: number }) {
   const r1 = size * 0.45, r2 = size * 0.38, r3 = size * 0.31;
@@ -28,6 +28,9 @@ export function JoinScreen() {
     const parsed = stored !== null ? parseInt(stored, 10) : NaN;
     return Number.isFinite(parsed) && parsed >= 0 && parsed < AVATAR_COLORS.length ? parsed : 0;
   });
+  const [emoji, setEmoji] = useState<string>(() => readStoredEmoji());
+  const [emojiInput, setEmojiInput] = useState('');
+  const emojiInputRef = useRef<HTMLInputElement>(null);
   const inputId = 'join-display-name';
 
   useEffect(() => { setName(savedName); }, [savedName]);
@@ -35,6 +38,25 @@ export function JoinScreen() {
   const handleColorSelect = (idx: number) => {
     setColorIdx(idx);
     localStorage.setItem(AVATAR_COLOR_KEY, String(idx));
+  };
+
+  const handleEmojiChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    if (!val) return;
+    const seg = new Intl.Segmenter();
+    const [first] = [...seg.segment(val)];
+    if (first?.segment.trim()) {
+      const g = first.segment;
+      setEmoji(g);
+      localStorage.setItem(AVATAR_EMOJI_KEY, g);
+    }
+    setEmojiInput('');
+    emojiInputRef.current?.blur();
+  };
+
+  const handleEmojiClear = () => {
+    setEmoji('');
+    localStorage.removeItem(AVATAR_EMOJI_KEY);
   };
 
   const canSubmit = name.trim().length >= DISPLAY_NAME_MIN_LENGTH && !loading;
@@ -122,20 +144,24 @@ export function JoinScreen() {
             className="gr-input"
           />
 
-          {/* Avatar preview + color picker */}
+          {/* Avatar preview + color picker + emoji */}
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '8px 0' }}>
+            {/* Avatar circle */}
             <div
               style={{
-                width: 52, height: 52, borderRadius: '50%',
+                width: 60, height: 60, borderRadius: '50%',
                 background: getAvatarGrad(colorIdx),
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 18, fontWeight: 900, color: 'white',
+                fontSize: emoji ? 28 : 18, fontWeight: 900, color: 'white',
                 boxShadow: '0 0 18px rgba(0,0,0,.35)',
-                transition: 'background .2s ease',
+                transition: 'background .2s ease, font-size .15s',
+                userSelect: 'none',
               }}
             >
-              {getInitials(name) || '?'}
+              {emoji || getInitials(name) || '?'}
             </div>
+
+            {/* Color swatches */}
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
               {AVATAR_COLORS.map((grad, idx) => (
                 <button
@@ -155,6 +181,42 @@ export function JoinScreen() {
                   }}
                 />
               ))}
+            </div>
+
+            {/* Emoji picker row */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', justifyContent: 'center' }}>
+              <div style={{ position: 'relative' }}>
+                <input
+                  ref={emojiInputRef}
+                  type="text"
+                  inputMode="text"
+                  value={emojiInput}
+                  onChange={handleEmojiChange}
+                  placeholder={emoji ? emoji : '😊'}
+                  aria-label="เลือก emoji"
+                  style={{
+                    width: 52, height: 44, borderRadius: 12, border: '1.5px solid rgba(255,255,255,.15)',
+                    background: 'rgba(255,255,255,.06)', color: 'var(--text)',
+                    fontSize: 24, textAlign: 'center', fontFamily: 'var(--font-sans)',
+                    cursor: 'pointer', outline: 'none', caretColor: 'transparent',
+                    transition: 'border-color .15s',
+                  }}
+                  onFocus={(e) => { e.currentTarget.style.borderColor = 'rgba(245,199,74,.5)'; }}
+                  onBlur={(e) => { e.currentTarget.style.borderColor = 'rgba(255,255,255,.15)'; }}
+                />
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text-3)', lineHeight: 1.4, maxWidth: 160 }}>
+                แตะช่องแล้วเปลี่ยน keyboard เป็น emoji
+                {emoji && (
+                  <button
+                    type="button"
+                    onClick={handleEmojiClear}
+                    style={{ display: 'block', marginTop: 3, fontSize: 11, color: 'var(--rose)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--font-sans)', padding: 0 }}
+                  >
+                    ลบ emoji
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 
