@@ -23,6 +23,7 @@ import { COUNTDOWN_DISPLAY_SECONDS, SERVER_TIME_RESYNC_INTERVAL_MS } from '../li
 import type { GameState, Player, Question, LeaderboardEntry, DisplayStatsResponse, DisplayEvent, DisplayEventType, DisplayTheme, SpecialRuleType, SpecialRuleConfig } from '../lib/types';
 import { DisplayAudioControls } from '../components/DisplayAudioControls';
 import { QuestionImage } from '../components/QuestionImage';
+import type { HeatmapPoint } from '../components/QuestionImage';
 import { AutoFitText } from '../components/AutoFitText';
 import { useImagePreloadStatus, usePrimeImages } from '../hooks/useImagePreload';
 import { useDisplayAudioController } from '../lib/displayAudio';
@@ -253,6 +254,7 @@ function DisplayImageStage({
   revealReady = true,
   fullWidth = false,
   variant = 'question',
+  heatmapPoints,
 }: {
   imageUrl: string | null;
   maskUrl?: string | null;
@@ -261,6 +263,7 @@ function DisplayImageStage({
   revealReady?: boolean;
   fullWidth?: boolean;
   variant?: 'clue' | 'question' | 'reveal';
+  heatmapPoints?: HeatmapPoint[];
 }) {
   const imageStatus = useImagePreloadStatus(imageUrl, 6500);
   const revealStatus = useImagePreloadStatus(revealImageUrl ?? null, 6500);
@@ -272,6 +275,9 @@ function DisplayImageStage({
 
   const displayImageUrl = canShowReveal ? (revealImageUrl ?? imageUrl) : imageUrl;
   const shellClassName = `ds-display-shell ${shellVariant}${fullWidth ? ' ds-display-shell-full' : ''}${canShowReveal ? ' quiz-image-shell--reveal-active' : ''}`;
+
+  // Only show mask when reveal is active — this also ensures the scratch animation fires at the right time
+  const activeMaskUrl = canShowReveal ? (maskUrl ?? undefined) : undefined;
 
   if (imageUrl && imageStatus === 'loading' && !canShowReveal) {
     return (
@@ -303,9 +309,10 @@ function DisplayImageStage({
         circle={null}
         onCircleChange={() => {}}
         locked
-        maskOverlayUrl={maskUrl ?? undefined}
-        maskOverlayClassName="reveal-mask-pulse"
+        maskOverlayUrl={activeMaskUrl}
+        maskOverlayClassName="reveal-mask-scratch"
         shellClassName={shellClassName}
+        heatmapPoints={heatmapPoints}
       />
     </div>
   );
@@ -1793,7 +1800,11 @@ function DsQuestion({
             </div>
 
             <div className="ds-stage-card ds-stage-card-visual ds-q-right">
-              <DisplayImageStage imageUrl={imgUrl} variant="question" />
+              <DisplayImageStage
+                imageUrl={imgUrl}
+                variant="question"
+                heatmapPoints={stats?.answer_positions?.map((p) => ({ xRatio: p.x, yRatio: p.y, correct: p.c === 1 }))}
+              />
             </div>
           </div>
         </div>
@@ -1975,6 +1986,7 @@ function DsReveal({
               revealReady={revealImageReady}
               fullWidth
               variant="reveal"
+              heatmapPoints={showReveal ? stats?.answer_positions?.map((p) => ({ xRatio: p.x, yRatio: p.y, correct: p.c === 1 })) : undefined}
             />
           </div>
         </div>

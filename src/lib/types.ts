@@ -267,6 +267,7 @@ export interface DisplayStatsResponse {
   current_question_id: string | null;
   active_game_set_id: string | null;
   fastest_finger_winners?: FastestFingerWinner[];
+  answer_positions?: Array<{ x: number; y: number; c: number }>; // heatmap: c=1 correct
 }
 
 export interface EdgeFunctionError {

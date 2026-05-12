@@ -2,6 +2,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react';
 import type { CirclePosition } from '../lib/types';
 
+export interface HeatmapPoint {
+  xRatio: number;
+  yRatio: number;
+  correct: boolean;
+}
+
 interface Props {
   imageUrl: string | null;
   circleRadiusRatio: number;
@@ -15,6 +21,8 @@ interface Props {
   shellClassName?: string;
   /** Extra class(es) to apply to the answer circle div */
   circleClassName?: string;
+  /** Answer heatmap dots rendered on canvas over the image */
+  heatmapPoints?: HeatmapPoint[];
 }
 
 // ── Coordinate helpers ───────────────────────────────────────────────────────
@@ -147,8 +155,10 @@ export function QuestionImage({
   maskOverlayClassName,
   shellClassName = '',
   circleClassName = '',
+  heatmapPoints,
 }: Props) {
   const imgRef = useRef<HTMLImageElement>(null);
+  const heatmapCanvasRef = useRef<HTMLCanvasElement>(null);
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const [stableNaturalSize, setStableNaturalSize] = useState({ width: 0, height: 0 });
   const [loadFailed, setLoadFailed] = useState(false);
@@ -226,6 +236,49 @@ export function QuestionImage({
     const y = Math.max(cr.offsetY, Math.min(cr.offsetY + cr.renderedHeight, clientY - rect.top));
     return { x, y };
   }, []);
+
+  // Heatmap canvas rendering
+  useEffect(() => {
+    const canvas = heatmapCanvasRef.current;
+    if (!canvas || !heatmapPoints || heatmapPoints.length === 0) {
+      if (canvas) {
+        const ctx = canvas.getContext('2d');
+        ctx?.clearRect(0, 0, canvas.width, canvas.height);
+      }
+      return;
+    }
+
+    const nw = stableNaturalSize.width || (imgRef.current?.naturalWidth ?? 0);
+    const nh = stableNaturalSize.height || (imgRef.current?.naturalHeight ?? 0);
+    const cr = getContainedImageRect(containerSize.width, containerSize.height, nw, nh);
+    if (cr.renderedWidth === 0 || cr.renderedHeight === 0) return;
+
+    canvas.width = containerSize.width;
+    canvas.height = containerSize.height;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    const radius = Math.max(10, cr.renderedWidth * 0.038);
+
+    for (const pt of heatmapPoints) {
+      const cx = cr.offsetX + pt.xRatio * cr.renderedWidth;
+      const cy = cr.offsetY + pt.yRatio * cr.renderedHeight;
+      const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
+      if (pt.correct) {
+        grad.addColorStop(0, 'rgba(52,211,153,.42)');
+        grad.addColorStop(1, 'rgba(52,211,153,0)');
+      } else {
+        grad.addColorStop(0, 'rgba(251,113,133,.36)');
+        grad.addColorStop(1, 'rgba(251,113,133,0)');
+      }
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }, [heatmapPoints, containerSize, stableNaturalSize]);
 
   const addTrailPoint = useCallback((clientX: number, clientY: number) => {
     if (reducedMotion || locked) return;
@@ -361,6 +414,7 @@ export function QuestionImage({
 
         {canRenderImage && maskOverlayUrl && (
           <img
+            key={maskOverlayUrl}
             src={maskOverlayUrl}
             alt=""
             aria-hidden
@@ -373,6 +427,20 @@ export function QuestionImage({
               objectFit: 'contain',
               pointerEvents: 'none',
               opacity: 1,
+            }}
+          />
+        )}
+
+        {canRenderImage && heatmapPoints && heatmapPoints.length > 0 && (
+          <canvas
+            ref={heatmapCanvasRef}
+            aria-hidden
+            style={{
+              position: 'absolute',
+              inset: 0,
+              width: '100%',
+              height: '100%',
+              pointerEvents: 'none',
             }}
           />
         )}

@@ -16,6 +16,7 @@ interface DisplayStatsResponse {
   current_question_id: string | null;
   active_game_set_id: string | null;
   fastest_finger_winners: FastestFingerWinner[];
+  answer_positions: Array<{ x: number; y: number; c: number }>; // c=1 correct, c=0 wrong
 }
 
 Deno.serve(async (req: Request): Promise<Response> => {
@@ -60,6 +61,23 @@ Deno.serve(async (req: Request): Promise<Response> => {
     const accuracy = submittedCount > 0
       ? Math.round((correctCount / submittedCount) * 1000) / 10   // one decimal place
       : 0;
+
+    // Fetch answer positions for heatmap (aggregate — not player-identifiable)
+    let answerPositions: Array<{ x: number; y: number; c: number }> = [];
+    if (gs.current_question_id) {
+      const { data: posRows } = await db
+        .from('answers')
+        .select('selected_x_ratio, selected_y_ratio, is_correct')
+        .eq('question_id', gs.current_question_id)
+        .limit(300);
+      if (posRows) {
+        answerPositions = posRows.map((r) => ({
+          x: r.selected_x_ratio as number,
+          y: r.selected_y_ratio as number,
+          c: r.is_correct ? 1 : 0,
+        }));
+      }
+    }
 
     // Current play position and total in the game set
     let questionIndex: number | null = null;
@@ -143,6 +161,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       current_question_id: gs.current_question_id,
       active_game_set_id: gs.active_game_set_id,
       fastest_finger_winners: fastestFingerWinners,
+      answer_positions: answerPositions,
     };
 
     return Response.json(body, { headers: corsHeaders });

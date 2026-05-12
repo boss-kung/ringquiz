@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useGameStore } from '../store/gameStore';
 import { COUNTDOWN_DISPLAY_SECONDS } from '../lib/constants';
 import { useGetServerTime } from '../hooks/useServerTime';
 import { useImagePreloadStatus, usePrimeImages } from '../hooks/useImagePreload';
 import { resolveQuestionImageUrl, resolveRevealImageUrl } from '../lib/questionAssets';
 import { getSpecialRulePresentation, hasSpecialRule } from '../lib/specialRules';
+import { triggerFeedbackFx } from '../lib/feedbackFx';
 
 export function CountdownScreen() {
   const question = useGameStore((s) => s.question);
@@ -22,6 +23,16 @@ export function CountdownScreen() {
   const countdownStartedAt = gameState?.updated_at ?? null;
   const cluePhase = showClue;
   const displayOrder = question?.play_order ?? question?.order_index ?? gameState?.current_question_index ?? null;
+  const countdownFxKeyRef = useRef<string | null>(null);
+
+  // Fire haptic + tone once per countdown phase entry
+  useEffect(() => {
+    if (!countdownStartedAt) return;
+    const key = countdownStartedAt;
+    if (countdownFxKeyRef.current === key) return;
+    countdownFxKeyRef.current = key;
+    triggerFeedbackFx('countdownStart');
+  }, [countdownStartedAt]);
 
   useEffect(() => {
     setShowClue(false);

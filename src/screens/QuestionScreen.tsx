@@ -31,6 +31,7 @@ export function QuestionScreen() {
   // Track last whole-second bucket for timerTickUrgent haptic (one per second, not per frame)
   const lastUrgentBucketRef = useRef<number | null>(null);
   const lastSpecialRoundFxKeyRef = useRef<string | null>(null);
+  const answerOpenFxKeyRef = useRef<string | null>(null);
 
   const endsAt = gameState?.question_ends_at ?? null;
   const displayOrder = question?.play_order ?? question?.order_index ?? gameState?.current_question_index ?? null;
@@ -112,6 +113,15 @@ export function QuestionScreen() {
   useEffect(() => {
     latestCirclePositionRef.current = circlePosition;
   }, [circlePosition]);
+
+  // Fire answerOpen haptic once per question open phase
+  useEffect(() => {
+    if (!question?.id || gameState?.status !== 'question_open') return;
+    const key = `${question.id}:open`;
+    if (answerOpenFxKeyRef.current === key) return;
+    answerOpenFxKeyRef.current = key;
+    triggerFeedbackFx('answerOpen');
+  }, [question?.id, gameState?.status]);
 
   useEffect(() => {
     if (!question?.id || gameState?.status !== 'question_open') return;

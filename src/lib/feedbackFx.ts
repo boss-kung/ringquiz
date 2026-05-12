@@ -42,6 +42,8 @@ const vibratePatterns: Partial<Record<FeedbackFxEventName, number | number[]>> =
 
 const audioProfiles: Partial<Record<FeedbackFxEventName, { frequency: number; durationMs: number; type?: OscillatorType }>> = {
   joinSuccess: { frequency: 660, durationMs: 90, type: 'sine' },
+  countdownStart: { frequency: 520, durationMs: 130, type: 'triangle' },
+  answerOpen: { frequency: 740, durationMs: 150, type: 'sine' },
   specialRoundDouble: { frequency: 520, durationMs: 160, type: 'triangle' },
   specialRoundSpeed: { frequency: 960, durationMs: 120, type: 'square' },
   specialRoundMystery: { frequency: 300, durationMs: 180, type: 'sine' },
