@@ -17,7 +17,7 @@ export function usePlayerSession() {
   const savedName = localStorage.getItem(DISPLAY_NAME_KEY) ?? '';
 
   const join = useCallback(
-    async (displayName: string) => {
+    async (displayName: string, emoji?: string) => {
       setLoading(true);
       setError(null);
       try {
@@ -31,12 +31,15 @@ export function usePlayerSession() {
 
         const userId = session.user.id;
 
+        // Prefix emoji so display screens (big screen, leaderboard) show it too
+        const fullName = emoji ? `${emoji} ${displayName}` : displayName;
+
         const { error: joinErr } = await supabase.rpc('join_player', {
-          display_name_input: displayName,
+          display_name_input: fullName,
         });
         if (joinErr) throw new Error(joinErr.message);
 
-        // Persist for next visit
+        // Persist name without emoji so the input is pre-filled correctly next time
         localStorage.setItem(PLAYER_ID_KEY, userId);
         localStorage.setItem(DISPLAY_NAME_KEY, displayName);
         const currentVersion = useGameStore.getState().gameState?.session_version;
@@ -44,7 +47,7 @@ export function usePlayerSession() {
           localStorage.setItem(SESSION_VERSION_KEY, String(currentVersion));
         }
 
-        setSession(userId, displayName);
+        setSession(userId, fullName);
         window.setTimeout(() => triggerFeedbackFx('joinSuccess'), 0);
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Failed to join. Try again.');

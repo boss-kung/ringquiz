@@ -65,7 +65,7 @@ export function JoinScreen() {
     e.preventDefault();
     if (!canSubmit) return;
     await unlockFeedbackAudio();
-    join(name.trim());
+    join(name.trim(), emoji || undefined);
   };
 
   return (
