@@ -23,6 +23,8 @@ interface Props {
   circleClassName?: string;
   /** Answer heatmap dots rendered on canvas over the image */
   heatmapPoints?: HeatmapPoint[];
+  /** When set, the image remounts with scratch-card animation (reveal transition) */
+  revealScratchKey?: string;
 }
 
 // ── Coordinate helpers ───────────────────────────────────────────────────────
@@ -156,6 +158,7 @@ export function QuestionImage({
   shellClassName = '',
   circleClassName = '',
   heatmapPoints,
+  revealScratchKey,
 }: Props) {
   const imgRef = useRef<HTMLImageElement>(null);
   const heatmapCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -366,10 +369,11 @@ export function QuestionImage({
       <div className="quiz-image-circle">
         {canRenderImage ? (
           <img
+            key={revealScratchKey ?? 'img'}
             ref={imgRef}
             src={imageUrl ?? undefined}
             alt="Question"
-            className="quiz-image-media"
+            className={`quiz-image-media${revealScratchKey ? ' quiz-image-media--reveal-scratch' : ''}`}
             draggable={false}
             onLoad={() => {
               if (imgRef.current) {
@@ -414,7 +418,6 @@ export function QuestionImage({
 
         {canRenderImage && maskOverlayUrl && (
           <img
-            key={maskOverlayUrl}
             src={maskOverlayUrl}
             alt=""
             aria-hidden

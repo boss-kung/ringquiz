@@ -58,6 +58,7 @@ const VALID_FROM: Record<HostActionName, GameStatus[] | '*'> = {
   trigger_hype_cheer:           '*',
   trigger_spotlight_leaderboard:'*',
   trigger_final_drumroll:       '*',
+  trigger_show_heatmap:         ['question_open', 'question_closed', 'reveal'],
   set_display_theme:            '*',
 };
 
@@ -478,6 +479,17 @@ async function executeAction(
         created_by: 'host',
       });
       if (insErr) throw new Error(`trigger_final_drumroll insert failed: ${insErr.message}`);
+      return ok(action, gs.status, false, gs);
+    }
+
+    // ── trigger_show_heatmap ─────────────────────────────────────────────────
+    case 'trigger_show_heatmap': {
+      const { error: insErr } = await db.from('display_events').insert({
+        event_type: 'show_answer_heatmap',
+        payload: {},
+        created_by: 'host',
+      });
+      if (insErr) throw new Error(`trigger_show_heatmap insert failed: ${insErr.message}`);
       return ok(action, gs.status, false, gs);
     }
 

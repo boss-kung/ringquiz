@@ -323,10 +323,11 @@ export function RevealScreen() {
             circle={persistentCircle}
             onCircleChange={() => {}}
             locked
-            maskOverlayClassName="reveal-mask-scratch"
+            maskOverlayClassName="reveal-mask-pulse"
             maskOverlayUrl={`${FUNCTIONS_URL}/get-reveal-mask?questionId=${encodeURIComponent(
               question.id
             )}&updatedAt=${encodeURIComponent(gameState?.updated_at ?? '')}`}
+            revealScratchKey={showRevealImage && revealImageReady ? `r-${question.id}` : undefined}
             shellClassName={`quiz-image-shell--reveal${showRevealImage && revealImageReady ? ' quiz-image-shell--reveal-active' : ''}`}
           />
         </div>

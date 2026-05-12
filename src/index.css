@@ -4476,14 +4476,14 @@ body.host-route {
   gap: 7px;
 }
 
-/* ── Progressive Reveal (scratch-card animation) ──────────────────────────── */
-@keyframes revealMaskScratch {
+/* ── Progressive Reveal (scratch-card on the reveal image, not the mask) ─── */
+@keyframes revealImgScratch {
   0%   { clip-path: circle(0% at 50% 50%); opacity: 0; }
   8%   { opacity: 1; }
   100% { clip-path: circle(150% at 50% 50%); }
 }
-.reveal-mask-scratch {
-  animation: revealMaskScratch 1.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+.quiz-image-media--reveal-scratch {
+  animation: revealImgScratch 1.5s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 /* ── Overtake Toast (player leaderboard) ──────────────────────────────────── */

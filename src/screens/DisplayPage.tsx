@@ -276,8 +276,8 @@ function DisplayImageStage({
   const displayImageUrl = canShowReveal ? (revealImageUrl ?? imageUrl) : imageUrl;
   const shellClassName = `ds-display-shell ${shellVariant}${fullWidth ? ' ds-display-shell-full' : ''}${canShowReveal ? ' quiz-image-shell--reveal-active' : ''}`;
 
-  // Only show mask when reveal is active — this also ensures the scratch animation fires at the right time
-  const activeMaskUrl = canShowReveal ? (maskUrl ?? undefined) : undefined;
+  // Scratch animation fires when reveal image first appears (canShowReveal transition)
+  const revealScratchKey = canShowReveal ? `r-${displayImageUrl ?? 'img'}` : undefined;
 
   if (imageUrl && imageStatus === 'loading' && !canShowReveal) {
     return (
@@ -309,8 +309,9 @@ function DisplayImageStage({
         circle={null}
         onCircleChange={() => {}}
         locked
-        maskOverlayUrl={activeMaskUrl}
-        maskOverlayClassName="reveal-mask-scratch"
+        maskOverlayUrl={maskUrl ?? undefined}
+        maskOverlayClassName="reveal-mask-pulse"
+        revealScratchKey={revealScratchKey}
         shellClassName={shellClassName}
         heatmapPoints={heatmapPoints}
       />
@@ -556,6 +557,8 @@ export function DisplayPage() {
   const [activeDisplayFx, setActiveDisplayFx] = useState<ActiveDisplayFx | null>(null);
   const displayFxTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastDisplayFxEventIdRef = useRef<string | null>(null);
+  const [heatmapActive, setHeatmapActive] = useState(false);
+  const heatmapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const getServerTime = useDisplayServerTime();
   const reducedMotion = useReducedMotion();
   const audio = useDisplayAudioController();
@@ -585,6 +588,7 @@ export function DisplayPage() {
       if (leaderboardStageTimerRef.current) clearTimeout(leaderboardStageTimerRef.current);
       if (leaderboardSettleTimerRef.current) clearTimeout(leaderboardSettleTimerRef.current);
       if (displayFxTimerRef.current) clearTimeout(displayFxTimerRef.current);
+      if (heatmapTimerRef.current) clearTimeout(heatmapTimerRef.current);
     };
   }, []);
 
@@ -1157,6 +1161,17 @@ export function DisplayPage() {
     if (lastDisplayFxEventIdRef.current === event.id) return;
     lastDisplayFxEventIdRef.current = event.id;
 
+    // Heatmap is its own overlay — handled separately from FX overlay
+    if (event.event_type === 'show_answer_heatmap') {
+      if (heatmapTimerRef.current) clearTimeout(heatmapTimerRef.current);
+      setHeatmapActive(true);
+      heatmapTimerRef.current = setTimeout(() => {
+        setHeatmapActive(false);
+        heatmapTimerRef.current = null;
+      }, 8000);
+      return;
+    }
+
     if (displayFxTimerRef.current) clearTimeout(displayFxTimerRef.current);
 
     setActiveDisplayFx({
@@ -1306,6 +1321,7 @@ export function DisplayPage() {
         getServerTime={getServerTime}
         questionFetchError={questionFetchError}
         reducedMotion={reducedMotion}
+        heatmapActive={heatmapActive}
       />
     );
   } else if (status === 'question_closed') {
@@ -1320,6 +1336,7 @@ export function DisplayPage() {
         getServerTime={getServerTime}
         statsFetchError={statsFetchError}
         reducedMotion={reducedMotion}
+        heatmapActive={heatmapActive}
       />
     );
     // Note: special_round_type is already in question object passed to DsReveal
@@ -1649,7 +1666,7 @@ function DsCountdown({
 // ── 3. QUESTION OPEN ──────────────────────────────────────────────────────────
 
 function DsQuestion({
-  gameState, question, stats, totalQs, getServerTime, questionFetchError, reducedMotion,
+  gameState, question, stats, totalQs, getServerTime, questionFetchError, reducedMotion, heatmapActive,
 }: {
   gameState: GameState;
   question: DisplayQuestion | null;
@@ -1658,6 +1675,7 @@ function DsQuestion({
   getServerTime: () => number;
   questionFetchError: boolean;
   reducedMotion: boolean;
+  heatmapActive?: boolean;
 }) {
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const prevSubmittedRef = useRef<number | null>(null);
@@ -1803,7 +1821,7 @@ function DsQuestion({
               <DisplayImageStage
                 imageUrl={imgUrl}
                 variant="question"
-                heatmapPoints={stats?.answer_positions?.map((p) => ({ xRatio: p.x, yRatio: p.y, correct: p.c === 1 }))}
+                heatmapPoints={heatmapActive ? stats?.answer_positions?.map((p) => ({ xRatio: p.x, yRatio: p.y, correct: p.c === 1 })) : undefined}
               />
             </div>
           </div>
@@ -1846,7 +1864,7 @@ function DsClosed({
 
 function DsReveal({
   gameState, question, stats, totalQs, getServerTime,
-  statsFetchError, reducedMotion,
+  statsFetchError, reducedMotion, heatmapActive,
 }: {
   gameState: GameState;
   question: DisplayQuestion | null;
@@ -1855,6 +1873,7 @@ function DsReveal({
   getServerTime: () => number;
   statsFetchError: boolean;
   reducedMotion: boolean;
+  heatmapActive?: boolean;
 }) {
   const [showReveal, setShowReveal] = useState(false);
   const [revealImageReady, setRevealImageReady] = useState(false);
@@ -1986,7 +2005,7 @@ function DsReveal({
               revealReady={revealImageReady}
               fullWidth
               variant="reveal"
-              heatmapPoints={showReveal ? stats?.answer_positions?.map((p) => ({ xRatio: p.x, yRatio: p.y, correct: p.c === 1 })) : undefined}
+              heatmapPoints={heatmapActive && showReveal ? stats?.answer_positions?.map((p) => ({ xRatio: p.x, yRatio: p.y, correct: p.c === 1 })) : undefined}
             />
           </div>
         </div>

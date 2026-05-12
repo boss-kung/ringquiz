@@ -775,11 +775,12 @@ function GameConsole({
 
             {/* Stage FX */}
             <div className="gr-label-xs" style={{ marginBottom:8 }}>Stage FX</div>
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:6, marginBottom:10 }}>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:6, marginBottom:10 }}>
               {([
                 { action:'trigger_hype_cheer'           as HostActionName, label:'เชียร์' },
                 { action:'trigger_spotlight_leaderboard'as HostActionName, label:'Spotlight' },
                 { action:'trigger_final_drumroll'       as HostActionName, label:'Drumroll' },
+                { action:'trigger_show_heatmap'         as HostActionName, label:'Heatmap 🗺' },
               ] as const).map(({ action, label }) => (
                 <button key={action} onClick={() => onFxAction(action)} disabled={fxLoading !== null} className="gr-hbtn" style={{ textAlign:'center', borderColor:'rgba(129,140,248,.2)', color:'var(--indigo)' }}>
                   <span style={{ fontSize:10, fontWeight:700 }}>{fxLoading === action ? '...' : label}</span>

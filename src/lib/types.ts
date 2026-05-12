@@ -71,7 +71,8 @@ export type DisplayEventType =
   | 'hype_cheer'
   | 'spotlight_leaderboard'
   | 'final_drumroll'
-  | 'theme_change';
+  | 'theme_change'
+  | 'show_answer_heatmap';
 
 export interface DisplayEvent {
   id: string;
@@ -178,6 +179,7 @@ export type HostActionName =
   | 'trigger_hype_cheer'
   | 'trigger_spotlight_leaderboard'
   | 'trigger_final_drumroll'
+  | 'trigger_show_heatmap'
   | 'set_display_theme';
 
 export interface HostActionRequest {
