@@ -13,6 +13,7 @@ import type {
   QuestionStatsResponse,
   EdgeFunctionError,
   DisplayTheme,
+  ExportResultsResponse,
   Question,
   GameState,
 } from '../../lib/types';
@@ -28,6 +29,27 @@ const HOST_ACTION_FALLBACKS: Partial<Record<HostActionName, string[]>> = {
   trigger_final_drumroll:       ['final_drumroll'],
   set_display_theme:            ['display_theme', 'set_theme'],
 };
+
+function csvCell(value: string | number | null | undefined): string {
+  const text = String(value ?? '');
+  if (!/[",\n\r]/.test(text)) return text;
+  return `"${text.replace(/"/g, '""')}"`;
+}
+
+function buildFinalLeaderboardCsv(results: ExportResultsResponse): string {
+  const header = ['Rank', 'Display Name', 'Total Score', 'Joined At', 'Player ID'];
+  const rows = results.players.map((player, index) => [
+    index + 1,
+    player.display_name,
+    player.total_score,
+    player.joined_at,
+    player.id,
+  ]);
+
+  return [header, ...rows]
+    .map((row) => row.map(csvCell).join(','))
+    .join('\r\n');
+}
 
 export function HostPage() {
   const [secret, setSecret] = useState(() => sessionStorage.getItem(SESSION_KEY) ?? '');
@@ -374,13 +396,14 @@ function HostDashboard({ secret, onLogout }: { secret: string; onLogout: () => v
         setActionError(getHostActionMessage((j as { error?: string }).error ?? 'function_error', `export HTTP ${res.status}`));
         return;
       }
-      const json = await res.json();
-      const blob = new Blob([JSON.stringify(json, null, 2)], { type:'application/json' });
+      const json = await res.json() as ExportResultsResponse;
+      const csv = buildFinalLeaderboardCsv(json);
+      const blob = new Blob([`\uFEFF${csv}`], { type:'text/csv;charset=utf-8' });
       const url  = URL.createObjectURL(blob);
       const a    = document.createElement('a');
-      a.href = url; a.download = `game-results-${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.json`;
+      a.href = url; a.download = `final-leaderboard-${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.csv`;
       a.click(); URL.revokeObjectURL(url);
-      setActionSuccess('ส่งออกผลสำเร็จ');
+      setActionSuccess('ส่งออกตารางคะแนน CSV สำเร็จ');
     } catch { setActionError(getHostActionMessage('network_error')); }
     finally { setExportBusy(false); }
   }, [secret]);
