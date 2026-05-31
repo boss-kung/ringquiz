@@ -236,6 +236,41 @@ export interface QuestionStatsResponse {
   active_game_set_name: string | null;
 }
 
+export type SupabaseUsageStatus = 'ok' | 'warning' | 'danger' | 'unknown';
+export type SupabaseUsageSource = 'live_project' | 'management_api' | 'estimate' | 'manual';
+
+export interface SupabaseUsageMetric {
+  key: string;
+  label: string;
+  used: number | null;
+  limit: number | null;
+  unit: 'bytes' | 'count' | 'requests' | 'connections' | 'messages' | 'invocations';
+  percent: number | null;
+  status: SupabaseUsageStatus;
+  source: SupabaseUsageSource;
+  note_th: string;
+}
+
+export interface SupabaseUsageResponse {
+  generated_at: string;
+  project_ref: string | null;
+  plan: 'free';
+  billing_window_note_th: string;
+  management_api: {
+    configured: boolean;
+    ok: boolean;
+    note_th: string;
+  };
+  metrics: SupabaseUsageMetric[];
+  local_counts: {
+    players: number;
+    questions: number;
+    answers: number;
+    storage_objects: number;
+  };
+  warnings: string[];
+}
+
 // ── export-results ───────────────────────────────────────────────────────────
 
 export interface ExportResultsResponse {

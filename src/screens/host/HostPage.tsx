@@ -16,6 +16,8 @@ import type {
   ExportResultsResponse,
   Question,
   GameState,
+  SupabaseUsageMetric,
+  SupabaseUsageResponse,
 } from '../../lib/types';
 
 const SESSION_KEY = 'quiz_host_secret';
@@ -172,8 +174,9 @@ function HostDashboard({ secret, onLogout }: { secret: string; onLogout: () => v
   const question    = useGameStore((s) => s.question);
   const getServerTime = useGetServerTime();
 
-  const [activeTab, setActiveTab] = useState<'game' | 'questions' | 'setup'>('game');
+  const [activeTab, setActiveTab] = useState<'game' | 'questions' | 'setup' | 'usage'>('game');
   const [stats, setStats]         = useState<QuestionStatsResponse | null>(null);
+  const [usage, setUsage]         = useState<SupabaseUsageResponse | null>(null);
   const [timeLeft, setTimeLeft]   = useState<number | null>(null);
 
   const [actionLoading, setActionLoading] = useState<HostActionName | null>(null);
@@ -181,6 +184,8 @@ function HostDashboard({ secret, onLogout }: { secret: string; onLogout: () => v
   const [actionError,   setActionError]   = useState('');
   const [actionSuccess, setActionSuccess] = useState('');
   const [statsError,    setStatsError]    = useState('');
+  const [usageError,    setUsageError]    = useState('');
+  const [usageLoading,  setUsageLoading]  = useState(false);
 
   const [resetConfirm,       setResetConfirm]       = useState<ConfirmAction | null>(null);
   const [autoAdvance,          setAutoAdvance]          = useState(false);
@@ -239,6 +244,27 @@ function HostDashboard({ secret, onLogout }: { secret: string; onLogout: () => v
     }
   }, [secret]);
 
+  const fetchUsage = useCallback(async () => {
+    setUsageLoading(true);
+    try {
+      const res = await fetch(`${FUNCTIONS_URL}/supabase-usage`, {
+        headers: { 'Authorization':`Bearer ${SUPABASE_ANON_KEY}`, 'X-Host-Secret':secret },
+      });
+      if (!res.ok) {
+        let errCode = '';
+        try { errCode = (await res.json()).error ?? ''; } catch { /* ignore */ }
+        setUsageError(errCode || `usage_http_${res.status}`);
+        return;
+      }
+      setUsage(await res.json());
+      setUsageError('');
+    } catch {
+      setUsageError('network_error');
+    } finally {
+      setUsageLoading(false);
+    }
+  }, [secret]);
+
   // ── Effects ──────────────────────────────────────────────────────────────────
 
   // Dynamic poll: 1 s during question_open, 2.5 s otherwise
@@ -250,6 +276,7 @@ function HostDashboard({ secret, onLogout }: { secret: string; onLogout: () => v
   }, [fetchStats, status]);
 
   useEffect(() => { if (activeTab === 'game') void fetchStats(); }, [activeTab, fetchStats]);
+  useEffect(() => { if (activeTab === 'usage') void fetchUsage(); }, [activeTab, fetchUsage]);
 
   // Realtime connection status
   useEffect(() => {
@@ -532,9 +559,9 @@ function HostDashboard({ secret, onLogout }: { secret: string; onLogout: () => v
 
       {/* ── Tab Bar ── */}
       <div style={{ display:'flex', gap:6, padding:'10px 16px', borderBottom:'1px solid var(--border)' }}>
-        {(['game','questions','setup'] as const).map((tab) => (
+        {(['game','questions','setup','usage'] as const).map((tab) => (
           <button key={tab} onClick={() => setActiveTab(tab)} style={{ padding:'7px 14px', borderRadius:999, border:'none', fontFamily:'var(--font-sans)', fontSize:12, fontWeight:700, cursor:'pointer', transition:'all .15s', background: activeTab === tab ? 'rgba(255,255,255,.07)' : 'transparent', color: activeTab === tab ? 'var(--text)' : 'var(--text-3)', borderBottom: activeTab === tab ? '2px solid var(--gold)' : '2px solid transparent' }}>
-            {tab === 'game' ? 'ควบคุมเกม' : tab === 'questions' ? 'คลังคำถาม' : 'ตั้งค่าเกม'}
+            {tab === 'game' ? 'ควบคุมเกม' : tab === 'questions' ? 'คลังคำถาม' : tab === 'setup' ? 'ตั้งค่าเกม' : 'Supabase Usage'}
           </button>
         ))}
       </div>
@@ -545,6 +572,13 @@ function HostDashboard({ secret, onLogout }: { secret: string; onLogout: () => v
           <AdminQuestionManager secret={secret} />
         ) : activeTab === 'setup' ? (
           <GameSetManager secret={secret} onStatsChanged={fetchStats} />
+        ) : activeTab === 'usage' ? (
+          <SupabaseUsagePanel
+            usage={usage}
+            usageError={usageError}
+            usageLoading={usageLoading}
+            onRefresh={fetchUsage}
+          />
         ) : (
           <GameConsole
             status={status}
@@ -746,6 +780,172 @@ function ResultsPreviewModal({
   );
 }
 
+function SupabaseUsagePanel({
+  usage,
+  usageError,
+  usageLoading,
+  onRefresh,
+}: {
+  usage: SupabaseUsageResponse | null;
+  usageError: string;
+  usageLoading: boolean;
+  onRefresh: () => void;
+}) {
+  const dangerMetrics = usage?.metrics.filter((metric) => metric.status === 'danger') ?? [];
+  const warningMetrics = usage?.metrics.filter((metric) => metric.status === 'warning') ?? [];
+  const unknownMetrics = usage?.metrics.filter((metric) => metric.status === 'unknown') ?? [];
+
+  return (
+    <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+      <div className="gr-card-strong" style={{ padding:18, display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}>
+        <div>
+          <div className="gr-label-xs" style={{ marginBottom:8 }}>Supabase Free Project</div>
+          <h2 style={{ fontSize:22, fontWeight:900, color:'var(--text)', marginBottom:6 }}>การใช้ลิมิตของโปรเจกต์</h2>
+          <p style={{ fontSize:12, color:'var(--text-2)', lineHeight:1.65, maxWidth:640 }}>
+            รวมตัวเลขที่อ่านได้จากโปรเจกต์จริง และตัวเลขรายเดือนที่ต้องใช้ Supabase Management Token เพื่อดูว่า Free plan ใกล้เต็มหรือเสี่ยงระหว่างงานหรือไม่
+          </p>
+        </div>
+        <button onClick={onRefresh} disabled={usageLoading} className="gr-hbtn" style={{ width:'auto', minWidth:116, textAlign:'center', borderColor:'rgba(245,199,74,.24)', color:'var(--gold)' }}>
+          {usageLoading ? 'กำลังโหลด...' : 'Refresh'}
+        </button>
+      </div>
+
+      {usageError && (
+        <div style={{ background:'rgba(251,113,133,.08)', border:'1px solid rgba(251,113,133,.2)', borderRadius:10, padding:'10px 14px', color:'var(--rose)', fontSize:12 }}>
+          โหลดข้อมูล Supabase Usage ไม่สำเร็จ: {getHostActionMessage(usageError, usageError)}
+        </div>
+      )}
+
+      {!usage && !usageError && (
+        <div className="gr-card" style={{ padding:18, color:'var(--text-2)', fontSize:13 }}>
+          {usageLoading ? 'กำลังอ่านข้อมูลจาก Supabase...' : 'กด Refresh เพื่ออ่านข้อมูลล่าสุด'}
+        </div>
+      )}
+
+      {usage && (
+        <>
+          <div className="hc-usage-summary">
+            <UsageSummaryBox label="Project" value={usage.project_ref ?? 'unknown'} tone="indigo" />
+            <UsageSummaryBox label="Players" value={String(usage.local_counts.players)} tone="emerald" />
+            <UsageSummaryBox label="Questions" value={String(usage.local_counts.questions)} tone="gold" />
+            <UsageSummaryBox label="Answers" value={String(usage.local_counts.answers)} tone="rose" />
+          </div>
+
+          {(dangerMetrics.length > 0 || warningMetrics.length > 0 || unknownMetrics.length > 0 || usage.warnings.length > 0) && (
+            <div style={{ border:'1px solid rgba(245,199,74,.22)', background:'rgba(245,199,74,.055)', borderRadius:12, padding:14 }}>
+              <div style={{ fontSize:13, fontWeight:850, color:'var(--gold)', marginBottom:8 }}>สิ่งที่ควรรู้ก่อนเริ่มเกม</div>
+              <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+                {dangerMetrics.map((metric) => (
+                  <div key={metric.key} style={{ fontSize:12, color:'var(--rose)', lineHeight:1.55 }}>
+                    {metric.label} เกิน 90% แล้ว ควรอัปเกรดหรือลดการใช้งานก่อนงานจริง
+                  </div>
+                ))}
+                {warningMetrics.map((metric) => (
+                  <div key={metric.key} style={{ fontSize:12, color:'var(--gold)', lineHeight:1.55 }}>
+                    {metric.label} ใกล้ลิมิตแล้ว ควรเฝ้าดูระหว่างงาน
+                  </div>
+                ))}
+                {unknownMetrics.map((metric) => (
+                  <div key={metric.key} style={{ fontSize:12, color:'var(--text-2)', lineHeight:1.55 }}>
+                    {metric.label}: ยังไม่มีตัวเลขจริงใน panel นี้ ให้เทียบกับ Supabase Dashboard
+                  </div>
+                ))}
+                {usage.warnings.map((warning) => (
+                  <div key={warning} style={{ fontSize:12, color:'var(--text-2)', lineHeight:1.55 }}>{warning}</div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="hc-usage-grid">
+            {usage.metrics.map((metric) => (
+              <UsageMetricCard key={metric.key} metric={metric} />
+            ))}
+          </div>
+
+          <div className="gr-card" style={{ padding:14 }}>
+            <div className="gr-label-xs" style={{ marginBottom:10 }}>อ่านตัวเลขยังไง</div>
+            <div style={{ display:'grid', gap:8, fontSize:12, color:'var(--text-2)', lineHeight:1.65 }}>
+              <div><strong style={{ color:'var(--text)' }}>เขียว</strong> ยังสบาย, <strong style={{ color:'var(--gold)' }}>เหลือง</strong> เริ่มใกล้ลิมิต, <strong style={{ color:'var(--rose)' }}>แดง</strong> เสี่ยงชนลิมิต</div>
+              <div><strong style={{ color:'var(--text)' }}>Realtime connections</strong> ใช้จำนวนผู้เล่นเป็นค่าประมาณขั้นต่ำ เพราะ host, display และ tab ซ้ำก็นับ connection ได้</div>
+              <div><strong style={{ color:'var(--text)' }}>Management API</strong>: {usage.management_api.note_th}</div>
+              <div>{usage.billing_window_note_th}</div>
+              <div style={{ color:'var(--text-3)' }}>อัปเดตล่าสุด: {new Date(usage.generated_at).toLocaleString()}</div>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function UsageSummaryBox({ label, value, tone }: { label: string; value: string; tone: 'gold' | 'emerald' | 'rose' | 'indigo' }) {
+  const color = tone === 'gold' ? 'var(--gold)' : tone === 'emerald' ? 'var(--emerald)' : tone === 'rose' ? 'var(--rose)' : 'var(--indigo)';
+  return (
+    <div className="gr-card" style={{ padding:14, minWidth:0 }}>
+      <div className="gr-label-xs" style={{ marginBottom:8 }}>{label}</div>
+      <div style={{ fontSize:18, fontWeight:900, color, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{value}</div>
+    </div>
+  );
+}
+
+function UsageMetricCard({ metric }: { metric: SupabaseUsageMetric }) {
+  const tone = metric.status === 'danger'
+    ? { color:'var(--rose)', bg:'rgba(251,113,133,.12)', border:'rgba(251,113,133,.3)' }
+    : metric.status === 'warning'
+    ? { color:'var(--gold)', bg:'rgba(245,199,74,.12)', border:'rgba(245,199,74,.28)' }
+    : metric.status === 'unknown'
+    ? { color:'var(--text-3)', bg:'rgba(255,255,255,.045)', border:'rgba(255,255,255,.1)' }
+    : { color:'var(--emerald)', bg:'rgba(52,211,153,.1)', border:'rgba(52,211,153,.25)' };
+  const width = metric.percent == null ? 0 : Math.min(100, metric.percent);
+
+  return (
+    <div className="gr-card" style={{ padding:15 }}>
+      <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:10, marginBottom:12 }}>
+        <div style={{ minWidth:0 }}>
+          <div style={{ fontSize:13, fontWeight:850, color:'var(--text)', marginBottom:4 }}>{metric.label}</div>
+          <div style={{ fontSize:11, color:'var(--text-3)' }}>{sourceLabel(metric.source)}</div>
+        </div>
+        <div style={{ flexShrink:0, fontSize:10, fontWeight:850, color:tone.color, background:tone.bg, border:`1px solid ${tone.border}`, borderRadius:999, padding:'5px 8px' }}>
+          {metric.status === 'unknown' ? 'ไม่ทราบ' : `${Math.round(metric.percent ?? 0)}%`}
+        </div>
+      </div>
+      <div style={{ display:'flex', alignItems:'baseline', justifyContent:'space-between', gap:10, marginBottom:8 }}>
+        <span className="gr-mono" style={{ fontSize:17, fontWeight:900, color:'var(--text)' }}>{formatMetricValue(metric.used, metric.unit)}</span>
+        <span style={{ fontSize:11, color:'var(--text-3)' }}>จาก {formatMetricValue(metric.limit, metric.unit)}</span>
+      </div>
+      <div style={{ height:8, borderRadius:999, background:'rgba(255,255,255,.08)', overflow:'hidden', marginBottom:10 }}>
+        <div style={{ height:'100%', width:`${width}%`, borderRadius:999, transition:'width .25s', background:tone.color }} />
+      </div>
+      <p style={{ fontSize:11, color:'var(--text-2)', lineHeight:1.55 }}>{metric.note_th}</p>
+    </div>
+  );
+}
+
+function sourceLabel(source: SupabaseUsageMetric['source']) {
+  if (source === 'live_project') return 'อ่านจากโปรเจกต์จริง';
+  if (source === 'management_api') return 'อ่านจาก Supabase Management API';
+  if (source === 'estimate') return 'ค่าประมาณเพื่อใช้งานหน้างาน';
+  return 'ต้องตรวจจาก Dashboard';
+}
+
+function formatMetricValue(value: number | null, unit: SupabaseUsageMetric['unit']) {
+  if (value == null) return '—';
+  if (unit === 'bytes') return formatBytes(value);
+  return Math.round(value).toLocaleString();
+}
+
+function formatBytes(bytes: number) {
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let value = bytes;
+  let index = 0;
+  while (value >= 1024 && index < units.length - 1) {
+    value /= 1024;
+    index += 1;
+  }
+  return `${value >= 10 || index === 0 ? value.toFixed(0) : value.toFixed(1)} ${units[index]}`;
+}
+
 // ── Game Console (game tab content) ──────────────────────────────────────────
 
 interface GameConsoleProps {
@@ -784,7 +984,7 @@ interface GameConsoleProps {
   onExport: () => void;
   onCopyLink: (type: 'join' | 'display') => void;
   onEmergencyToggle: () => void;
-  onSetTab: (tab: 'game' | 'questions' | 'setup') => void;
+  onSetTab: (tab: 'game' | 'questions' | 'setup' | 'usage') => void;
 }
 
 function GameConsole({

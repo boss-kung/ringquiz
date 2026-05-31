@@ -82,6 +82,26 @@ This repo includes:
 ## Host panel
 
 Navigate to `/host`. Enter the `HOST_SECRET` (set via `supabase secrets set HOST_SECRET=...`).
+
+### Supabase Free usage panel
+
+The Host panel has a **Supabase Usage** tab for checking Free plan limits before and during an event.
+
+Setup for the full version:
+
+1. In Supabase Dashboard, create a Management API access token with usage/analytics read access.
+2. Store it as an Edge Function secret:
+   ```bash
+   supabase secrets set SUPABASE_MANAGEMENT_TOKEN=<your-management-api-token>
+   ```
+3. Run the latest migration so the host-only database size helper exists.
+4. Deploy the usage function:
+   ```bash
+   supabase functions deploy supabase-usage
+   ```
+
+The token is used only inside the Edge Function. It is never sent to the browser.
+If the Management API token is missing or cannot read a billing counter, the tab still shows project-local values like database size, storage size, players, questions, answers, and the Free plan limits.
 The secret is stored in `sessionStorage` only — it clears when the tab is closed.
 
 ## Architecture notes

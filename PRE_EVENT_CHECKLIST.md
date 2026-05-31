@@ -39,14 +39,17 @@ Each item is a concrete, verifiable action — not a reminder to "check things."
 ## Edge Function Setup
 
 - [ ] `HOST_SECRET` set: `supabase secrets set HOST_SECRET=<min-32-char-random-string>`
+- [ ] `SUPABASE_MANAGEMENT_TOKEN` set for Host → Supabase Usage tab
 - [ ] `HOST_SECRET` is stored somewhere safe outside the browser (paper or password manager)
-- [ ] All 5 functions deployed: `supabase functions deploy --no-verify-jwt server-time get-question-stats export-results` and `supabase functions deploy submit-answer host-action`
+- [ ] All 6 functions deployed: `supabase functions deploy --no-verify-jwt server-time get-question-stats export-results supabase-usage` and `supabase functions deploy submit-answer host-action`
 - [ ] `server-time` returns valid JSON: `curl .../server-time` → `{"server_time_ms": <number>}`
 - [ ] `host-action` rejects missing secret: `curl -X POST .../host-action -d '{"action":"reset_game"}'` → 401
 - [ ] `host-action` rejects bad action name: `curl -X POST .../host-action -H "X-Host-Secret: $S" -d '{"action":"invalid"}'` → 400
 - [ ] `submit-answer` rejects missing JWT: `curl -X POST .../submit-answer -d '{}'` → 401
 - [ ] `submit-answer` rejects when status=waiting: open anon session, call with valid JWT → 400 question_not_open
 - [ ] `get-question-stats` rejects missing secret → 401
+- [ ] `supabase-usage` rejects missing secret → 401
+- [ ] Host → Supabase Usage tab loads and shows database/storage/realtime limit cards
 - [ ] `export-results` rejects missing secret → 401
 - [ ] `export-results` response has no `mask_storage_path`, `mask_width`, or `mask_height` fields
 - [ ] PNG decoder in `mask-check.ts` is confirmed working (run a test submission with known coordinates)
