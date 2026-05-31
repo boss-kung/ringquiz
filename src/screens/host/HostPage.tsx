@@ -22,6 +22,11 @@ const SESSION_KEY = 'quiz_host_secret';
 
 type ConfirmAction = 'soft_reset_game' | 'hard_reset_game' | 'end_game' | 'force_close_question';
 type RtStatus = 'connecting' | 'connected' | 'disconnected';
+type ResultsTableCell = string | number;
+type ResultsTable = {
+  header: string[];
+  rows: ResultsTableCell[][];
+};
 
 const HOST_ACTION_FALLBACKS: Partial<Record<HostActionName, string[]>> = {
   trigger_hype_cheer:           ['hype_cheer'],
@@ -36,7 +41,7 @@ function csvCell(value: string | number | null | undefined): string {
   return `"${text.replace(/"/g, '""')}"`;
 }
 
-function buildFinalLeaderboardCsv(results: ExportResultsResponse): string {
+function buildFinalLeaderboardTable(results: ExportResultsResponse): ResultsTable {
   const questions = [...(results.questions ?? [])].sort((a, b) => a.order - b.order);
   const finalQuestionId = questions.length > 0 ? questions[questions.length - 1].id : null;
   const finalLeaderboard = finalQuestionId
@@ -80,9 +85,26 @@ function buildFinalLeaderboardCsv(results: ExportResultsResponse): string {
     ];
   });
 
-  return [header, ...rows]
+  return { header, rows };
+}
+
+function buildFinalLeaderboardCsv(results: ExportResultsResponse): string {
+  const table = buildFinalLeaderboardTable(results);
+
+  return [table.header, ...table.rows]
     .map((row) => row.map(csvCell).join(','))
     .join('\r\n');
+}
+
+function downloadFinalLeaderboardCsv(results: ExportResultsResponse) {
+  const csv = buildFinalLeaderboardCsv(results);
+  const blob = new Blob([`\uFEFF${csv}`], { type:'text/csv;charset=utf-8' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url;
+  a.download = `final-leaderboard-${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 export function HostPage() {
@@ -168,6 +190,7 @@ function HostDashboard({ secret, onLogout }: { secret: string; onLogout: () => v
   const [revealDelay,          setRevealDelay]          = useState(3);   // seconds after question_closed
   const [rtStatus,           setRtStatus]           = useState<RtStatus>('connecting');
   const [exportBusy,         setExportBusy]         = useState(false);
+  const [resultsPreview,     setResultsPreview]     = useState<ExportResultsResponse | null>(null);
   const [emergencyOpen,      setEmergencyOpen]      = useState(false);
   const [copiedLink,         setCopiedLink]         = useState<'join' | 'display' | null>(null);
 
@@ -419,8 +442,10 @@ function HostDashboard({ secret, onLogout }: { secret: string; onLogout: () => v
     void doAction(action);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleExportResults = useCallback(async () => {
+  const handleOpenResultsPreview = useCallback(async () => {
     setExportBusy(true);
+    setActionError('');
+    setActionSuccess('');
     try {
       const res = await fetch(`${FUNCTIONS_URL}/export-results`, {
         headers: { 'Authorization':`Bearer ${SUPABASE_ANON_KEY}`, 'X-Host-Secret':secret },
@@ -431,16 +456,16 @@ function HostDashboard({ secret, onLogout }: { secret: string; onLogout: () => v
         return;
       }
       const json = await res.json() as ExportResultsResponse;
-      const csv = buildFinalLeaderboardCsv(json);
-      const blob = new Blob([`\uFEFF${csv}`], { type:'text/csv;charset=utf-8' });
-      const url  = URL.createObjectURL(blob);
-      const a    = document.createElement('a');
-      a.href = url; a.download = `final-leaderboard-${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.csv`;
-      a.click(); URL.revokeObjectURL(url);
-      setActionSuccess('ส่งออกตารางคะแนน CSV สำเร็จ');
+      setResultsPreview(json);
     } catch { setActionError(getHostActionMessage('network_error')); }
     finally { setExportBusy(false); }
   }, [secret]);
+
+  const handleDownloadPreviewCsv = useCallback(() => {
+    if (!resultsPreview) return;
+    downloadFinalLeaderboardCsv(resultsPreview);
+    setActionSuccess('ดาวน์โหลดตารางคะแนน CSV สำเร็จ');
+  }, [resultsPreview]);
 
   const handleCopyLink = (type: 'join' | 'display') => {
     const base = window.location.origin + (import.meta.env.BASE_URL || '/');
@@ -554,7 +579,7 @@ function HostDashboard({ secret, onLogout }: { secret: string; onLogout: () => v
             onRevealDelayChange={setRevealDelay}
             onCallAction={callAction}
             onFxAction={doFxAction}
-            onExport={handleExportResults}
+            onExport={handleOpenResultsPreview}
             onCopyLink={handleCopyLink}
             onEmergencyToggle={() => setEmergencyOpen((v) => !v)}
             onSetTab={setActiveTab}
@@ -600,6 +625,123 @@ function HostDashboard({ secret, onLogout }: { secret: string; onLogout: () => v
           </div>
         </div>
       )}
+
+      {resultsPreview && (
+        <ResultsPreviewModal
+          results={resultsPreview}
+          onClose={() => setResultsPreview(null)}
+          onDownload={handleDownloadPreviewCsv}
+        />
+      )}
+    </div>
+  );
+}
+
+function ResultsPreviewModal({
+  results,
+  onClose,
+  onDownload,
+}: {
+  results: ExportResultsResponse;
+  onClose: () => void;
+  onDownload: () => void;
+}) {
+  const table = buildFinalLeaderboardTable(results);
+  const questionCount = Math.max(0, (table.header.length - 5) / 2);
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="results-preview-title"
+      style={{ position:'fixed', inset:0, background:'rgba(5,8,16,.9)', display:'flex', alignItems:'center', justifyContent:'center', padding:18, zIndex:320, backdropFilter:'blur(7px)' }}
+    >
+      <div className="gr-card" style={{ width:'min(1180px, 100%)', maxHeight:'88vh', padding:0, display:'flex', flexDirection:'column', overflow:'hidden', borderRadius:8 }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:12, padding:'16px 18px', borderBottom:'1px solid rgba(255,255,255,.08)' }}>
+          <div>
+            <div className="gr-label-xs" style={{ marginBottom:5 }}>Export Preview</div>
+            <h2 id="results-preview-title" style={{ fontSize:18, fontWeight:850, color:'var(--text)' }}>
+              ตารางคะแนนทั้งหมด
+            </h2>
+            <div style={{ marginTop:5, fontSize:12, color:'var(--text-3)' }}>
+              {table.rows.length} players · {questionCount} questions · {new Date(results.exported_at).toLocaleString()}
+            </div>
+          </div>
+          <div style={{ display:'flex', gap:8, alignItems:'center', flexShrink:0 }}>
+            <button onClick={onDownload} className="gr-hbtn" style={{ padding:'9px 12px', color:'var(--indigo)', borderColor:'rgba(129,140,248,.32)', fontWeight:800 }}>
+              Download CSV
+            </button>
+            <button onClick={onClose} className="gr-hbtn" style={{ width:36, height:36, padding:0, display:'grid', placeItems:'center', fontSize:18 }} aria-label="Close results preview">
+              ×
+            </button>
+          </div>
+        </div>
+
+        <div style={{ overflow:'auto', padding:14 }}>
+          <table style={{ width:'100%', minWidth:Math.max(760, table.header.length * 122), borderCollapse:'separate', borderSpacing:0, fontSize:12 }}>
+            <thead>
+              <tr>
+                {table.header.map((label, index) => (
+                  <th
+                    key={label}
+                    style={{
+                      position:'sticky',
+                      top:0,
+                      zIndex: index < 3 ? 3 : 2,
+                      left: index === 0 ? 0 : index === 1 ? 54 : index === 2 ? 214 : undefined,
+                      minWidth: index === 0 ? 54 : index === 1 ? 160 : index === 2 ? 110 : 118,
+                      textAlign: index === 1 || index >= table.header.length - 2 ? 'left' : 'right',
+                      padding:'9px 10px',
+                      background:'rgba(15,23,42,.98)',
+                      color:'var(--text-2)',
+                      borderBottom:'1px solid rgba(255,255,255,.1)',
+                      fontWeight:800,
+                      whiteSpace:'nowrap',
+                    }}
+                  >
+                    {label}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {table.rows.map((row, rowIndex) => (
+                <tr key={`${row[row.length - 2]}-${rowIndex}`}>
+                  {row.map((value, cellIndex) => (
+                    <td
+                      key={`${cellIndex}-${String(value)}`}
+                      style={{
+                        position: cellIndex < 3 ? 'sticky' : undefined,
+                        left: cellIndex === 0 ? 0 : cellIndex === 1 ? 54 : cellIndex === 2 ? 214 : undefined,
+                        zIndex: cellIndex < 3 ? 1 : 0,
+                        minWidth: cellIndex === 0 ? 54 : cellIndex === 1 ? 160 : cellIndex === 2 ? 110 : 118,
+                        padding:'8px 10px',
+                        background: cellIndex < 3
+                          ? rowIndex % 2 === 0 ? 'rgba(9,14,27,.98)' : 'rgba(12,18,34,.98)'
+                          : rowIndex % 2 === 0 ? 'rgba(255,255,255,.025)' : 'rgba(255,255,255,.045)',
+                        borderBottom:'1px solid rgba(255,255,255,.055)',
+                        color: cellIndex === 0 ? 'var(--gold)' : cellIndex === 2 ? 'var(--emerald)' : 'var(--text)',
+                        textAlign: cellIndex === 1 || cellIndex >= table.header.length - 2 ? 'left' : 'right',
+                        fontWeight: cellIndex < 3 ? 800 : 600,
+                        whiteSpace:'nowrap',
+                      }}
+                    >
+                      {String(value)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+              {table.rows.length === 0 && (
+                <tr>
+                  <td colSpan={table.header.length} style={{ padding:28, textAlign:'center', color:'var(--text-3)' }}>
+                    ยังไม่มีข้อมูลผู้เล่นสำหรับแสดงผล
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   );
 }
@@ -897,7 +1039,7 @@ function GameConsole({
                 <span style={{ fontSize:11, fontWeight:700 }}>{copiedLink === 'display' ? '✓ คัดลอกแล้ว' : '📺 ลิงก์จอหลัก'}</span>
               </button>
               <button onClick={onExport} disabled={exportBusy} className="gr-hbtn" style={{ textAlign:'center', borderColor:'rgba(129,140,248,.25)', color:'var(--indigo)' }}>
-                <span style={{ fontSize:11, fontWeight:700 }}>{exportBusy ? '...' : '⬇ ส่งออกผล'}</span>
+                <span style={{ fontSize:11, fontWeight:700 }}>{exportBusy ? '...' : 'ดูตารางผล'}</span>
               </button>
               <button onClick={() => onCallAction('recompute_leaderboard')} disabled={anyPending || !isActionEnabled('recompute_leaderboard')} className="gr-hbtn" style={{ textAlign:'center' }}>
                 <span style={{ fontSize:11, fontWeight:700 }}>🔄 คำนวณคะแนน</span>
