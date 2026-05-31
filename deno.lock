@@ -49,6 +49,7 @@
         "npm:jszip@^3.10.1",
         "npm:papaparse@^5.5.3",
         "npm:postcss@^8.4.47",
+        "npm:qrcode.react@^4.2.0",
         "npm:react-dom@^18.3.1",
         "npm:react@^18.3.1",
         "npm:tailwindcss@^3.4.14",

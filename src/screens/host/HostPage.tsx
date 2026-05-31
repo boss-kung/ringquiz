@@ -63,7 +63,7 @@ function buildFinalLeaderboardTable(results: ExportResultsResponse): ResultsTabl
 
   const questionColumns = questions.flatMap((_, index) => [
     `Q${index + 1} Score`,
-    `Q${index + 1} Time Used (sec)`,
+    `Q${index + 1} Time (sec)`,
   ]);
   const header = ['Rank', 'Player Name', 'Total Score', ...questionColumns, 'Player ID', 'Joined At'];
   const rows = rankedPlayers.map((player, index) => {
@@ -72,7 +72,7 @@ function buildFinalLeaderboardTable(results: ExportResultsResponse): ResultsTabl
       const answer = answerByPlayerAndQuestion.get(`${player.id}:${question.id}`);
       if (!answer) return [0, ''];
       const timeUsed = question.time_limit_seconds * (1 - answer.time_remaining_ratio);
-      return [answer.score, Math.max(0, timeUsed).toFixed(2)];
+      return [answer.score, Math.max(0, timeUsed).toFixed(6)];
     });
 
     return [
