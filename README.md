@@ -92,7 +92,7 @@ Setup for the full version:
 1. In Supabase Dashboard, create a Management API access token with usage/analytics read access.
 2. Store it as an Edge Function secret:
    ```bash
-   supabase secrets set SUPABASE_MANAGEMENT_TOKEN=<your-management-api-token>
+   supabase secrets set MANAGEMENT_API_ACCESS_TOKEN=<your-management-api-token>
    ```
 3. Run the latest migration so the host-only database size helper exists.
 4. Deploy the usage function:

@@ -3,7 +3,7 @@
 //
 // Exact project-local values come from Postgres and Storage metadata.
 // Billing counters that Supabase only exposes through the platform are fetched
-// with SUPABASE_MANAGEMENT_TOKEN when configured.
+// with MANAGEMENT_API_ACCESS_TOKEN when configured.
 import { corsHeaders, handleCors } from '../_shared/cors.ts';
 import { getSupabaseAdmin } from '../_shared/supabase-admin.ts';
 import type {
@@ -224,12 +224,12 @@ async function getManagementUsage(projectRef: string): Promise<{
     realtimeMessages?: number;
   };
 }> {
-  const token = Deno.env.get('SUPABASE_MANAGEMENT_TOKEN')?.trim();
+  const token = Deno.env.get('MANAGEMENT_API_ACCESS_TOKEN')?.trim();
   if (!token) {
     return {
       configured: false,
       ok: false,
-      note: 'ยังไม่ได้ตั้ง SUPABASE_MANAGEMENT_TOKEN จึงอ่าน billing counters จริงจาก Supabase Platform ไม่ได้',
+      note: 'ยังไม่ได้ตั้ง MANAGEMENT_API_ACCESS_TOKEN จึงอ่าน billing counters จริงจาก Supabase Platform ไม่ได้',
       metrics: {},
     };
   }

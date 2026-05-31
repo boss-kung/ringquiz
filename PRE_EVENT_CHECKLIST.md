@@ -39,7 +39,7 @@ Each item is a concrete, verifiable action — not a reminder to "check things."
 ## Edge Function Setup
 
 - [ ] `HOST_SECRET` set: `supabase secrets set HOST_SECRET=<min-32-char-random-string>`
-- [ ] `SUPABASE_MANAGEMENT_TOKEN` set for Host → Supabase Usage tab
+- [ ] `MANAGEMENT_API_ACCESS_TOKEN` set for Host → Supabase Usage tab
 - [ ] `HOST_SECRET` is stored somewhere safe outside the browser (paper or password manager)
 - [ ] All 6 functions deployed: `supabase functions deploy --no-verify-jwt server-time get-question-stats export-results supabase-usage` and `supabase functions deploy submit-answer host-action`
 - [ ] `server-time` returns valid JSON: `curl .../server-time` → `{"server_time_ms": <number>}`
