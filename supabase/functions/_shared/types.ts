@@ -240,6 +240,11 @@ export interface QuestionStatsResponse {
 
 export interface ExportResultsResponse {
   exported_at: string;
+  questions: Array<{
+    id: string;
+    order: number;
+    time_limit_seconds: number;
+  }>;
   players: Array<{
     id: string;
     display_name: string;

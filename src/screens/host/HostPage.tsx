@@ -37,14 +37,48 @@ function csvCell(value: string | number | null | undefined): string {
 }
 
 function buildFinalLeaderboardCsv(results: ExportResultsResponse): string {
-  const header = ['Rank', 'Display Name', 'Total Score', 'Joined At', 'Player ID'];
-  const rows = results.players.map((player, index) => [
-    index + 1,
-    player.display_name,
-    player.total_score,
-    player.joined_at,
-    player.id,
+  const questions = [...(results.questions ?? [])].sort((a, b) => a.order - b.order);
+  const finalQuestionId = questions.length > 0 ? questions[questions.length - 1].id : null;
+  const finalLeaderboard = finalQuestionId
+    ? results.leaderboard
+      .filter((entry) => entry.question_id === finalQuestionId)
+      .sort((a, b) => a.rank - b.rank)
+    : [];
+  const playerById = new Map(results.players.map((player) => [player.id, player]));
+  const finalEntryByPlayerId = new Map(finalLeaderboard.map((entry) => [entry.player_id, entry]));
+  const answerByPlayerAndQuestion = new Map(
+    results.answers.map((answer) => [`${answer.player_id}:${answer.question_id}`, answer]),
+  );
+  const rankedPlayers = [
+    ...finalLeaderboard
+      .map((entry) => playerById.get(entry.player_id))
+      .filter((player): player is ExportResultsResponse['players'][number] => Boolean(player)),
+    ...results.players.filter((player) => !finalEntryByPlayerId.has(player.id)),
+  ];
+
+  const questionColumns = questions.flatMap((_, index) => [
+    `Q${index + 1} Score`,
+    `Q${index + 1} Time Used (sec)`,
   ]);
+  const header = ['Rank', 'Player Name', 'Total Score', ...questionColumns, 'Player ID', 'Joined At'];
+  const rows = rankedPlayers.map((player, index) => {
+    const finalEntry = finalEntryByPlayerId.get(player.id);
+    const perQuestion = questions.flatMap((question) => {
+      const answer = answerByPlayerAndQuestion.get(`${player.id}:${question.id}`);
+      if (!answer) return [0, ''];
+      const timeUsed = question.time_limit_seconds * (1 - answer.time_remaining_ratio);
+      return [answer.score, Math.max(0, timeUsed).toFixed(2)];
+    });
+
+    return [
+      finalEntry?.rank ?? index + 1,
+      player.display_name,
+      finalEntry?.cumulative_score ?? player.total_score,
+      ...perQuestion,
+      player.id,
+      player.joined_at,
+    ];
+  });
 
   return [header, ...rows]
     .map((row) => row.map(csvCell).join(','))

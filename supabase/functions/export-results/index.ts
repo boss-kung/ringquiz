@@ -31,7 +31,11 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
   try {
     // Fetch all data in parallel — none of these queries touch question_masks
-    const [playersResult, answersResult, leaderboardResult] = await Promise.all([
+    const [gameStateResult, playersResult, answersResult, leaderboardResult] = await Promise.all([
+      db.from('game_state')
+        .select('active_game_set_id')
+        .maybeSingle(),
+
       db.from('players')
         .select('id, display_name, total_score, joined_at')
         .order('total_score', { ascending: false }),
@@ -49,11 +53,40 @@ Deno.serve(async (req: Request): Promise<Response> => {
         .order('rank', { ascending: true }),
     ]);
 
+    if (gameStateResult.error) throw new Error(`game_state query: ${gameStateResult.error.message}`);
     if (playersResult.error) throw new Error(`players query: ${playersResult.error.message}`);
     if (answersResult.error) throw new Error(`answers query: ${answersResult.error.message}`);
     if (leaderboardResult.error) throw new Error(`leaderboard query: ${leaderboardResult.error.message}`);
 
-    const answerRows = answersResult.data ?? [];
+    const activeGameSetId = (gameStateResult.data as { active_game_set_id: string | null } | null)?.active_game_set_id;
+    const questionsResult = activeGameSetId
+      ? await db.from('game_set_questions')
+        .select('question_id, play_order, time_limit_seconds')
+        .eq('game_set_id', activeGameSetId)
+        .eq('is_enabled', true)
+        .order('play_order', { ascending: true })
+      : await db.from('questions')
+        .select('id, order_index, time_limit_seconds')
+        .eq('is_published', true)
+        .order('order_index', { ascending: true });
+
+    if (questionsResult.error) throw new Error(`questions query: ${questionsResult.error.message}`);
+
+    const questions = activeGameSetId
+      ? ((questionsResult.data ?? []) as Array<{ question_id: string; play_order: number; time_limit_seconds: number }>)
+        .map((question) => ({
+          id: question.question_id,
+          order: question.play_order,
+          time_limit_seconds: question.time_limit_seconds,
+        }))
+      : ((questionsResult.data ?? []) as Array<{ id: string; order_index: number; time_limit_seconds: number }>)
+        .map((question) => ({
+          id: question.id,
+          order: question.order_index,
+          time_limit_seconds: question.time_limit_seconds,
+        }));
+
+    const answerRows = (answersResult.data ?? []) as unknown as ExportResultsResponse['answers'];
     const authoritativeTotals = new Map<string, number>();
     for (const row of answerRows) {
       authoritativeTotals.set(
@@ -71,8 +104,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
     const body: ExportResultsResponse = {
       exported_at: new Date().toISOString(),
+      questions,
       players,
-      answers: answerRows as unknown as ExportResultsResponse['answers'],
+      answers: answerRows,
       leaderboard: (leaderboardResult.data ?? []) as unknown as ExportResultsResponse['leaderboard'],
     };
 
