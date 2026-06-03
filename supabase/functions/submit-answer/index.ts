@@ -24,6 +24,8 @@ import type {
   ErrorResponse,
 } from '../_shared/types.ts';
 
+const HIGH_RES_EPOCH_ORIGIN_MS = Date.now() - performance.now();
+
 Deno.serve(async (req: Request): Promise<Response> => {
   const preflight = handleCors(req);
   if (preflight) return preflight;
@@ -329,20 +331,29 @@ function err(status: number, code: string, field?: string): Response {
 }
 
 function getHighResolutionEpochMs(): number {
-  return performance.timeOrigin + performance.now();
+  const epochMs = HIGH_RES_EPOCH_ORIGIN_MS + performance.now();
+  return Number.isFinite(epochMs) ? epochMs : Date.now();
 }
 
 function parseIsoEpochMs(value: string): number {
   const match = value.match(/^(.*?)(\.\d+)?(Z|[+-]\d{2}:\d{2})$/);
-  if (!match || !match[2]) return Date.parse(value);
+  if (!match || !match[2]) {
+    const epochMs = Date.parse(value);
+    if (!Number.isFinite(epochMs)) throw new Error(`Invalid timestamp: ${value}`);
+    return epochMs;
+  }
 
   const withoutFraction = `${match[1]}${match[3]}`;
   const wholeSecondMs = Date.parse(withoutFraction);
   const fractionalMs = Number(`0${match[2]}`) * 1000;
+  if (!Number.isFinite(wholeSecondMs) || !Number.isFinite(fractionalMs)) {
+    throw new Error(`Invalid timestamp: ${value}`);
+  }
   return wholeSecondMs + fractionalMs;
 }
 
 function formatEpochMsAsIso(epochMs: number): string {
+  if (!Number.isFinite(epochMs)) return new Date().toISOString();
   const totalMicros = Math.round(epochMs * 1000);
   const epochSeconds = Math.floor(totalMicros / 1_000_000);
   const micros = totalMicros - epochSeconds * 1_000_000;
