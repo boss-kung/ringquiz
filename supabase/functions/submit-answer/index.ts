@@ -117,11 +117,12 @@ Deno.serve(async (req: Request): Promise<Response> => {
     if (gs.current_question_id !== question_id) return err(400, 'wrong_question');
 
     // 4. Server-time deadline check (2-second grace window for network latency)
-    const serverNow = new Date();
-    const endsAt = gs.question_ends_at ? new Date(gs.question_ends_at) : null;
-    if (!endsAt) throw new Error('question_ends_at is null during question_open');
+    const serverNowMs = getHighResolutionEpochMs();
+    const serverNowIso = formatEpochMsAsIso(serverNowMs);
+    const endsAtMs = gs.question_ends_at ? parseIsoEpochMs(gs.question_ends_at) : null;
+    if (endsAtMs === null) throw new Error('question_ends_at is null during question_open');
     const GRACE_MS = 2_000;
-    if (serverNow.getTime() > endsAt.getTime() + GRACE_MS) return err(400, 'time_expired');
+    if (serverNowMs > endsAtMs + GRACE_MS) return err(400, 'time_expired');
 
     // 5. Idempotency: check for existing submission before expensive mask work
     const { data: existing } = await db
@@ -238,10 +239,12 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
     // 11. Compute score from server time.
     //     All time values come from server-side DB fields — never from client.
-    const startedAt = gs.question_started_at ? new Date(gs.question_started_at) : serverNow;
-    const totalMs = endsAt.getTime() - startedAt.getTime();
-    const remainingMs = endsAt.getTime() - serverNow.getTime();
-    const timeRemainingRatio = Math.max(0, Math.min(1, remainingMs / totalMs));
+    const startedAtMs = gs.question_started_at ? parseIsoEpochMs(gs.question_started_at) : serverNowMs;
+    const totalMs = Math.max(0, endsAtMs - startedAtMs);
+    const remainingMs = endsAtMs - serverNowMs;
+    const timeRemainingRatio = totalMs > 0
+      ? Math.max(0, Math.min(1, remainingMs / totalMs))
+      : 0;
 
     const baseScore = isCorrect
       ? Math.round(minCorrectScore + (maxScore - minCorrectScore) * timeRemainingRatio)
@@ -263,7 +266,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       question_id,
       selected_x_ratio: x_ratio,
       selected_y_ratio: y_ratio,
-      submitted_at: serverNow.toISOString(),
+      submitted_at: serverNowIso,
       time_remaining_ratio: timeRemainingRatio,
       is_correct: isCorrect,
       score,
@@ -323,6 +326,28 @@ Deno.serve(async (req: Request): Promise<Response> => {
 function err(status: number, code: string, field?: string): Response {
   const body: ErrorResponse = { error: code, ...(field ? { field } : {}) };
   return Response.json(body, { status, headers: corsHeaders });
+}
+
+function getHighResolutionEpochMs(): number {
+  return performance.timeOrigin + performance.now();
+}
+
+function parseIsoEpochMs(value: string): number {
+  const match = value.match(/^(.*?)(\.\d+)?(Z|[+-]\d{2}:\d{2})$/);
+  if (!match || !match[2]) return Date.parse(value);
+
+  const withoutFraction = `${match[1]}${match[3]}`;
+  const wholeSecondMs = Date.parse(withoutFraction);
+  const fractionalMs = Number(`0${match[2]}`) * 1000;
+  return wholeSecondMs + fractionalMs;
+}
+
+function formatEpochMsAsIso(epochMs: number): string {
+  const totalMicros = Math.round(epochMs * 1000);
+  const epochSeconds = Math.floor(totalMicros / 1_000_000);
+  const micros = totalMicros - epochSeconds * 1_000_000;
+  const baseIso = new Date(epochSeconds * 1000).toISOString();
+  return baseIso.replace(/\.\d{3}Z$/, `.${String(micros).padStart(6, '0')}Z`);
 }
 
 async function syncPlayerTotalScore(
