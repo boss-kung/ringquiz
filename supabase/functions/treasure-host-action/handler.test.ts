@@ -74,6 +74,17 @@ Deno.test('get_setup returns the active game so a Host can resume after refresh'
   assert.deepEqual((await responseJson(response)).activeGame, activeGame);
 });
 
+Deno.test('get_lobby_status reports a Player who linked before the Host opened the lobby', async () => {
+  const activeGame = { id: 'existing', phase: 'waiting', current_round: 0 };
+  const response = await handleHostAction({ action: 'get_lobby_status', pin: '1234' }, deps({
+    getActiveGame: async () => activeGame,
+    getProfile: async () => ({ id: 'profile-1', auth_user_id: 'player-auth-user' }),
+  }));
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await responseJson(response), { ok: true, game: activeGame, playerConnected: true });
+});
+
 Deno.test('create_game returns the active game idempotently instead of a 409', async () => {
   const activeGame = { id: 'existing', phase: 'waiting', current_round: 0 };
   let createCalls = 0;

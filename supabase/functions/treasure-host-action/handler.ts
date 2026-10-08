@@ -5,6 +5,7 @@ import type { HostDeps, TqGame } from '../_shared/treasure-repository.ts';
 
 export type HostAction =
   | 'get_setup'
+  | 'get_lobby_status'
   | 'save_question'
   | 'save_chest_type'
   | 'delete_chest_type'
@@ -90,6 +91,11 @@ export async function handleHostAction(request: HostActionRequest, deps: HostDep
           return { ...setting, questionCount: roundQuestions.length || setting.questionCount, questionType: firstType ?? setting.questionType, noMistake: firstType === 'no_mistake' || setting.noMistake };
         });
         return ok({ ok: true, activeGame, questions, chests, rewards, roundSettings });
+      }
+      case 'get_lobby_status': {
+        const game = await repo.getActiveGame?.() ?? null;
+        const profile = await repo.getProfile?.();
+        return ok({ ok: true, game, playerConnected: Boolean(profile?.auth_user_id) });
       }
       case 'save_question': {
         if (!repo.saveQuestion) return fail(500, 'repository_method_missing', 'Question repository is not configured');
