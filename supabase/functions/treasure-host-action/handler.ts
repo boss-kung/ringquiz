@@ -118,7 +118,8 @@ export async function handleHostAction(request: HostActionRequest, deps: HostDep
       }
       case 'create_game': {
         if (!repo.getQuestionDefinitions || !repo.createGame) return fail(500, 'repository_method_missing', 'Game repository is not configured');
-        if (await repo.getActiveGame?.()) return fail(409, 'active_game_exists', 'An active game already exists');
+        const activeGame = await repo.getActiveGame?.();
+        if (activeGame) return ok({ ok: true, game: activeGame, reused: true });
         const configSnapshot = payload.configSnapshot && typeof payload.configSnapshot === 'object' ? payload.configSnapshot as Record<string, unknown> : {};
         const roundSettings = normalizeRoundSettings(configSnapshot.roundSettings);
         const settingsValidation = validateRoundSettings(roundSettings);

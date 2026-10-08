@@ -74,23 +74,20 @@ Deno.test('get_setup returns the active game so a Host can resume after refresh'
   assert.deepEqual((await responseJson(response)).activeGame, activeGame);
 });
 
-Deno.test('second active game returns 409', async () => {
-  const questions = Array.from({ length: 50 }, (_, index) => ({
-    roundNo: index < 10 ? 1 : index < 20 ? 2 : Math.floor((index - 20) / 5) + 3,
-    position: index < 20 ? (index % 10) + 1 : (index % 5) + 1,
-    questionType: index < 20 ? 'true_false' : 'multiple_choice',
-    prompt: `Q${index}`,
-    keyword: `K${index}`,
-    choices: ['A', 'B'],
-    correctAnswer: 'A',
-    difficulty: 1,
-  }));
+Deno.test('create_game returns the active game idempotently instead of a 409', async () => {
+  const activeGame = { id: 'existing', phase: 'waiting', current_round: 0 };
+  let createCalls = 0;
   const response = await handleHostAction({ action: 'create_game', pin: '1234' }, deps({
-    getActiveGame: async () => ({ id: 'existing', phase: 'waiting' }),
-    getQuestionDefinitions: async () => questions,
+    getActiveGame: async () => activeGame,
+    createGame: async (input) => {
+      createCalls += 1;
+      return { id: 'new-game', phase: 'waiting', ...input };
+    },
   }));
-  assert.equal(response.status, 409);
-  assert.equal((await responseJson(response)).error.code, 'active_game_exists');
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await responseJson(response), { ok: true, game: activeGame, reused: true });
+  assert.equal(createCalls, 0);
 });
 
 Deno.test('Host completes and cancels redemptions through repository state transitions', async () => {
