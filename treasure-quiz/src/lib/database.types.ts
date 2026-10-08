@@ -34,7 +34,7 @@ export type Database = {
         Update: Partial<Database['public']['Tables']['tq_chest_types']['Row']>;
       };
       tq_chest_opens: {
-        Row: { id: string; game_id: string; player_profile_id: string; chest_key: string; purchase_index: number; gold_cost: number; gem_cost: number; status: string; result_satang: number | null; opened_at: string | null; idempotency_key: string; created_at: string };
+        Row: { id: string; game_id: string; player_profile_id: string; chest_key: string; purchase_index: number; gold_cost: number; gem_cost: number; status: string; result_satang: number | null; wallet_entry_id: string | null; opened_at: string | null; idempotency_key: string; created_at: string };
         Insert: Partial<Database['public']['Tables']['tq_chest_opens']['Row']>;
         Update: Partial<Database['public']['Tables']['tq_chest_opens']['Row']>;
       };

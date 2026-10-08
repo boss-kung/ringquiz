@@ -3,6 +3,7 @@ import type {
   ChestType,
   QuestionDefinition,
 } from './treasure-types.ts';
+import { drawWeightedReward } from './treasure-game.ts';
 
 export interface TqProfile {
   id: string;
@@ -63,6 +64,15 @@ export interface TqBet {
   [key: string]: unknown;
 }
 
+export interface TqChestOpen {
+  id: string;
+  chest_key?: string;
+  status?: string;
+  result_satang?: number | null;
+  wallet_entry_id?: string | null;
+  [key: string]: unknown;
+}
+
 export interface CreateGameInput {
   playerProfileId: string;
   gold: number;
@@ -115,6 +125,12 @@ export interface TreasureRepository {
   insertAnswer?: (input: InsertAnswerInput) => Promise<TqAnswer>;
   getCurrentQuestion?: (gameId: string, roundNo: number) => Promise<TqQuestion | null>;
   revealRound?: (gameId: string, roundNo: number) => Promise<TqRound>;
+  getChestTypes?: () => Promise<any[]>;
+  submitChestCart?: (input: { gameId: string; profileId: string; cart: unknown[]; discountTarget?: string }) => Promise<TqChestOpen[]>;
+  getChestOpen?: (id: string) => Promise<TqChestOpen | null>;
+  openChest?: (id: string) => Promise<TqChestOpen>;
+  openAllChests?: (gameId: string, profileId: string) => Promise<TqChestOpen[]>;
+  getWallet?: (profileId: string) => Promise<{ balanceSatang: number; entries: any[] }>;
 }
 
 export interface HostDeps {
@@ -137,7 +153,7 @@ export function createTreasureRepository(client: any): TreasureRepository {
     return data as T | null;
   };
 
-  return {
+  const repository: TreasureRepository = {
     authenticate: async (accessToken) => {
       const { data, error } = await client.auth.getUser(accessToken);
       if (error || !data?.user) return null;
@@ -280,5 +296,80 @@ export function createTreasureRepository(client: any): TreasureRepository {
       if (!round) throw new Error('Round not found');
       return round;
     },
+    getChestTypes: async () => {
+      const { data, error } = await client.from('tq_chest_types').select('*').eq('enabled', true).order('gold_cost');
+      if (error) throw new Error(error.message);
+      return (data ?? []).map((row: any) => ({ key: row.key, name: row.name, goldCost: row.gold_cost, gemCost: row.gem_cost, rewardTable: row.reward_table }));
+    },
+    submitChestCart: async ({ gameId, profileId, cart, discountTarget }) => {
+      const game = await single<any>(client.from('tq_games').select('gold,gems').eq('id', gameId));
+      const chestTypes = await (async () => {
+        const { data, error } = await client.from('tq_chest_types').select('*').eq('enabled', true);
+        if (error) throw new Error(error.message);
+        return data ?? [];
+      })();
+      const byKey = new Map<string, any>(chestTypes.map((row: any) => [row.key, row] as [string, any]));
+      let gold = 0;
+      let gems = 0;
+      const rows: any[] = [];
+      let closeoutRequested = false;
+      for (const item of cart as any[]) {
+        if (item.key === 'closeout') {
+          closeoutRequested = true;
+          continue;
+        }
+        const chest = byKey.get(item.key);
+        if (!chest) continue;
+        gold += chest.gold_cost * item.quantity;
+        gems += chest.gem_cost * item.quantity;
+        for (let index = 0; index < item.quantity; index += 1) rows.push({ game_id: gameId, player_profile_id: profileId, chest_key: item.key, gold_cost: chest.gold_cost, gem_cost: chest.gem_cost, purchase_index: rows.length + 1, idempotency_key: `${gameId}:${rows.length + 1}` });
+      }
+      if (discountTarget) gold = Math.max(0, gold - 100);
+      if (closeoutRequested) {
+        const remainder = (game?.gold ?? 0) - gold;
+        if (remainder >= 1 && remainder <= 99) {
+          const consolation = byKey.get('consolation');
+          if (consolation) rows.push({ game_id: gameId, player_profile_id: profileId, chest_key: 'consolation', gold_cost: remainder, gem_cost: 0, purchase_index: rows.length + 1, idempotency_key: `${gameId}:${rows.length + 1}` });
+          gold += remainder;
+        }
+      }
+      const { data: inserted, error } = await client.from('tq_chest_opens').insert(rows).select('*');
+      if (error) throw new Error(error.message);
+      const { error: gameError } = await client.from('tq_games').update({ gold: Math.max(0, (game?.gold ?? 0) - gold), gems: Math.max(0, (game?.gems ?? 0) - gems), phase: 'chest_opening' }).eq('id', gameId);
+      if (gameError) throw new Error(gameError.message);
+      return (inserted ?? []) as TqChestOpen[];
+    },
+    getChestOpen: async (id) => single<TqChestOpen>(client.from('tq_chest_opens').select('*').eq('id', id)),
+    openChest: async (id) => {
+      const open = await single<any>(client.from('tq_chest_opens').select('*').eq('id', id));
+      if (!open) throw new Error('Chest purchase not found');
+      if (open.status === 'opened') return open as TqChestOpen;
+      const chest = await single<any>(client.from('tq_chest_types').select('reward_table').eq('key', open.chest_key));
+      if (!chest) throw new Error('Chest type not found');
+      const table = (chest.reward_table ?? []).map((reward: any) => ({ amountSatang: reward.amount_satang, weight: reward.weight }));
+      const resultSatang = drawWeightedReward(table, Math.random());
+      const { data: walletEntry, error: walletError } = await client.from('tq_wallet_entries').insert({ player_profile_id: open.player_profile_id, amount_satang: resultSatang, entry_type: 'chest_reward', reference_id: open.id, idempotency_key: `chest:${open.id}` }).select().single();
+      if (walletError) throw new Error(walletError.message);
+      const profile = await single<any>(client.from('tq_player_profile').select('balance_satang').eq('id', open.player_profile_id));
+      const { error: profileError } = await client.from('tq_player_profile').update({ balance_satang: (profile?.balance_satang ?? 0) + resultSatang }).eq('id', open.player_profile_id);
+      if (profileError) throw new Error(profileError.message);
+      const { data: updated, error } = await client.from('tq_chest_opens').update({ status: 'opened', result_satang: resultSatang, opened_at: new Date().toISOString(), wallet_entry_id: walletEntry.id }).eq('id', id).select().single();
+      if (error) throw new Error(error.message);
+      return updated as TqChestOpen;
+    },
+    openAllChests: async (gameId, profileId) => {
+      const { data, error } = await client.from('tq_chest_opens').select('id,status').eq('game_id', gameId).eq('player_profile_id', profileId).order('purchase_index');
+      if (error) throw new Error(error.message);
+      const result: TqChestOpen[] = [];
+      for (const row of data ?? []) result.push(await (row.status === 'opened' ? single<TqChestOpen>(client.from('tq_chest_opens').select('*').eq('id', row.id)) : repository.openChest!(row.id)) as TqChestOpen);
+      return result;
+    },
+    getWallet: async (profileId) => {
+      const profile = await single<any>(client.from('tq_player_profile').select('balance_satang').eq('id', profileId));
+      const { data, error } = await client.from('tq_wallet_entries').select('*').eq('player_profile_id', profileId).order('created_at', { ascending: false });
+      if (error) throw new Error(error.message);
+      return { balanceSatang: profile?.balance_satang ?? 0, entries: data ?? [] };
+    },
   };
+  return repository;
 }

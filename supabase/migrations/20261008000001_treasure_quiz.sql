@@ -190,7 +190,8 @@ values
   ('silver', 'หีบเงิน', 300, 0, '[{"amount_satang":50,"weight":55},{"amount_satang":100,"weight":35},{"amount_satang":200,"weight":10}]'::jsonb),
   ('gold', 'หีบทอง', 700, 1, '[{"amount_satang":100,"weight":50},{"amount_satang":200,"weight":30},{"amount_satang":500,"weight":18},{"amount_satang":1000,"weight":2}]'::jsonb),
   ('diamond', 'หีบเพชร', 1500, 3, '[{"amount_satang":500,"weight":50},{"amount_satang":1000,"weight":30},{"amount_satang":2000,"weight":17},{"amount_satang":5000,"weight":2},{"amount_satang":10000,"weight":1}]'::jsonb),
-  ('crystal', 'หีบคริสตัลเล็ก', 0, 1, '[{"amount_satang":10,"weight":60},{"amount_satang":50,"weight":30},{"amount_satang":100,"weight":10}]'::jsonb)
+  ('crystal', 'หีบคริสตัลเล็ก', 0, 1, '[{"amount_satang":10,"weight":60},{"amount_satang":50,"weight":30},{"amount_satang":100,"weight":10}]'::jsonb),
+  ('consolation', 'หีบปลอบใจ', 0, 0, '[{"amount_satang":1,"weight":100}]'::jsonb)
 on conflict (key) do nothing;
 
 insert into public.tq_reward_catalog (title, reward_kind, cost_satang)

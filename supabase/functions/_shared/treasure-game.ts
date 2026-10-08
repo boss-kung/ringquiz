@@ -77,6 +77,13 @@ export const DEFAULT_CHEST_TYPES: ChestType[] = [
       { amountSatang: 100, weight: 10 },
     ],
   },
+  {
+    key: 'consolation',
+    name: 'หีบปลอบใจ',
+    goldCost: 0,
+    gemCost: 0,
+    rewardTable: [{ amountSatang: 1, weight: 100 }],
+  },
 ];
 
 const BASE_GOLD_BY_ROUND: Record<number, number> = {
@@ -239,12 +246,18 @@ export function quoteChestCart(input: ChestCartInput): ChestCartQuote {
   let totalGold = 0;
   let totalGems = 0;
   let discountApplied = false;
+  let closeoutRequested = false;
 
   if (!Number.isInteger(input.gold) || input.gold < 0) errors.push('Gold balance must be a non-negative integer');
   if (!Number.isInteger(input.gems) || input.gems < 0) errors.push('Gem balance must be a non-negative integer');
   if (input.cart.length === 0) errors.push('Cart cannot be empty');
 
   for (const item of input.cart) {
+    if (item.key === 'closeout') {
+      if (item.quantity !== 1) errors.push('Closeout must be exactly one chest');
+      closeoutRequested = true;
+      continue;
+    }
     const chest = byKey.get(item.key);
     if (!chest) {
       errors.push(`Unknown chest: ${item.key}`);
@@ -261,9 +274,18 @@ export function quoteChestCart(input: ChestCartInput): ChestCartQuote {
 
   if (input.discountTarget && !discountApplied) errors.push('Discount target must be included in the cart');
   if (input.discountTarget === 'copper' || input.discountTarget === 'crystal') errors.push('Copper and Crystal cannot receive a discount');
+  if (input.discountTarget === 'closeout' || input.discountTarget === 'consolation') errors.push('Closeout and Consolation cannot receive a discount');
   if (discountApplied) totalGold = Math.max(0, totalGold - 100);
 
-  const rawRemainingGold = input.gold - totalGold;
+  let rawRemainingGold = input.gold - totalGold;
+  if (closeoutRequested) {
+    if (rawRemainingGold >= 1 && rawRemainingGold <= 99) {
+      totalGold += rawRemainingGold;
+      rawRemainingGold = 0;
+    } else {
+      errors.push('Closeout requires 1–99 remaining gold');
+    }
+  }
   const remainingGold = rawRemainingGold >= 0 && rawRemainingGold < 100 ? 0 : rawRemainingGold;
   const remainingGems = input.gems - totalGems;
   if (rawRemainingGold < 0) errors.push('Not enough gold');

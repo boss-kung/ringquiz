@@ -105,3 +105,41 @@ Deno.test('buy_event rejects non-checkpoint and insufficient balance', async () 
   assert.equal(insufficient.status, 409);
   assert.equal((await insufficient.json()).error.code, 'insufficient_gems');
 });
+
+Deno.test('submit_chest_cart rejects a cart that leaves resources and gives a completion suggestion', async () => {
+  const response = await handlePlayerAction({ action: 'submit_chest_cart', accessToken: 'jwt', payload: { gameId: 'game-1', cart: [{ key: 'copper', quantity: 1 }] } }, deps({
+    getGame: async () => ({ id: 'game-1', phase: 'prize_shop', gold: 250, gems: 0, player_profile_id: 'profile-1' }),
+  }));
+  assert.equal(response.status, 409);
+  assert.equal((await response.json()).error.code, 'incomplete_chest_cart');
+});
+
+Deno.test('open_chest is idempotent and returns the first wallet result', async () => {
+  let openCount = 0;
+  const first = { id: 'open-1', status: 'opened', result_satang: 100, wallet_entry_id: 'wallet-1' };
+  const response = await handlePlayerAction({ action: 'open_chest', accessToken: 'jwt', payload: { gameId: 'game-1', chestOpenId: 'open-1' } }, deps({
+    getChestOpen: async () => first,
+    openChest: async () => { openCount += 1; return first; },
+  }));
+  assert.equal(response.status, 200);
+  assert.equal(openCount, 0);
+  assert.equal((await response.json()).chest.result_satang, 100);
+});
+
+Deno.test('get_wallet returns integer satang entries', async () => {
+  const response = await handlePlayerAction({ action: 'get_wallet', accessToken: 'jwt', payload: {} }, deps({
+    getWallet: async () => ({ balanceSatang: 101, entries: [{ amount_satang: 1 }] }),
+  }));
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).wallet.balanceSatang, 101);
+});
+
+Deno.test('zero-resource Player receives one consolation chest', async () => {
+  let received: unknown[] = [];
+  const response = await handlePlayerAction({ action: 'submit_chest_cart', accessToken: 'jwt', payload: { gameId: 'game-1', cart: [] } }, deps({
+    getGame: async () => ({ id: 'game-1', phase: 'prize_shop', gold: 0, gems: 0, player_profile_id: 'profile-1' }),
+    submitChestCart: async (input) => { received = input.cart; return [{ id: 'open-1', chest_key: 'consolation' }]; },
+  }));
+  assert.equal(response.status, 200);
+  assert.deepEqual(received, [{ key: 'consolation', quantity: 1 }]);
+});

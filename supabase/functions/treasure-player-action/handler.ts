@@ -1,5 +1,5 @@
 import { corsHeaders } from '../_shared/cors.ts';
-import { drawEventForChoice, eventCost, isEventCheckpoint, type EventChoice } from '../_shared/treasure-game.ts';
+import { DEFAULT_CHEST_TYPES, drawEventForChoice, eventCost, isEventCheckpoint, quoteChestCart, type EventChoice } from '../_shared/treasure-game.ts';
 import type { BetType } from '../_shared/treasure-types.ts';
 import type { PlayerDeps, TqGame, TqQuestion, TqRound } from '../_shared/treasure-repository.ts';
 
@@ -107,6 +107,40 @@ export async function handlePlayerAction(request: PlayerActionRequest, deps: Pla
         if (repo.updateRound && round) await repo.updateRound(round.id, { event_choice: choice, event_result: event, active_effects: event.durationRounds ? [event] : [] });
         const updatedGame = await repo.updateGame(game.id, { gold: (game.gold ?? 0) - cost.gold, gems: (game.gems ?? 0) - cost.gems });
         return reply({ ok: true, already_submitted: false, event, game: updatedGame });
+      }
+      case 'submit_chest_cart': {
+        if (!repo.getGame) return fail(500, 'repository_method_missing', 'Chest repository is not configured');
+        const game = await repo.getGame(String(payload.gameId ?? ''));
+        if (!game) return fail(404, 'game_not_found', 'Game not found');
+        const cart = Array.isArray(payload.cart) ? payload.cart : [];
+        if (cart.length === 0 && (game.gold ?? 0) === 0 && (game.gems ?? 0) === 0) cart.push({ key: 'consolation', quantity: 1 });
+        const chestTypes = repo.getChestTypes ? await repo.getChestTypes() : DEFAULT_CHEST_TYPES;
+        const quote = quoteChestCart({ gold: game.gold ?? 0, gems: game.gems ?? 0, cart: cart as any, discountTarget: payload.discountTarget ? String(payload.discountTarget) : undefined, chestTypes: chestTypes as any });
+        if (!quote.ok) {
+          const suggestion = quote.remainingGold >= 100 ? { key: 'copper', quantity: Math.floor(quote.remainingGold / 100) } : quote.remainingGold > 0 ? { key: 'closeout', quantity: 1 } : quote.remainingGems > 0 ? { key: 'crystal', quantity: quote.remainingGems } : null;
+          return fail(409, 'incomplete_chest_cart', JSON.stringify({ message: quote.errors.join('; ') || 'Spend all resources before confirming', suggestion }));
+        }
+        if (!repo.submitChestCart) return fail(500, 'repository_method_missing', 'Chest repository is not configured');
+        const profileId = profile.id;
+        const opens = await repo.submitChestCart({ gameId: game.id, profileId, cart, discountTarget: payload.discountTarget ? String(payload.discountTarget) : undefined });
+        return reply({ ok: true, opens, quote });
+      }
+      case 'open_chest': {
+        if (!repo.getChestOpen || !repo.openChest) return fail(500, 'repository_method_missing', 'Chest opening repository is not configured');
+        const chestOpenId = String(payload.chestOpenId ?? '');
+        const existing = await repo.getChestOpen(chestOpenId);
+        if (existing?.status === 'opened') return reply({ ok: true, already_opened: true, chest: existing });
+        const chest = await repo.openChest(chestOpenId);
+        return reply({ ok: true, already_opened: false, chest });
+      }
+      case 'open_all_chests': {
+        if (!repo.openAllChests) return fail(500, 'repository_method_missing', 'Chest opening repository is not configured');
+        const opens = await repo.openAllChests(String(payload.gameId ?? ''), profile.id);
+        return reply({ ok: true, opens });
+      }
+      case 'get_wallet': {
+        if (!repo.getWallet) return fail(500, 'repository_method_missing', 'Wallet repository is not configured');
+        return reply({ ok: true, wallet: await repo.getWallet(profile.id) });
       }
       case 'submit_answer': {
         if (!repo.getRound || !repo.getQuestion || !repo.getAnswer || !repo.insertAnswer) return fail(500, 'repository_method_missing', 'Answer repository is not configured');

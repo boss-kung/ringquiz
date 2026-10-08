@@ -148,4 +148,21 @@ button:disabled { cursor: not-allowed; opacity: .42; }
 .event-reveal { display: grid; justify-items: center; gap: 8px; margin: 28px auto; padding: 34px; width: min(100%, 420px); border-radius: 26px; color: #fff0c9; background: radial-gradient(circle at 50% 0, rgba(255, 218, 155, .22), rgba(49, 32, 67, .82)); border: 1px solid rgba(255, 218, 155, .3); box-shadow: 0 22px 80px rgba(0,0,0,.25); }
 .event-reveal strong { font-size: 1.45rem; letter-spacing: .04em; }
 .event-reveal span { color: #c9b9cf; }
+.shop-remaining { display: flex; gap: 8px; flex-wrap: wrap; margin: 18px 0 12px; }
+.shop-remaining strong { padding: 9px 12px; color: #ffe7b0; border-radius: 999px; background: rgba(255, 218, 155, .1); border: 1px solid rgba(255, 218, 155, .18); font-size: .86rem; }
+.chest-grid { display: grid; gap: 10px; }
+.chest-card { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 16px; border: 1px solid rgba(196, 166, 255, .17); border-radius: 20px; background: rgba(36, 28, 48, .9); }
+.chest-card h2 { margin: 3px 0 0; color: #fff5df; font-size: 1.08rem; }
+.chest-card p { margin: 0; }
+.quantity-controls { display: flex; align-items: center; gap: 10px; }
+.quantity-controls button { width: 34px; height: 34px; border-radius: 50%; color: #ffe9ba; border: 1px solid #655176; background: #291e37; cursor: pointer; font-size: 1.1rem; }
+.quantity-controls strong { min-width: 1.5rem; color: #fff; text-align: center; }
+.suggestion-button { margin-top: 14px; }
+.confirm-shop { width: 100%; margin-top: 18px; }
+.open-list, .wallet-entries { display: grid; gap: 8px; margin: 20px 0; }
+.open-row, .wallet-row { display: flex; align-items: center; justify-content: space-between; padding: 14px; color: #f9edda; border: 1px solid #443653; border-radius: 14px; background: #211a2a; }
+.open-row strong, .wallet-row strong { color: #a8e9b6; }
+.wallet-total { display: grid; gap: 8px; margin: 24px 0; padding: 24px; text-align: center; border: 1px solid rgba(255, 218, 155, .24); border-radius: 24px; background: radial-gradient(circle at 50% 0, rgba(255, 218, 155, .18), rgba(36, 28, 48, .86)); }
+.wallet-total span { color: #c4b6ca; }
+.wallet-total strong { color: #ffe5a6; font-size: 2.6rem; letter-spacing: -.05em; }
 @media (max-width: 600px) { .player-screen { padding-inline: 14px; } .player-screen .screen-header { flex-direction: column; } .resource-bar { justify-content: flex-start; } .bet-grid, .event-grid { grid-template-columns: 1fr; } .event-choice { min-height: 110px; } }

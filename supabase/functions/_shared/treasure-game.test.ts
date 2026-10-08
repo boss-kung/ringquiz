@@ -182,3 +182,9 @@ Deno.test('active effects normalize and reject unknown codes', () => {
   assert.deepEqual(normalizeActiveEffect({ code: 'mistake_shield', durationRounds: 1 }), { code: 'mistake_shield', durationRounds: 1 });
   assert.equal(normalizeActiveEffect({ code: 'not-a-real-event', durationRounds: 1 }), null);
 });
+
+Deno.test('closeout and consolation carts consume the exact remaining resources', () => {
+  assert.equal(quoteChestCart({ gold: 37, gems: 0, cart: [{ key: 'closeout', quantity: 1 }] }).remainingGold, 0);
+  assert.equal(quoteChestCart({ gold: 0, gems: 0, cart: [{ key: 'consolation', quantity: 1 }] }).ok, true);
+  assert.equal(quoteChestCart({ gold: 100, gems: 0, cart: [{ key: 'copper', quantity: 1 }], discountTarget: 'copper' }).ok, false);
+});
