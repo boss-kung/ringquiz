@@ -1,5 +1,15 @@
 export type QuestionType = 'true_false' | 'multiple_choice' | 'time_bank' | 'no_mistake';
 export type BetType = 'safe' | 'gold' | 'diamond';
+export type TimingMode = 'per_question' | 'total';
+
+export interface RoundSettings {
+  roundNo: number;
+  questionType: QuestionType;
+  questionCount: number;
+  timingMode: TimingMode;
+  timeLimitSec: number;
+  noMistake: boolean;
+}
 
 export interface QuestionDefinition {
   roundNo: number;

@@ -7,6 +7,7 @@ import type {
   QuestionDefinition,
   RoundSettlement,
   RoundSettlementInput,
+  RoundSettings,
   ValidationResult,
   WeightedReward,
 } from './treasure-types.ts';
@@ -85,6 +86,45 @@ export const DEFAULT_CHEST_TYPES: ChestType[] = [
     rewardTable: [{ amountSatang: 1, weight: 100 }],
   },
 ];
+
+export const DEFAULT_ROUND_SETTINGS: RoundSettings[] = [
+  ...[1, 2].map((roundNo) => ({ roundNo, questionType: 'true_false' as const, questionCount: 10, timingMode: 'per_question' as const, timeLimitSec: 10, noMistake: false })),
+  ...[3, 4].map((roundNo) => ({ roundNo, questionType: 'multiple_choice' as const, questionCount: 5, timingMode: 'per_question' as const, timeLimitSec: 10, noMistake: false })),
+  ...[5, 6].map((roundNo) => ({ roundNo, questionType: 'time_bank' as const, questionCount: 5, timingMode: 'total' as const, timeLimitSec: 30, noMistake: false })),
+  ...[7, 8].map((roundNo) => ({ roundNo, questionType: 'no_mistake' as const, questionCount: 5, timingMode: 'per_question' as const, timeLimitSec: 15, noMistake: true })),
+];
+
+export function normalizeRoundSettings(value: unknown): RoundSettings[] {
+  const candidates = Array.isArray(value) ? value : [];
+  return DEFAULT_ROUND_SETTINGS.map((fallback) => {
+    const candidate = candidates.find((item) => item && typeof item === 'object' && Number((item as Record<string, unknown>).roundNo) === fallback.roundNo) as Record<string, unknown> | undefined;
+    if (!candidate) return { ...fallback };
+    const questionType = ['true_false', 'multiple_choice', 'time_bank', 'no_mistake'].includes(String(candidate.questionType)) ? String(candidate.questionType) as RoundSettings['questionType'] : fallback.questionType;
+    const timingMode = candidate.timingMode === 'total' ? 'total' : 'per_question';
+    return {
+      roundNo: fallback.roundNo,
+      questionType,
+      questionCount: Number(candidate.questionCount),
+      timingMode,
+      timeLimitSec: Number(candidate.timeLimitSec),
+      noMistake: Boolean(candidate.noMistake ?? questionType === 'no_mistake'),
+    };
+  });
+}
+
+export function validateRoundSettings(settings: RoundSettings[]): ValidationResult {
+  const errors: string[] = [];
+  if (settings.length !== 8) errors.push('Round settings must contain exactly 8 rounds');
+  const seen = new Set<number>();
+  for (const setting of settings) {
+    if (seen.has(setting.roundNo)) errors.push(`Round ${setting.roundNo} is duplicated`);
+    seen.add(setting.roundNo);
+    if (!Number.isInteger(setting.roundNo) || setting.roundNo < 1 || setting.roundNo > 8) errors.push(`Round ${setting.roundNo} has an invalid round number`);
+    if (!Number.isInteger(setting.questionCount) || setting.questionCount < 1 || setting.questionCount > 10) errors.push(`Round ${setting.roundNo} question count must be between 1 and 10`);
+    if (!Number.isInteger(setting.timeLimitSec) || setting.timeLimitSec < 1 || setting.timeLimitSec > 600) errors.push(`Round ${setting.roundNo} time must be between 1 and 600 seconds`);
+  }
+  return { ok: errors.length === 0, errors };
+}
 
 const BASE_GOLD_BY_ROUND: Record<number, number> = {
   1: 15,
@@ -218,12 +258,12 @@ export function drawWeightedReward(table: WeightedReward[], randomUnit: number):
   return table[table.length - 1].amountSatang;
 }
 
-export function validateQuestionSet(questions: QuestionDefinition[]): ValidationResult {
+export function validateQuestionSet(questions: QuestionDefinition[], settings: RoundSettings[] = DEFAULT_ROUND_SETTINGS): ValidationResult {
   const errors: string[] = [];
-  if (questions.length !== 50) errors.push(`Question set must contain exactly 50 questions (received ${questions.length})`);
-  const requiredPerRound = new Map<number, number>([
-    [1, 10], [2, 10], [3, 5], [4, 5], [5, 5], [6, 5], [7, 5], [8, 5],
-  ]);
+  const expectedTotal = settings.reduce((sum, setting) => sum + setting.questionCount, 0);
+  if (questions.length !== expectedTotal) errors.push(`Question set must contain exactly ${expectedTotal} questions (received ${questions.length})`);
+  const requiredPerRound = new Map(settings.map((setting) => [setting.roundNo, setting.questionCount]));
+  const expectedTypes = new Map(settings.map((setting) => [setting.roundNo, setting.questionType]));
   const counts = new Map<number, number>();
   for (const [index, question] of questions.entries()) {
     counts.set(question.roundNo, (counts.get(question.roundNo) ?? 0) + 1);
@@ -232,6 +272,9 @@ export function validateQuestionSet(questions: QuestionDefinition[]): Validation
     if (new Set(question.choices).size !== question.choices.length) errors.push(`Question ${index + 1} has duplicate choices`);
     if (!question.choices.includes(question.correctAnswer)) errors.push(`Question ${index + 1} is missing the correct answer in choices`);
     if (question.roundNo < 1 || question.roundNo > 8) errors.push(`Question ${index + 1} has an invalid round number`);
+    if (expectedTypes.get(question.roundNo) && expectedTypes.get(question.roundNo) !== question.questionType) errors.push(`Question ${index + 1} does not match the configured round type`);
+    if (question.questionType === 'true_false' && question.choices.length !== 2) errors.push(`Question ${index + 1} must have exactly 2 choices`);
+    if (question.questionType !== 'true_false' && question.choices.length < 2) errors.push(`Question ${index + 1} must have at least 2 choices`);
   }
   for (const [roundNo, required] of requiredPerRound) {
     if ((counts.get(roundNo) ?? 0) !== required) errors.push(`Round ${roundNo} must contain ${required} questions`);

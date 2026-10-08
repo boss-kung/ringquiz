@@ -35,6 +35,35 @@ Deno.test('create_game rejects invalid 50-question setup', async () => {
   assert.equal((await responseJson(response)).error.code, 'invalid_question_set');
 });
 
+Deno.test('create_game persists custom round settings and accepts their question counts', async () => {
+  const roundSettings = Array.from({ length: 8 }, (_, index) => ({
+    roundNo: index + 1,
+    questionType: index < 2 ? 'true_false' : index < 4 ? 'multiple_choice' : index < 6 ? 'time_bank' : 'no_mistake',
+    questionCount: 1,
+    timingMode: 'per_question',
+    timeLimitSec: 15,
+    noMistake: index >= 6,
+  }));
+  const questions = roundSettings.map((setting) => ({
+    roundNo: setting.roundNo,
+    position: 1,
+    questionType: setting.questionType,
+    prompt: `Q${setting.roundNo}`,
+    keyword: `K${setting.roundNo}`,
+    choices: setting.questionType === 'true_false' ? ['ใช่', 'ไม่ใช่'] : ['A', 'B', 'C'],
+    correctAnswer: setting.questionType === 'true_false' ? 'ใช่' : 'A',
+    difficulty: 1,
+  }));
+  let createdInput: any;
+  const response = await handleHostAction({ action: 'create_game', pin: '1234', payload: { questions, configSnapshot: { roundSettings } } }, deps({
+    getQuestionDefinitions: async () => questions,
+    saveQuestion: async (question) => question,
+    createGame: async (input) => { createdInput = input; return { id: 'game-1', phase: 'waiting', ...input }; },
+  }));
+  assert.equal(response.status, 200);
+  assert.deepEqual(createdInput.configSnapshot.roundSettings, roundSettings);
+});
+
 Deno.test('second active game returns 409', async () => {
   const questions = Array.from({ length: 50 }, (_, index) => ({
     roundNo: index < 10 ? 1 : index < 20 ? 2 : Math.floor((index - 20) / 5) + 3,

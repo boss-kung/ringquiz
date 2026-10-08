@@ -9,6 +9,7 @@ import {
   eventCost,
   isEventCheckpoint,
   normalizeActiveEffect,
+  validateRoundSettings,
 } from './treasure-game.ts';
 import type { QuestionDefinition, WeightedReward } from './treasure-types.ts';
 
@@ -122,6 +123,30 @@ Deno.test('question validation rejects duplicate choices and missing correct cho
   assert.equal(result.ok, false);
   assert.ok(result.errors.some((error) => error.includes('duplicate')));
   assert.ok(result.errors.some((error) => error.includes('correct answer')));
+});
+
+Deno.test('question validation accepts a Host-defined question count per round', () => {
+  const settings = Array.from({ length: 8 }, (_, index) => ({
+    roundNo: index + 1,
+    questionType: index < 2 ? 'true_false' as const : index < 4 ? 'multiple_choice' as const : index < 6 ? 'time_bank' as const : 'no_mistake' as const,
+    questionCount: 1,
+    timingMode: 'per_question' as const,
+    timeLimitSec: 15,
+    noMistake: index >= 6,
+  }));
+  const questions = settings.map((setting) => ({
+    roundNo: setting.roundNo,
+    position: 1,
+    questionType: setting.questionType,
+    prompt: `Question ${setting.roundNo}`,
+    keyword: `Keyword ${setting.roundNo}`,
+    choices: setting.questionType === 'true_false' ? ['ใช่', 'ไม่ใช่'] : ['A', 'B', 'C'],
+    correctAnswer: setting.questionType === 'true_false' ? 'ใช่' : 'A',
+    difficulty: 1,
+  }));
+
+  assert.equal(validateRoundSettings(settings).ok, true);
+  assert.equal(validateQuestionSet(questions, settings).ok, true);
 });
 
 Deno.test('weighted reward boundaries are deterministic', () => {

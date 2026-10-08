@@ -185,6 +185,7 @@ export async function handlePlayerAction(request: PlayerActionRequest, deps: Pla
         const opens = repo.getChestOpens ? await repo.getChestOpens(game.id, profile.id) : [];
         const wallet = repo.getWallet ? await repo.getWallet(profile.id) : null;
         const rewards = repo.getRewardCatalog ? await repo.getRewardCatalog() : [];
+        const chests = repo.getChestTypes ? await repo.getChestTypes() : [];
         return reply({
           ok: true,
           game,
@@ -194,6 +195,7 @@ export async function handlePlayerAction(request: PlayerActionRequest, deps: Pla
           opens,
           wallet,
           rewards,
+          chests,
         });
       }
       default:

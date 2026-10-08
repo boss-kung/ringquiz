@@ -117,8 +117,11 @@ export interface TreasureRepository {
   getActiveGame?: () => Promise<TqGame | null>;
   getQuestionDefinitions?: () => Promise<any[]>;
   saveQuestion?: (question: QuestionDefinition & { id?: string }) => Promise<unknown>;
+  deactivateQuestionsAfter?: (roundNo: number, maxPosition: number) => Promise<unknown>;
   saveChestType?: (chest: ChestType) => Promise<unknown>;
+  deactivateChestType?: (key: string) => Promise<unknown>;
   saveRewardItem?: (item: Record<string, unknown>) => Promise<unknown>;
+  deactivateRewardItem?: (id: string) => Promise<unknown>;
   createGame?: (input: CreateGameInput) => Promise<TqGame>;
   getGame?: (gameId: string) => Promise<TqGame | null>;
   updateGame?: (gameId: string, patch: Record<string, unknown>) => Promise<any>;
@@ -217,6 +220,11 @@ export function createTreasureRepository(client: any): TreasureRepository {
       if (error) throw new Error(error.message);
       return data;
     },
+    deactivateQuestionsAfter: async (roundNo, maxPosition) => {
+      const { data, error } = await client.from('tq_questions').update({ active: false }).eq('round_no', roundNo).gt('position', maxPosition).select();
+      if (error) throw new Error(error.message);
+      return data;
+    },
     saveChestType: async (chest) => {
       const { data, error } = await client.from('tq_chest_types').upsert({
         key: chest.key, name: chest.name, gold_cost: chest.goldCost, gem_cost: chest.gemCost, reward_table: chest.rewardTable, enabled: true,
@@ -224,13 +232,32 @@ export function createTreasureRepository(client: any): TreasureRepository {
       if (error) throw new Error(error.message);
       return data;
     },
+    deactivateChestType: async (key) => {
+      const { data, error } = await client.from('tq_chest_types').update({ enabled: false }).eq('key', key).select().single();
+      if (error) throw new Error(error.message);
+      return data;
+    },
     saveRewardItem: async (item) => {
-      const { data, error } = await client.from('tq_reward_catalog').insert({
-        title: String(item.title ?? ''),
+      const title = String(item.title ?? '').trim();
+      const reward = {
+        title,
         reward_kind: String(item.rewardKind ?? item.reward_kind ?? 'cash'),
         cost_satang: Number(item.costSatang ?? item.cost_satang ?? 0),
         active: true,
-      }).select().single();
+      };
+      const id = String(item.id ?? '');
+      const existing = id && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)
+        ? await single<any>(client.from('tq_reward_catalog').select('id').eq('id', id))
+        : await single<any>(client.from('tq_reward_catalog').select('id').eq('title', title));
+      const query = existing
+        ? client.from('tq_reward_catalog').update(reward).eq('id', existing.id)
+        : client.from('tq_reward_catalog').insert(reward);
+      const { data, error } = await query.select().single();
+      if (error) throw new Error(error.message);
+      return data;
+    },
+    deactivateRewardItem: async (id) => {
+      const { data, error } = await client.from('tq_reward_catalog').update({ active: false }).eq('id', id).select().single();
       if (error) throw new Error(error.message);
       return data;
     },
