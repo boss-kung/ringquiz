@@ -41,6 +41,10 @@ export interface HostActionCaller {
   <T = unknown>(action: HostActionName, payload?: unknown): Promise<T>;
 }
 
+export interface PlayerActionCaller {
+  <T = unknown>(action: string, payload?: unknown, pin?: string): Promise<T>;
+}
+
 export interface GameSnapshot {
   id: string;
   phase: string;

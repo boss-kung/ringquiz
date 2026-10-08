@@ -1,10 +1,12 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { getAppPath } from './lib/routing';
-import { getStoredHostPin, hostAction } from './lib/api';
+import { getStoredHostPin, hostAction, playerAction } from './lib/api';
 import HostLoginScreen from './screens/host/HostLoginScreen';
 import HostSetupScreen from './screens/host/HostSetupScreen';
 import HostLobbyScreen from './screens/host/HostLobbyScreen';
 import type { ChestDraft, GameSnapshot, QuestionDraft } from './domain/types';
+import PlayerLoginScreen from './screens/player/PlayerLoginScreen';
+import PlayerBriefingScreen from './screens/player/PlayerBriefingScreen';
 
 const starterChests: ChestDraft[] = [
   { key: 'copper', name: 'หีบทองแดง', goldCost: 100, gemCost: 0, rewardTable: [{ amountSatang: 1, weight: 60 }, { amountSatang: 10, weight: 30 }, { amountSatang: 50, weight: 10 }] },
@@ -35,13 +37,22 @@ function HostShell() {
 }
 
 function PlayerShell() {
-  return (
-    <main className="app-shell app-shell-player">
-      <p className="eyebrow">TREASURE QUIZ</p>
-      <h1>Treasure Quiz</h1>
-      <p className="shell-copy">ตอบให้ดี เก็บทองให้พอ แล้วไปเปิดหีบด้วยกัน</p>
-    </main>
-  );
+  const [authenticated, setAuthenticated] = useState(false);
+  const [game, setGame] = useState<GameSnapshot | null>(null);
+  if (!authenticated) return <PlayerLoginScreen action={playerAction} onSuccess={() => setAuthenticated(true)} />;
+  if (!game) return <PlayerWaitingScreen onGame={setGame} />;
+  return <PlayerBriefingScreen gameId={game.id} roundNo={game.current_round ?? 1} gold={game.gold ?? 200} gems={game.gems ?? 0} questions={[]} action={playerAction} />;
+}
+
+function PlayerWaitingScreen({ onGame }: { onGame: (game: GameSnapshot) => void }) {
+  const [message, setMessage] = useState('กำลังตามหาเกมปัจจุบัน…');
+  useEffect(() => {
+    void playerAction<{ game?: GameSnapshot }>('restore_game').then((response) => {
+      if (response.game) onGame(response.game);
+      else setMessage('รอ Host สร้างเกม แล้วหน้านี้จะอัปเดตเอง');
+    }).catch(() => setMessage('เชื่อมต่อแล้ว แต่ยังไม่มีเกมที่กำลังเล่น'));
+  }, [onGame]);
+  return <main className="player-screen auth-screen"><p className="eyebrow">PLAYER · LOBBY</p><h1>รอ Host เปิดโต๊ะ</h1><p className="lead">{message}</p></main>;
 }
 
 export default function App() {
