@@ -142,6 +142,10 @@ export async function handlePlayerAction(request: PlayerActionRequest, deps: Pla
         if (!repo.getWallet) return fail(500, 'repository_method_missing', 'Wallet repository is not configured');
         return reply({ ok: true, wallet: await repo.getWallet(profile.id) });
       }
+      case 'get_reward_catalog': {
+        if (!repo.getRewardCatalog) return fail(500, 'repository_method_missing', 'Reward catalog repository is not configured');
+        return reply({ ok: true, rewards: await repo.getRewardCatalog() });
+      }
       case 'request_redemption': {
         if (!repo.requestRedemption) return fail(500, 'repository_method_missing', 'Redemption repository is not configured');
         const rewardCatalogId = String(payload.rewardCatalogId ?? '');
@@ -172,12 +176,25 @@ export async function handlePlayerAction(request: PlayerActionRequest, deps: Pla
       case 'restore_game': {
         const game = payload.gameId && repo.getGame ? await repo.getGame(String(payload.gameId)) : await repo.getActiveGame?.();
         if (!game) return fail(404, 'game_not_found', 'Game not found');
-        const roundNo = Number(game.current_round ?? 1);
+        const roundNo = Number(game.current_round ?? 0) || 1;
         const round = repo.getRound ? await repo.getRound(game.id, roundNo) : null;
         const question = repo.getCurrentQuestion
           ? await repo.getCurrentQuestion(game.id, roundNo)
           : repo.getQuestion ? await repo.getQuestion(String(game.current_question_id ?? payload.questionId ?? 'current-question')) : null;
-        return reply({ ok: true, game, round: sanitizeRound(round), question: sanitizeQuestion(question) });
+        const questions = repo.getQuestionsForRound ? await repo.getQuestionsForRound(roundNo) : question ? [question] : [];
+        const opens = repo.getChestOpens ? await repo.getChestOpens(game.id, profile.id) : [];
+        const wallet = repo.getWallet ? await repo.getWallet(profile.id) : null;
+        const rewards = repo.getRewardCatalog ? await repo.getRewardCatalog() : [];
+        return reply({
+          ok: true,
+          game,
+          round: sanitizeRound(round),
+          question: sanitizeQuestion(question),
+          questions: questions.map((item) => sanitizeQuestion(item)),
+          opens,
+          wallet,
+          rewards,
+        });
       }
       default:
         return fail(400, 'unknown_action', 'Unknown Player action');

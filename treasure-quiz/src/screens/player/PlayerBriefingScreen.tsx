@@ -2,12 +2,12 @@ import { useMemo, useState } from 'react';
 import ResourceBar from '../../components/ResourceBar';
 import type { PlayerActionCaller } from '../../domain/types';
 
-interface BriefingQuestion { id: string; keyword: string; prompt: string; choices?: string[]; }
+interface BriefingQuestion { id: string; keyword?: string; prompt: string; choices?: string[]; }
 interface PlayerBriefingScreenProps { gameId: string; roundNo: number; gold: number; gems: number; questions: BriefingQuestion[]; action: PlayerActionCaller; onPlacedBet?: () => void; }
 
 export default function PlayerBriefingScreen({ gameId, roundNo, gold, gems, questions, action, onPlacedBet }: PlayerBriefingScreenProps) {
   const [busy, setBusy] = useState(false);
-  const keywords = useMemo(() => questions.map((question) => question.keyword).filter(Boolean).sort((a, b) => a.localeCompare(b)), [questions]);
+  const keywords = useMemo(() => questions.map((question) => question.keyword ?? '').filter((keyword) => keyword.length > 0).sort((a, b) => a.localeCompare(b)), [questions]);
   const target = roundNo <= 2 ? 'ถูกอย่างน้อย 8/10' : roundNo <= 6 ? 'ถูกอย่างน้อย 4/5' : 'ถูกครบ 5/5';
   const placeBet = async (betType: 'safe' | 'gold' | 'diamond') => {
     if (busy) return;

@@ -1,5 +1,5 @@
 import { corsHeaders } from '../_shared/cors.ts';
-import { validateQuestionSet } from '../_shared/treasure-game.ts';
+import { isEventCheckpoint, validateQuestionSet } from '../_shared/treasure-game.ts';
 import type { QuestionDefinition } from '../_shared/treasure-types.ts';
 import type { HostDeps, TqGame } from '../_shared/treasure-repository.ts';
 
@@ -15,6 +15,7 @@ export type HostAction =
   | 'advance_phase'
   | 'pause_game'
   | 'resume_game'
+  | 'get_redemptions'
   | 'complete_redemption'
   | 'cancel_redemption'
   | 'adjust_wallet';
@@ -46,6 +47,18 @@ function payloadQuestion(payload: Record<string, unknown>): QuestionDefinition {
   };
 }
 
+function roundDurationSeconds(roundNo: number): number {
+  if (roundNo <= 2) return 100;
+  if (roundNo <= 4) return 50;
+  if (roundNo <= 6) return 30;
+  return 75;
+}
+
+function sanitizeQuestion(question: Record<string, unknown>): Record<string, unknown> {
+  const { correctAnswer: _camel, correct_answer: _snake, ...safe } = question;
+  return safe;
+}
+
 async function requireGame(deps: HostDeps, gameId?: string): Promise<TqGame | null> {
   if (gameId && deps.repository.getGame) return deps.repository.getGame(gameId);
   return deps.repository.getActiveGame?.() ?? null;
@@ -74,7 +87,19 @@ export async function handleHostAction(request: HostActionRequest, deps: HostDep
       case 'create_game': {
         if (!repo.getQuestionDefinitions || !repo.createGame) return fail(500, 'repository_method_missing', 'Game repository is not configured');
         if (await repo.getActiveGame?.()) return fail(409, 'active_game_exists', 'An active game already exists');
-        const questions = await repo.getQuestionDefinitions();
+        const submittedQuestions = Array.isArray(payload.questions) ? payload.questions.map((question) => payloadQuestion(question as Record<string, unknown>)) : [];
+        if (submittedQuestions.length > 0) {
+          const submittedValidation = validateQuestionSet(submittedQuestions);
+          if (!submittedValidation.ok) return fail(400, 'invalid_question_set', submittedValidation.errors.join('; '));
+          if (repo.saveQuestion) for (const question of submittedQuestions) await repo.saveQuestion(question);
+        }
+        if (Array.isArray(payload.chests) && repo.saveChestType) {
+          for (const chest of payload.chests) await repo.saveChestType(chest as never);
+        }
+        if (Array.isArray(payload.rewards) && repo.saveRewardItem) {
+          for (const reward of payload.rewards) await repo.saveRewardItem(reward as Record<string, unknown>);
+        }
+        const questions = submittedQuestions.length > 0 ? submittedQuestions : await repo.getQuestionDefinitions();
         const validation = validateQuestionSet(questions);
         if (!validation.ok) return fail(400, 'invalid_question_set', validation.errors.join('; '));
         const profile = await repo.getProfile?.();
@@ -101,18 +126,25 @@ export async function handleHostAction(request: HostActionRequest, deps: HostDep
       case 'start_round': {
         const game = await requireGame(deps, String(payload.gameId ?? ''));
         if (!game || !repo.updateGame) return fail(404, 'game_not_found', 'Game not found');
-        const roundNo = Number(payload.roundNo ?? Number(game.current_round ?? 0) + 1);
+        const requestedRound = Number(payload.roundNo);
+        const currentRound = Number(game.current_round ?? 0);
+        const roundNo = Number.isInteger(requestedRound) && requestedRound > currentRound ? requestedRound : currentRound + 1;
+        const startedAt = new Date();
+        const deadline = new Date(startedAt.getTime() + roundDurationSeconds(roundNo) * 1000);
         const updated = await repo.updateGame(game.id, { phase: 'playing', current_round: roundNo });
         const round = repo.getRound ? await repo.getRound(game.id, roundNo) : null;
-        const createdRound = round ?? (repo.createRound ? await repo.createRound(game.id, roundNo) : null);
-        return ok({ ok: true, game: updated, round: createdRound });
+        const createdRound = round
+          ? repo.updateRound ? await repo.updateRound(round.id, { phase: 'playing', started_at: startedAt.toISOString(), deadline: deadline.toISOString() }) : round
+          : repo.createRound ? await repo.createRound(game.id, roundNo, { phase: 'playing', started_at: startedAt.toISOString(), deadline: deadline.toISOString() }) : null;
+        const questions = repo.getQuestionsForRound ? await repo.getQuestionsForRound(roundNo) : [];
+        return ok({ ok: true, game: updated, round: createdRound, questions: questions.map((question) => sanitizeQuestion(question as unknown as Record<string, unknown>)) });
       }
       case 'reveal_round': {
         const game = await requireGame(deps, String(payload.gameId ?? ''));
         if (!game) return fail(404, 'game_not_found', 'Game not found');
         if (!repo.revealRound) return fail(500, 'repository_method_missing', 'Reveal repository is not configured');
         const round = await repo.revealRound(game.id, Number(payload.roundNo ?? game.current_round ?? 1));
-        return ok({ ok: true, round });
+        return ok({ ok: true, round, game: repo.getGame ? await repo.getGame(game.id) : undefined });
       }
       case 'advance_phase': {
         const game = await requireGame(deps, String(payload.gameId ?? ''));
@@ -141,6 +173,10 @@ export async function handleHostAction(request: HostActionRequest, deps: HostDep
         const profile = await repo.getProfile?.();
         if (!profile) return fail(404, 'profile_not_found', 'Player profile not found');
         return ok({ ok: true, wallet: await repo.adjustWallet({ profileId: String(payload.profileId ?? profile.id), amountSatang, reason }) });
+      }
+      case 'get_redemptions': {
+        if (!repo.getRedemptions) return fail(500, 'repository_method_missing', 'Redemption repository is not configured');
+        return ok({ ok: true, redemptions: await repo.getRedemptions() });
       }
       default:
         return fail(400, 'unknown_action', 'Unknown Host action');

@@ -4,6 +4,7 @@ export type HostActionName =
   | 'save_question' | 'save_chest_type' | 'save_reward_item' | 'create_game'
   | 'start_game' | 'open_briefing' | 'start_round' | 'reveal_round'
   | 'advance_phase' | 'pause_game' | 'resume_game'
+  | 'get_redemptions'
   | 'complete_redemption' | 'cancel_redemption' | 'adjust_wallet';
 
 export interface QuestionDraft {

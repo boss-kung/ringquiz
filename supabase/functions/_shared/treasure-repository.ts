@@ -3,7 +3,7 @@ import type {
   ChestType,
   QuestionDefinition,
 } from './treasure-types.ts';
-import { drawWeightedReward } from './treasure-game.ts';
+import { drawWeightedReward, isEventCheckpoint, settleRound } from './treasure-game.ts';
 
 export interface TqProfile {
   id: string;
@@ -126,12 +126,14 @@ export interface TreasureRepository {
   linkProfile?: (input: LinkProfileInput) => Promise<TqProfile>;
   joinGame?: (gameId: string, profileId: string) => Promise<TqGame>;
   getRound?: (gameId: string, roundNo: number) => Promise<TqRound | null>;
-  createRound?: (gameId: string, roundNo: number) => Promise<TqRound>;
+  createRound?: (gameId: string, roundNo: number, patch?: Record<string, unknown>) => Promise<TqRound>;
   updateRound?: (roundId: string, patch: Record<string, unknown>) => Promise<TqRound>;
   placeBet?: (input: PlaceBetInput) => Promise<TqBet>;
   getQuestion?: (questionId: string) => Promise<TqQuestion | null>;
   getAnswer?: (gameId: string, roundNo: number, questionId?: string) => Promise<TqAnswer | null>;
   insertAnswer?: (input: InsertAnswerInput) => Promise<TqAnswer>;
+  getAnswers?: (gameId: string, roundNo: number) => Promise<TqAnswer[]>;
+  getQuestionsForRound?: (roundNo: number) => Promise<TqQuestion[]>;
   getCurrentQuestion?: (gameId: string, roundNo: number) => Promise<TqQuestion | null>;
   revealRound?: (gameId: string, roundNo: number) => Promise<TqRound>;
   getChestTypes?: () => Promise<any[]>;
@@ -139,8 +141,11 @@ export interface TreasureRepository {
   getChestOpen?: (id: string) => Promise<TqChestOpen | null>;
   openChest?: (id: string) => Promise<TqChestOpen>;
   openAllChests?: (gameId: string, profileId: string) => Promise<TqChestOpen[]>;
+  getChestOpens?: (gameId: string, profileId: string) => Promise<TqChestOpen[]>;
   getWallet?: (profileId: string) => Promise<{ balanceSatang: number; entries: any[] }>;
+  getRewardCatalog?: () => Promise<any[]>;
   requestRedemption?: (input: { profileId: string; rewardCatalogId: string }) => Promise<TqRedemption>;
+  getRedemptions?: () => Promise<TqRedemption[]>;
   getRedemption?: (id: string) => Promise<TqRedemption | null>;
   completeRedemption?: (id: string) => Promise<TqRedemption>;
   cancelRedemption?: (id: string) => Promise<TqRedemption>;
@@ -196,8 +201,7 @@ export function createTreasureRepository(client: any): TreasureRepository {
       }));
     },
     saveQuestion: async (question) => {
-      const { data, error } = await client.from('tq_questions').upsert({
-        id: question.id,
+      const row: Record<string, unknown> = {
         round_no: question.roundNo,
         position: question.position,
         question_type: question.questionType,
@@ -207,7 +211,9 @@ export function createTreasureRepository(client: any): TreasureRepository {
         correct_answer: question.correctAnswer,
         difficulty: question.difficulty,
         active: true,
-      }).select().single();
+      };
+      if (question.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(question.id)) row.id = question.id;
+      const { data, error } = await client.from('tq_questions').upsert(row, { onConflict: 'round_no,position' }).select().single();
       if (error) throw new Error(error.message);
       return data;
     },
@@ -219,7 +225,12 @@ export function createTreasureRepository(client: any): TreasureRepository {
       return data;
     },
     saveRewardItem: async (item) => {
-      const { data, error } = await client.from('tq_reward_catalog').insert(item).select().single();
+      const { data, error } = await client.from('tq_reward_catalog').insert({
+        title: String(item.title ?? ''),
+        reward_kind: String(item.rewardKind ?? item.reward_kind ?? 'cash'),
+        cost_satang: Number(item.costSatang ?? item.cost_satang ?? 0),
+        active: true,
+      }).select().single();
       if (error) throw new Error(error.message);
       return data;
     },
@@ -258,8 +269,8 @@ export function createTreasureRepository(client: any): TreasureRepository {
       return game;
     },
     getRound: async (gameId, roundNo) => single<TqRound>(client.from('tq_rounds').select('*').eq('game_id', gameId).eq('round_no', roundNo)),
-    createRound: async (gameId, roundNo) => {
-      const { data, error } = await client.from('tq_rounds').insert({ game_id: gameId, round_no: roundNo }).select().single();
+    createRound: async (gameId, roundNo, patch = {}) => {
+      const { data, error } = await client.from('tq_rounds').insert({ game_id: gameId, round_no: roundNo, ...patch }).select().single();
       if (error) throw new Error(error.message);
       return data as TqRound;
     },
@@ -299,16 +310,68 @@ export function createTreasureRepository(client: any): TreasureRepository {
       if (error) throw new Error(error.message);
       return data as TqAnswer;
     },
+    getAnswers: async (gameId, roundNo) => {
+      const { data, error } = await client.from('tq_answers').select('*').eq('game_id', gameId).eq('round_no', roundNo).order('submitted_at');
+      if (error) throw new Error(error.message);
+      return (data ?? []) as TqAnswer[];
+    },
+    getQuestionsForRound: async (roundNo) => {
+      const { data, error } = await client.from('tq_questions').select('*').eq('active', true).eq('round_no', roundNo).order('position');
+      if (error) throw new Error(error.message);
+      return (data ?? []).map((row: any) => ({
+        ...row,
+        roundNo: row.round_no,
+        position: row.position,
+        questionType: row.question_type,
+        correctAnswer: row.correct_answer,
+        choices: Array.isArray(row.choices) ? row.choices : [],
+      })) as TqQuestion[];
+    },
     getCurrentQuestion: async (gameId, roundNo) => {
       const { data, error } = await client.from('tq_answers').select('question_id').eq('game_id', gameId).eq('round_no', roundNo).order('submitted_at', { ascending: false }).limit(1).maybeSingle();
-      if (error || !data) return null;
-      const row = await single<any>(client.from('tq_questions').select('*').eq('id', data.question_id));
+      if (error) throw new Error(error.message);
+      const row = data
+        ? await single<any>(client.from('tq_questions').select('*').eq('id', data.question_id))
+        : (await repository.getQuestionsForRound!(roundNo))[0];
       return row ? { ...row, roundNo: row.round_no, position: row.position, questionType: row.question_type, correctAnswer: row.correct_answer } as TqQuestion : null;
     },
     revealRound: async (gameId, roundNo) => {
       const round = await single<TqRound>(client.from('tq_rounds').select('*').eq('game_id', gameId).eq('round_no', roundNo));
       if (!round) throw new Error('Round not found');
-      return round;
+      if (round.correct_count !== null && round.correct_count !== undefined) return round;
+      const game = await single<TqGame>(client.from('tq_games').select('*').eq('id', gameId));
+      if (!game) throw new Error('Game not found');
+      const answers = await repository.getAnswers!(gameId, roundNo);
+      const questions = await repository.getQuestionsForRound!(roundNo);
+      const correctCount = answers.filter((answer) => answer.is_correct).length;
+      const answeredCount = answers.length;
+      const secondsRemaining = round.deadline ? Math.max(0, Math.floor((Date.parse(String(round.deadline)) - Date.now()) / 1000)) : null;
+      const eventEffects = Array.isArray(round.active_effects)
+        ? round.active_effects.map((effect) => typeof effect === 'object' && effect && 'code' in effect ? String((effect as { code?: unknown }).code) : '').filter(Boolean)
+        : [];
+      const settlement = settleRound({
+        roundNo,
+        questionCount: questions.length,
+        correctCount,
+        secondsRemaining,
+        betType: (round.bet_type ?? 'safe') as any,
+        eventEffects,
+        noMistakeFailed: roundNo >= 7 && answers.some((answer) => answer.is_correct === false),
+      });
+      const updatedRound = await repository.updateRound!(round.id, {
+        phase: 'round_result',
+        correct_count: correctCount,
+        answered_count: answeredCount,
+        base_reward_gold: settlement.baseGold,
+        bonus_reward_gold: settlement.roundBonusGold + settlement.eventBonusGold + settlement.betBonusGold + settlement.stakeGoldRefund,
+        achievement_gems: settlement.gemsEarned + settlement.stakeGemRefund,
+      });
+      await repository.updateGame!(gameId, {
+        gold: (game.gold ?? 0) + settlement.goldCredit,
+        gems: (game.gems ?? 0) + settlement.gemsEarned + settlement.stakeGemRefund,
+        phase: roundNo === 8 ? 'prize_shop' : isEventCheckpoint(roundNo) ? 'event' : 'round_result',
+      });
+      return updatedRound;
     },
     getChestTypes: async () => {
       const { data, error } = await client.from('tq_chest_types').select('*').eq('enabled', true).order('gold_cost');
@@ -376,7 +439,13 @@ export function createTreasureRepository(client: any): TreasureRepository {
       if (error) throw new Error(error.message);
       const result: TqChestOpen[] = [];
       for (const row of data ?? []) result.push(await (row.status === 'opened' ? single<TqChestOpen>(client.from('tq_chest_opens').select('*').eq('id', row.id)) : repository.openChest!(row.id)) as TqChestOpen);
+      await client.from('tq_games').update({ phase: 'finished' }).eq('id', gameId);
       return result;
+    },
+    getChestOpens: async (gameId, profileId) => {
+      const { data, error } = await client.from('tq_chest_opens').select('*').eq('game_id', gameId).eq('player_profile_id', profileId).order('purchase_index');
+      if (error) throw new Error(error.message);
+      return (data ?? []) as TqChestOpen[];
     },
     getWallet: async (profileId) => {
       const profile = await single<any>(client.from('tq_player_profile').select('balance_satang').eq('id', profileId));
@@ -384,12 +453,22 @@ export function createTreasureRepository(client: any): TreasureRepository {
       if (error) throw new Error(error.message);
       return { balanceSatang: profile?.balance_satang ?? 0, entries: data ?? [] };
     },
+    getRewardCatalog: async () => {
+      const { data, error } = await client.from('tq_reward_catalog').select('id,title,reward_kind,cost_satang').eq('active', true).order('cost_satang');
+      if (error) throw new Error(error.message);
+      return data ?? [];
+    },
     requestRedemption: async ({ profileId, rewardCatalogId }) => {
       const reward = await single<any>(client.from('tq_reward_catalog').select('id,cost_satang').eq('id', rewardCatalogId).eq('active', true));
       if (!reward) throw new Error('Reward catalog item not found');
       const { data, error } = await client.from('tq_redemptions').insert({ player_profile_id: profileId, reward_catalog_id: rewardCatalogId, cost_satang: reward.cost_satang, status: 'pending' }).select().single();
       if (error) throw new Error(error.message);
       return data as TqRedemption;
+    },
+    getRedemptions: async () => {
+      const { data, error } = await client.from('tq_redemptions').select('*, tq_reward_catalog(title)').order('created_at', { ascending: false });
+      if (error) throw new Error(error.message);
+      return (data ?? []).map((row: any) => ({ ...row, title: row.tq_reward_catalog?.title ?? null })) as TqRedemption[];
     },
     getRedemption: async (id) => single<TqRedemption>(client.from('tq_redemptions').select('*').eq('id', id)),
     completeRedemption: async (id) => {

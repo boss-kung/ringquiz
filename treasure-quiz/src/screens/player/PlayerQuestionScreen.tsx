@@ -9,6 +9,29 @@ import ServerTimer from '../../components/ServerTimer';
 interface PlayerQuestion { id: string; prompt: string; choices: string[]; questions?: RuntimeQuestion[]; }
 interface PlayerQuestionScreenProps { gameId: string; roundNo: number; question: PlayerQuestion; deadline: string | number; action: PlayerActionCaller; onComplete?: () => void; }
 
+interface SequentialRunnerProps {
+  questions: RuntimeQuestion[];
+  deadline: string | number;
+  trueFalse?: boolean;
+  onAnswer: (question: RuntimeQuestion, answer: string) => Promise<{ is_correct?: boolean } | void>;
+  onComplete?: () => void;
+}
+
+function SequentialRunner({ questions, deadline, trueFalse = false, onAnswer, onComplete }: SequentialRunnerProps) {
+  const [index, setIndex] = useState(0);
+  const [stopped, setStopped] = useState(false);
+  const question = questions[index];
+  const complete = () => { if (stopped) return; setStopped(true); onComplete?.(); };
+  if (!question || stopped) return <div className="question-card"><p>รอบจบแล้ว รอ Host เปิดผล</p></div>;
+  const answer = async (value: string) => {
+    await onAnswer(question, value);
+    if (index >= questions.length - 1) complete(); else setIndex((current) => current + 1);
+  };
+  return <div className="runner"><ServerTimer deadline={deadline} onExpire={complete} />{trueFalse
+    ? <TrueFalseQuestion key={question.id} prompt={question.prompt} onAnswer={answer} />
+    : <MultipleChoiceQuestion key={question.id} prompt={question.prompt} choices={question.choices} onAnswer={answer} />}</div>;
+}
+
 export default function PlayerQuestionScreen({ gameId, roundNo, question, deadline, action, onComplete }: PlayerQuestionScreenProps) {
   const [expired, setExpired] = useState(() => (typeof deadline === 'number' ? deadline : Date.parse(deadline)) <= Date.now());
   const [error, setError] = useState('');
@@ -19,5 +42,5 @@ export default function PlayerQuestionScreen({ gameId, roundNo, question, deadli
   };
   if (expired) return <main className="player-screen question-screen"><p className="eyebrow">ROUND {roundNo}</p><h1>หมดเวลา</h1><p className="lead">รอ Host เปิดผลรอบนี้</p></main>;
   const onExpire = () => setExpired(true);
-  return <main className="player-screen question-screen"><header className="screen-header"><div><p className="eyebrow">ROUND {roundNo} · PLAY</p><h1>ตอบให้ไวและแม่น</h1></div><ServerTimer deadline={deadline} onExpire={onExpire} /></header>{error ? <p role="alert" className="inline-error">{error}</p> : null}{roundNo <= 2 ? <TrueFalseQuestion prompt={question.prompt} onAnswer={(answer) => submit(questions[0], answer).then(onComplete).catch(() => setError('หมดเวลา หรือคำตอบนี้ถูกส่งไปแล้ว'))} /> : roundNo <= 4 ? <MultipleChoiceQuestion prompt={question.prompt} choices={question.choices} onAnswer={(answer) => submit(questions[0], answer).then(onComplete).catch(() => setError('หมดเวลา หรือคำตอบนี้ถูกส่งไปแล้ว'))} /> : roundNo <= 6 ? <TimeBankRunner questions={questions} deadline={deadline} onAnswer={submit} onComplete={onComplete} /> : <NoMistakeRunner questions={questions} deadline={deadline} onAnswer={submit} onComplete={() => onComplete?.()} />}</main>;
+  return <main className="player-screen question-screen"><header className="screen-header"><div><p className="eyebrow">ROUND {roundNo} · PLAY</p><h1>ตอบให้ไวและแม่น</h1></div><ServerTimer deadline={deadline} onExpire={onExpire} /></header>{error ? <p role="alert" className="inline-error">{error}</p> : null}{roundNo <= 2 ? <SequentialRunner questions={questions} deadline={deadline} trueFalse onAnswer={submit} onComplete={onComplete} /> : roundNo <= 4 ? <SequentialRunner questions={questions} deadline={deadline} onAnswer={submit} onComplete={onComplete} /> : roundNo <= 6 ? <TimeBankRunner questions={questions} deadline={deadline} onAnswer={submit} onComplete={onComplete} /> : <NoMistakeRunner questions={questions} deadline={deadline} onAnswer={submit} onComplete={() => onComplete?.()} />}</main>;
 }
