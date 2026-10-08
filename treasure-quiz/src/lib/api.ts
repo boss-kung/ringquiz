@@ -27,6 +27,12 @@ export const hostAction: HostActionCaller = async <T = unknown>(action: HostActi
 
 export const playerAction = async <T = unknown>(action: string, payload?: unknown, pin?: string): Promise<T> => {
   const client = getSupabaseClient();
+  const { data: sessionData, error: sessionError } = await client.auth.getSession();
+  if (sessionError) throw sessionError;
+  if (!sessionData.session) {
+    const { error } = await client.auth.signInAnonymously();
+    if (error) throw error;
+  }
   const { data, error } = await client.functions.invoke('treasure-player-action', {
     body: { action, pin, payload },
   });

@@ -131,11 +131,13 @@ export async function handleHostAction(request: HostActionRequest, deps: HostDep
         const roundNo = Number.isInteger(requestedRound) && requestedRound > currentRound ? requestedRound : currentRound + 1;
         const startedAt = new Date();
         const deadline = new Date(startedAt.getTime() + roundDurationSeconds(roundNo) * 1000);
+        const previousRound = roundNo > 1 && repo.getRound ? await repo.getRound(game.id, roundNo - 1) : null;
+        const inheritedEffects = Array.isArray(previousRound?.active_effects) ? previousRound?.active_effects : [];
         const updated = await repo.updateGame(game.id, { phase: 'playing', current_round: roundNo });
         const round = repo.getRound ? await repo.getRound(game.id, roundNo) : null;
         const createdRound = round
-          ? repo.updateRound ? await repo.updateRound(round.id, { phase: 'playing', started_at: startedAt.toISOString(), deadline: deadline.toISOString() }) : round
-          : repo.createRound ? await repo.createRound(game.id, roundNo, { phase: 'playing', started_at: startedAt.toISOString(), deadline: deadline.toISOString() }) : null;
+          ? repo.updateRound ? await repo.updateRound(round.id, { phase: 'playing', started_at: startedAt.toISOString(), deadline: deadline.toISOString(), active_effects: inheritedEffects }) : round
+          : repo.createRound ? await repo.createRound(game.id, roundNo, { phase: 'playing', started_at: startedAt.toISOString(), deadline: deadline.toISOString(), active_effects: inheritedEffects }) : null;
         const questions = repo.getQuestionsForRound ? await repo.getQuestionsForRound(roundNo) : [];
         return ok({ ok: true, game: updated, round: createdRound, questions: questions.map((question) => sanitizeQuestion(question as unknown as Record<string, unknown>)) });
       }
