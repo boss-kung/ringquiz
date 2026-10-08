@@ -75,6 +75,7 @@ export async function handleHostAction(request: HostActionRequest, deps: HostDep
   try {
     switch (request.action) {
       case 'get_setup': {
+        const activeGame = await repo.getActiveGame?.() ?? null;
         const questions = repo.getQuestionDefinitions ? await repo.getQuestionDefinitions() : [];
         const chests = repo.getChestTypes ? await repo.getChestTypes() : [];
         const rewards = (repo.getRewardCatalog ? await repo.getRewardCatalog() : []).map((reward: Record<string, unknown>) => ({
@@ -88,7 +89,7 @@ export async function handleHostAction(request: HostActionRequest, deps: HostDep
           const firstType = roundQuestions[0]?.questionType ?? roundQuestions[0]?.question_type;
           return { ...setting, questionCount: roundQuestions.length || setting.questionCount, questionType: firstType ?? setting.questionType, noMistake: firstType === 'no_mistake' || setting.noMistake };
         });
-        return ok({ ok: true, questions, chests, rewards, roundSettings });
+        return ok({ ok: true, activeGame, questions, chests, rewards, roundSettings });
       }
       case 'save_question': {
         if (!repo.saveQuestion) return fail(500, 'repository_method_missing', 'Question repository is not configured');

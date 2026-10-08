@@ -64,6 +64,16 @@ Deno.test('create_game persists custom round settings and accepts their question
   assert.deepEqual(createdInput.configSnapshot.roundSettings, roundSettings);
 });
 
+Deno.test('get_setup returns the active game so a Host can resume after refresh', async () => {
+  const activeGame = { id: 'existing', phase: 'waiting', current_round: 0 };
+  const response = await handleHostAction({ action: 'get_setup', pin: '1234' }, deps({
+    getActiveGame: async () => activeGame,
+  }));
+
+  assert.equal(response.status, 200);
+  assert.deepEqual((await responseJson(response)).activeGame, activeGame);
+});
+
 Deno.test('second active game returns 409', async () => {
   const questions = Array.from({ length: 50 }, (_, index) => ({
     roundNo: index < 10 ? 1 : index < 20 ? 2 : Math.floor((index - 20) / 5) + 3,
