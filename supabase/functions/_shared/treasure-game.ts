@@ -11,6 +11,13 @@ import type {
   WeightedReward,
 } from './treasure-types.ts';
 
+export type EventChoice = 'skip' | 'gold' | 'diamond';
+export interface ActiveEffect { code: string; durationRounds: number; }
+export const EVENT_CODES = [
+  'reward_boost_20', 'extra_keyword', 'bet_shield', 'mistake_shield',
+  'chest_discount_100', 'extra_time_5', 'tax_50', 'boss_question',
+] as const;
+
 export const DEFAULT_CHEST_TYPES: ChestType[] = [
   {
     key: 'copper',
@@ -158,8 +165,33 @@ export function settleRound(input: RoundSettlementInput): RoundSettlement {
 }
 
 export function applyEvent(input: EventInput): EventResult {
-  const durationRounds = input.code === 'reward_boost_20' ? 2 : 1;
+  const durationRounds = input.code === 'reward_boost_20' ? 2 : input.code === 'skip' ? 0 : 1;
   return { code: input.code, durationRounds };
+}
+
+export function isEventCheckpoint(roundNo: number): boolean {
+  return roundNo === 2 || roundNo === 4 || roundNo === 6;
+}
+
+export function eventCost(choice: EventChoice): { gold: number; gems: number } {
+  if (choice === 'gold') return { gold: 150, gems: 0 };
+  if (choice === 'diamond') return { gold: 0, gems: 1 };
+  return { gold: 0, gems: 0 };
+}
+
+export function normalizeActiveEffect(value: unknown): ActiveEffect | null {
+  if (!value || typeof value !== 'object') return null;
+  const candidate = value as { code?: unknown; durationRounds?: unknown };
+  if (typeof candidate.code !== 'string' || !EVENT_CODES.includes(candidate.code as typeof EVENT_CODES[number])) return null;
+  const durationRounds = Number(candidate.durationRounds);
+  if (!Number.isInteger(durationRounds) || durationRounds < 1) return null;
+  return { code: candidate.code, durationRounds };
+}
+
+export function drawEventForChoice(choice: EventChoice, randomUnit = Math.random()): EventResult {
+  if (choice === 'skip') return applyEvent({ code: 'skip' });
+  const index = Math.min(EVENT_CODES.length - 1, Math.floor(Math.max(0, Math.min(0.999999, randomUnit)) * EVENT_CODES.length));
+  return applyEvent({ code: EVENT_CODES[index] });
 }
 
 export function drawWeightedReward(table: WeightedReward[], randomUnit: number): number {

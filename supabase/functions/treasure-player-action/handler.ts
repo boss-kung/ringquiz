@@ -1,4 +1,5 @@
 import { corsHeaders } from '../_shared/cors.ts';
+import { drawEventForChoice, eventCost, isEventCheckpoint, type EventChoice } from '../_shared/treasure-game.ts';
 import type { BetType } from '../_shared/treasure-types.ts';
 import type { PlayerDeps, TqGame, TqQuestion, TqRound } from '../_shared/treasure-repository.ts';
 
@@ -88,6 +89,24 @@ export async function handlePlayerAction(request: PlayerActionRequest, deps: Pla
         const bet = await repo.placeBet({ gameId: game.id, roundNo, betType, stakeGold, stakeGems });
         const updatedGame = await repo.updateGame(game.id, { gold: (game.gold ?? 0) - stakeGold, gems: (game.gems ?? 0) - stakeGems });
         return reply({ ok: true, already_submitted: false, bet, game: updatedGame });
+      }
+      case 'buy_event': {
+        if (!repo.getGame || !repo.updateGame) return fail(500, 'repository_method_missing', 'Event repository is not configured');
+        const game = await repo.getGame(String(payload.gameId ?? ''));
+        if (!game) return fail(404, 'game_not_found', 'Game not found');
+        const roundNo = Number(game.current_round ?? 0);
+        if (!isEventCheckpoint(roundNo)) return fail(409, 'not_event_checkpoint', 'Events are available after rounds 2, 4 and 6');
+        const round = repo.getRound ? await repo.getRound(game.id, roundNo) : null;
+        if (round && (round as Record<string, unknown>).event_choice) return reply({ ok: true, already_submitted: true, event: (round as Record<string, unknown>).event_result });
+        const choice = String(payload.choice ?? 'skip') as EventChoice;
+        if (!['skip', 'gold', 'diamond'].includes(choice)) return fail(400, 'invalid_event_choice', 'Unknown event choice');
+        const cost = eventCost(choice);
+        if ((game.gold ?? 0) < cost.gold) return fail(409, 'insufficient_gold', 'Not enough gold for this event');
+        if ((game.gems ?? 0) < cost.gems) return fail(409, 'insufficient_gems', 'Not enough gems for this event');
+        const event = drawEventForChoice(choice);
+        if (repo.updateRound && round) await repo.updateRound(round.id, { event_choice: choice, event_result: event, active_effects: event.durationRounds ? [event] : [] });
+        const updatedGame = await repo.updateGame(game.id, { gold: (game.gold ?? 0) - cost.gold, gems: (game.gems ?? 0) - cost.gems });
+        return reply({ ok: true, already_submitted: false, event, game: updatedGame });
       }
       case 'submit_answer': {
         if (!repo.getRound || !repo.getQuestion || !repo.getAnswer || !repo.insertAnswer) return fail(500, 'repository_method_missing', 'Answer repository is not configured');

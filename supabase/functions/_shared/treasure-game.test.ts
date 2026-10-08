@@ -6,6 +6,9 @@ import {
   quoteChestCart,
   settleRound,
   validateQuestionSet,
+  eventCost,
+  isEventCheckpoint,
+  normalizeActiveEffect,
 } from './treasure-game.ts';
 import type { QuestionDefinition, WeightedReward } from './treasure-types.ts';
 
@@ -163,4 +166,19 @@ Deno.test('reward boost event returns an expiring effect', () => {
     code: 'reward_boost_20',
     durationRounds: 2,
   });
+});
+
+Deno.test('event checkpoints and costs are fixed', () => {
+  assert.equal(isEventCheckpoint(2), true);
+  assert.equal(isEventCheckpoint(4), true);
+  assert.equal(isEventCheckpoint(6), true);
+  assert.equal(isEventCheckpoint(3), false);
+  assert.deepEqual(eventCost('skip'), { gold: 0, gems: 0 });
+  assert.deepEqual(eventCost('gold'), { gold: 150, gems: 0 });
+  assert.deepEqual(eventCost('diamond'), { gold: 0, gems: 1 });
+});
+
+Deno.test('active effects normalize and reject unknown codes', () => {
+  assert.deepEqual(normalizeActiveEffect({ code: 'mistake_shield', durationRounds: 1 }), { code: 'mistake_shield', durationRounds: 1 });
+  assert.equal(normalizeActiveEffect({ code: 'not-a-real-event', durationRounds: 1 }), null);
 });

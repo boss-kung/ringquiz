@@ -81,3 +81,27 @@ Deno.test('current question response omits correct answer and unrevealed settlem
   assert.equal(body.round?.correct_count, undefined);
   assert.equal(body.round?.base_reward_gold, undefined);
 });
+
+Deno.test('buy_event only works at checkpoints and spends exactly one resource bundle', async () => {
+  let updatedGame: Record<string, unknown> | undefined;
+  const response = await handlePlayerAction({ action: 'buy_event', accessToken: 'jwt', payload: { gameId: 'game-1', choice: 'gold' } }, deps({
+    getGame: async () => ({ id: 'game-1', phase: 'event', current_round: 2, gold: 200, gems: 0, player_profile_id: 'profile-1' }),
+    getRound: async () => ({ id: 'round-1', game_id: 'game-1', round_no: 2, phase: 'event', event_choice: null }),
+    updateRound: async (_id, patch) => ({ id: 'round-1', ...patch }),
+    updateGame: async (_id, patch) => { updatedGame = patch; return { id: 'game-1', phase: 'event', ...patch }; },
+  }));
+  assert.equal(response.status, 200);
+  assert.equal(updatedGame?.gold, 50);
+});
+
+Deno.test('buy_event rejects non-checkpoint and insufficient balance', async () => {
+  const nonCheckpoint = await handlePlayerAction({ action: 'buy_event', accessToken: 'jwt', payload: { gameId: 'game-1', choice: 'gold' } }, deps({
+    getGame: async () => ({ id: 'game-1', phase: 'playing', current_round: 3, gold: 500, gems: 0, player_profile_id: 'profile-1' }),
+  }));
+  assert.equal(nonCheckpoint.status, 409);
+  const insufficient = await handlePlayerAction({ action: 'buy_event', accessToken: 'jwt', payload: { gameId: 'game-1', choice: 'diamond' } }, deps({
+    getGame: async () => ({ id: 'game-1', phase: 'event', current_round: 4, gold: 500, gems: 0, player_profile_id: 'profile-1' }),
+  }));
+  assert.equal(insufficient.status, 409);
+  assert.equal((await insufficient.json()).error.code, 'insufficient_gems');
+});
