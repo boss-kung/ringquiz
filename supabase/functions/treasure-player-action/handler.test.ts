@@ -143,3 +143,13 @@ Deno.test('zero-resource Player receives one consolation chest', async () => {
   assert.equal(response.status, 200);
   assert.deepEqual(received, [{ key: 'consolation', quantity: 1 }]);
 });
+
+Deno.test('request_redemption creates pending request without deducting wallet', async () => {
+  let requested = false;
+  const response = await handlePlayerAction({ action: 'request_redemption', accessToken: 'jwt', payload: { rewardCatalogId: 'reward-1' } }, deps({
+    requestRedemption: async (input) => { requested = true; return { id: 'redemption-1', status: 'pending', ...input }; },
+  }));
+  assert.equal(response.status, 200);
+  assert.equal(requested, true);
+  assert.equal((await response.json()).redemption.status, 'pending');
+});

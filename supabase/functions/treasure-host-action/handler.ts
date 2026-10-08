@@ -14,7 +14,10 @@ export type HostAction =
   | 'reveal_round'
   | 'advance_phase'
   | 'pause_game'
-  | 'resume_game';
+  | 'resume_game'
+  | 'complete_redemption'
+  | 'cancel_redemption'
+  | 'adjust_wallet';
 
 export interface HostActionRequest {
   action: HostAction | string;
@@ -117,11 +120,36 @@ export async function handleHostAction(request: HostActionRequest, deps: HostDep
         const phase = String(payload.phase ?? 'briefing');
         return ok({ ok: true, game: await repo.updateGame(game.id, { phase }) });
       }
+      case 'complete_redemption': {
+        if (!repo.completeRedemption) return fail(500, 'repository_method_missing', 'Redemption repository is not configured');
+        const redemptionId = String(payload.redemptionId ?? '');
+        if (!redemptionId) return fail(400, 'redemption_id_required', 'Redemption ID is required');
+        return ok({ ok: true, redemption: await repo.completeRedemption(redemptionId) });
+      }
+      case 'cancel_redemption': {
+        if (!repo.cancelRedemption) return fail(500, 'repository_method_missing', 'Redemption repository is not configured');
+        const redemptionId = String(payload.redemptionId ?? '');
+        if (!redemptionId) return fail(400, 'redemption_id_required', 'Redemption ID is required');
+        return ok({ ok: true, redemption: await repo.cancelRedemption(redemptionId) });
+      }
+      case 'adjust_wallet': {
+        const reason = String(payload.reason ?? '').trim();
+        if (!reason) return fail(400, 'reason_required', 'A wallet adjustment reason is required');
+        const amountSatang = Number(payload.amountSatang);
+        if (!Number.isInteger(amountSatang) || amountSatang === 0) return fail(400, 'invalid_amount', 'Amount must be a non-zero integer satang value');
+        if (!repo.adjustWallet) return fail(500, 'repository_method_missing', 'Wallet repository is not configured');
+        const profile = await repo.getProfile?.();
+        if (!profile) return fail(404, 'profile_not_found', 'Player profile not found');
+        return ok({ ok: true, wallet: await repo.adjustWallet({ profileId: String(payload.profileId ?? profile.id), amountSatang, reason }) });
+      }
       default:
         return fail(400, 'unknown_action', 'Unknown Host action');
     }
   } catch (error) {
     console.error('[treasure-host-action]', error);
+    const message = error instanceof Error ? error.message : String(error);
+    if (/insufficient wallet/i.test(message)) return fail(409, 'insufficient_wallet', 'Wallet balance is not enough to complete this redemption');
+    if (/cannot be (completed|cancelled)/i.test(message)) return fail(409, 'invalid_redemption_state', 'Redemption is already finalized');
     return fail(500, 'internal', 'Treasure Quiz action failed');
   }
 }

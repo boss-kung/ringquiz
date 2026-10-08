@@ -68,7 +68,7 @@ button, input, textarea, select { font: inherit; }
 .lead { color: #c9bfd4; line-height: 1.55; max-width: 560px; }
 .auth-card { width: min(100%, 380px); margin-top: 26px; padding: 22px; display: grid; gap: 12px; text-align: left; background: rgba(37, 29, 47, .82); border: 1px solid rgba(255, 218, 155, .16); border-radius: 22px; box-shadow: 0 22px 70px rgba(0,0,0,.24); }
 .auth-card label, .question-preview label { display: grid; gap: 6px; color: #f9eacb; font-size: .85rem; font-weight: 700; }
-input, textarea, select { width: 100%; color: #fff8ee; background: #201a2a; border: 1px solid #544765; border-radius: 12px; padding: 11px 12px; outline: none; }
+input, textarea, select { width: 100%; min-height: 44px; color: #fff8ee; background: #201a2a; border: 1px solid #544765; border-radius: 12px; padding: 11px 12px; outline: none; }
 input:focus, textarea:focus, select:focus { border-color: #e9b65d; box-shadow: 0 0 0 3px rgba(233, 182, 93, .15); }
 .primary-button, .secondary-button { border: 0; border-radius: 999px; padding: 12px 18px; font-weight: 800; cursor: pointer; transition: transform .18s ease, opacity .18s ease; }
 .primary-button { color: #2a1e0e; background: linear-gradient(135deg, #ffd98c, #e9a94f); box-shadow: 0 12px 28px rgba(233, 169, 79, .18); }
@@ -165,4 +165,9 @@ button:disabled { cursor: not-allowed; opacity: .42; }
 .wallet-total { display: grid; gap: 8px; margin: 24px 0; padding: 24px; text-align: center; border: 1px solid rgba(255, 218, 155, .24); border-radius: 24px; background: radial-gradient(circle at 50% 0, rgba(255, 218, 155, .18), rgba(36, 28, 48, .86)); }
 .wallet-total span { color: #c4b6ca; }
 .wallet-total strong { color: #ffe5a6; font-size: 2.6rem; letter-spacing: -.05em; }
+.reward-catalog-list, .redemption-list { display: grid; gap: 10px; margin-top: 20px; }
+.reward-catalog-card, .redemption-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 15px; border: 1px solid #443653; border-radius: 16px; background: #211a2a; }
+.reward-catalog-card div, .redemption-row div:first-child { display: grid; gap: 5px; }
+.reward-catalog-card strong, .redemption-row strong { color: #fff0d0; }
+.reward-catalog-card span, .redemption-row span { color: #b9a9c5; font-size: .86rem; }
 @media (max-width: 600px) { .player-screen { padding-inline: 14px; } .player-screen .screen-header { flex-direction: column; } .resource-bar { justify-content: flex-start; } .bet-grid, .event-grid { grid-template-columns: 1fr; } .event-choice { min-height: 110px; } }

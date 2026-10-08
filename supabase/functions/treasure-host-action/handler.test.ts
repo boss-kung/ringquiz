@@ -53,3 +53,21 @@ Deno.test('second active game returns 409', async () => {
   assert.equal(response.status, 409);
   assert.equal((await responseJson(response)).error.code, 'active_game_exists');
 });
+
+Deno.test('Host completes and cancels redemptions through repository state transitions', async () => {
+  const complete = await handleHostAction({ action: 'complete_redemption', pin: '1234', payload: { redemptionId: 'redemption-1' } }, deps({
+    completeRedemption: async (id) => ({ id, status: 'completed', cost_satang: 10000 }),
+  }));
+  assert.equal(complete.status, 200);
+  assert.equal((await complete.json()).redemption.status, 'completed');
+  const cancel = await handleHostAction({ action: 'cancel_redemption', pin: '1234', payload: { redemptionId: 'redemption-2' } }, deps({
+    cancelRedemption: async (id) => ({ id, status: 'cancelled' }),
+  }));
+  assert.equal(cancel.status, 200);
+});
+
+Deno.test('wallet adjustment requires a reason', async () => {
+  const response = await handleHostAction({ action: 'adjust_wallet', pin: '1234', payload: { amountSatang: 100 } }, deps());
+  assert.equal(response.status, 400);
+  assert.equal((await response.json()).error.code, 'reason_required');
+});

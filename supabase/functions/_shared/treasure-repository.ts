@@ -73,6 +73,15 @@ export interface TqChestOpen {
   [key: string]: unknown;
 }
 
+export interface TqRedemption {
+  id: string;
+  player_profile_id?: string;
+  reward_catalog_id?: string;
+  cost_satang?: number;
+  status?: 'pending' | 'completed' | 'cancelled' | string;
+  [key: string]: unknown;
+}
+
 export interface CreateGameInput {
   playerProfileId: string;
   gold: number;
@@ -131,6 +140,11 @@ export interface TreasureRepository {
   openChest?: (id: string) => Promise<TqChestOpen>;
   openAllChests?: (gameId: string, profileId: string) => Promise<TqChestOpen[]>;
   getWallet?: (profileId: string) => Promise<{ balanceSatang: number; entries: any[] }>;
+  requestRedemption?: (input: { profileId: string; rewardCatalogId: string }) => Promise<TqRedemption>;
+  getRedemption?: (id: string) => Promise<TqRedemption | null>;
+  completeRedemption?: (id: string) => Promise<TqRedemption>;
+  cancelRedemption?: (id: string) => Promise<TqRedemption>;
+  adjustWallet?: (input: { profileId: string; amountSatang: number; reason: string }) => Promise<TqRedemption | Record<string, unknown>>;
 }
 
 export interface HostDeps {
@@ -369,6 +383,49 @@ export function createTreasureRepository(client: any): TreasureRepository {
       const { data, error } = await client.from('tq_wallet_entries').select('*').eq('player_profile_id', profileId).order('created_at', { ascending: false });
       if (error) throw new Error(error.message);
       return { balanceSatang: profile?.balance_satang ?? 0, entries: data ?? [] };
+    },
+    requestRedemption: async ({ profileId, rewardCatalogId }) => {
+      const reward = await single<any>(client.from('tq_reward_catalog').select('id,cost_satang').eq('id', rewardCatalogId).eq('active', true));
+      if (!reward) throw new Error('Reward catalog item not found');
+      const { data, error } = await client.from('tq_redemptions').insert({ player_profile_id: profileId, reward_catalog_id: rewardCatalogId, cost_satang: reward.cost_satang, status: 'pending' }).select().single();
+      if (error) throw new Error(error.message);
+      return data as TqRedemption;
+    },
+    getRedemption: async (id) => single<TqRedemption>(client.from('tq_redemptions').select('*').eq('id', id)),
+    completeRedemption: async (id) => {
+      const redemption = await single<any>(client.from('tq_redemptions').select('*').eq('id', id));
+      if (!redemption) throw new Error('Redemption not found');
+      if (redemption.status === 'completed') return redemption as TqRedemption;
+      if (redemption.status !== 'pending') throw new Error('Redemption cannot be completed');
+      const profile = await single<any>(client.from('tq_player_profile').select('balance_satang').eq('id', redemption.player_profile_id));
+      if ((profile?.balance_satang ?? 0) < redemption.cost_satang) throw new Error('Insufficient wallet balance');
+      const { error: walletError } = await client.from('tq_wallet_entries').insert({ player_profile_id: redemption.player_profile_id, amount_satang: -redemption.cost_satang, entry_type: 'redemption', reference_id: redemption.id, idempotency_key: `redemption:${redemption.id}` });
+      if (walletError) throw new Error(walletError.message);
+      const { error: profileError } = await client.from('tq_player_profile').update({ balance_satang: profile.balance_satang - redemption.cost_satang }).eq('id', redemption.player_profile_id);
+      if (profileError) throw new Error(profileError.message);
+      const { data, error } = await client.from('tq_redemptions').update({ status: 'completed', completed_at: new Date().toISOString() }).eq('id', id).eq('status', 'pending').select().single();
+      if (error) throw new Error(error.message);
+      return data as TqRedemption;
+    },
+    cancelRedemption: async (id) => {
+      const redemption = await single<any>(client.from('tq_redemptions').select('*').eq('id', id));
+      if (!redemption) throw new Error('Redemption not found');
+      if (redemption.status === 'cancelled') return redemption as TqRedemption;
+      if (redemption.status !== 'pending') throw new Error('Redemption cannot be cancelled');
+      const { data, error } = await client.from('tq_redemptions').update({ status: 'cancelled' }).eq('id', id).eq('status', 'pending').select().single();
+      if (error) throw new Error(error.message);
+      return data as TqRedemption;
+    },
+    adjustWallet: async ({ profileId, amountSatang, reason }) => {
+      const profile = await single<any>(client.from('tq_player_profile').select('balance_satang').eq('id', profileId));
+      if (!profile) throw new Error('Profile not found');
+      const nextBalance = profile.balance_satang + amountSatang;
+      if (nextBalance < 0) throw new Error('Insufficient wallet balance');
+      const { data: entry, error: entryError } = await client.from('tq_wallet_entries').insert({ player_profile_id: profileId, amount_satang: amountSatang, entry_type: 'host_adjustment', reason, idempotency_key: `adjustment:${crypto.randomUUID()}` }).select().single();
+      if (entryError) throw new Error(entryError.message);
+      const { error } = await client.from('tq_player_profile').update({ balance_satang: nextBalance }).eq('id', profileId);
+      if (error) throw new Error(error.message);
+      return { balanceSatang: nextBalance, entry };
     },
   };
   return repository;

@@ -142,6 +142,13 @@ export async function handlePlayerAction(request: PlayerActionRequest, deps: Pla
         if (!repo.getWallet) return fail(500, 'repository_method_missing', 'Wallet repository is not configured');
         return reply({ ok: true, wallet: await repo.getWallet(profile.id) });
       }
+      case 'request_redemption': {
+        if (!repo.requestRedemption) return fail(500, 'repository_method_missing', 'Redemption repository is not configured');
+        const rewardCatalogId = String(payload.rewardCatalogId ?? '');
+        if (!rewardCatalogId) return fail(400, 'reward_catalog_id_required', 'Reward catalog item is required');
+        const redemption = await repo.requestRedemption({ profileId: profile.id, rewardCatalogId });
+        return reply({ ok: true, redemption });
+      }
       case 'submit_answer': {
         if (!repo.getRound || !repo.getQuestion || !repo.getAnswer || !repo.insertAnswer) return fail(500, 'repository_method_missing', 'Answer repository is not configured');
         const gameId = String(payload.gameId ?? '');
